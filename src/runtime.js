@@ -62,7 +62,7 @@ async function loadModels(dir) {
     app.logger.info('loading model', modelFile)
     const basename = path.basename(modelFile, '.js')
     const modelName = changeCase.pascalCase(basename)
-    const fullpath = path.join('../', dir, modelFile)
+    const fullpath = path.join(dir, modelFile)
     const schema = require(fullpath)
     schemas.push(new AschCore.ModelSchema(schema, modelName))
   })
@@ -84,7 +84,7 @@ async function loadContracts(dir) {
     app.logger.info('loading contract', contractFile)
     const basename = path.basename(contractFile, '.js')
     const contractName = changeCase.snakeCase(basename)
-    const fullpath = path.join('../', dir, contractFile)
+    const fullpath = path.join(dir, contractFile)
     const contract = require(fullpath)
     if (contractFile !== 'index.js') {
       app.contract[contractName] = contract
@@ -104,7 +104,7 @@ async function loadInterfaces(dir, routes) {
     app.logger.info('loading interface', f)
     const basename = path.basename(f, '.js')
     const rw = new RouteWrapper()
-    require(path.join('../', dir, f))(rw)
+    require(path.join(dir, f))(rw)
     const router = new Router()
     for (const h of rw.handlers) {
       router[h.method](h.path, (req, res) => {
@@ -277,8 +277,7 @@ module.exports = async function runtime(options) {
 
   app.AccountRole = AccountRole
 
-  const { baseDir } = options.appConfig
-  const { dataDir } = options.appConfig
+  const { appDir, dataDir } = options.appConfig
 
   const BLOCK_HEADER_DIR = path.resolve(dataDir, 'blocks')
   const BLOCK_DB_PATH = path.resolve(dataDir, 'blockchain.db')
@@ -293,10 +292,9 @@ module.exports = async function runtime(options) {
     address: require('./utils/address.js'),
   }
 
-  const builtinModelDir = path.join(baseDir, 'builtin')
-  await loadModels(path.join(builtinModelDir, 'model'))
-  await loadContracts(path.join(builtinModelDir, 'contract'))
-  await loadInterfaces(path.join(builtinModelDir, 'interface'), options.library.network.app)
+  await loadModels(path.join(appDir, 'model'))
+  await loadContracts(path.join(appDir, 'contract'))
+  await loadInterfaces(path.join(appDir, 'interface'), options.library.network.app)
 
   app.contractTypeMapping[1] = 'basic.transfer'
   app.contractTypeMapping[2] = 'basic.setName'

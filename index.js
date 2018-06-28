@@ -103,7 +103,7 @@ class Application {
         try {
           await initRuntime(options)
         } catch (e) {
-          logger.error('init runtime error: ', e)
+          scope.logger.error('init runtime error: ', e)
           process.exit(1)
           return
         }
