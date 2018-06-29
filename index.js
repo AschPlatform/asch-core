@@ -30,6 +30,7 @@ class Application {
   constructor(options) {
     this.options = options
   }
+
   run() {
     const options = this.options
     const pidFile = options.pidFile
