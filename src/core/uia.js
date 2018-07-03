@@ -1,16 +1,18 @@
 const crypto = require('crypto')
 const async = require('async')
-const ed = require('../utils/ed.js')
+const isArray = require('util').isArray
 const jsonSql = require('json-sql')()
 
 jsonSql.setDialect('sqlite')
+
+const ed = require('../utils/ed.js')
 const constants = require('../utils/constants.js')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 
 const addressHelper = require('../utils/address.js')
 const amountHelper = require('../utils/amount.js')
-const isArray = require('util').isArray
+
 
 // Private fields
 let modules
@@ -75,9 +77,18 @@ function trimPrecision(amount, precision) {
   return Number.parseInt(s.substr(0, s.length - precision), 10)
 }
 
-UIA.prototype.toAPIV1Assets = assets => ((assets && isArray(assets) && assets.length > 0) ?
-  assets.map(a => UIA.prototype.toAPIV1Asset(a)) :
-  [])
+UIA.prototype.toAPIV1UIABalances = (balances) => {
+  if (!(balances && isArray(balances) && balances.length > 0)) return balances
+  const assetMap = new Map()
+  app.sdb.getAllCached('Asset').forEach(asset => assetMap.set(asset.name, self.toAPIV1Asset(asset)))
+
+  return balances.map(b => (
+    assetMap.has(b.currency) ? Object.assign(b, assetMap.get(b.currency)) : b))
+}
+
+UIA.prototype.toAPIV1Assets = assets => ((assets && isArray(assets) && assets.length > 0)
+  ? assets.map(a => self.toAPIV1Asset(a))
+  : [])
 
 UIA.prototype.toAPIV1Asset = (asset) => {
   if (!asset) return asset
@@ -90,7 +101,7 @@ UIA.prototype.toAPIV1Asset = (asset) => {
     quantity: asset.quantity,
     issuerId: asset.issuerId,
     height: asset.height,
-    writeoff: false,
+    writeoff: 0,
     maximumShow: trimPrecision(asset.maximum, asset.precision),
     quantityShow: trimPrecision(asset.quantity, asset.precision),
 
@@ -332,7 +343,7 @@ shared.getIssuerAssets = (req, cb) => {
         const condition = { issuerName: req.params.name }
         const count = await app.sdb.count('Asset', condition)
         const assets = await app.sdb.find('Asset', condition, limitAndOffset)
-        return cb(null, { count, assets: UIA.prototype.toAPIV1Assets(assets) })
+        return cb(null, { count, assets: self.toAPIV1Assets(assets) })
       } catch (dbErr) {
         return cb(`Failed to get assets: ${dbErr}`)
       }
@@ -363,7 +374,7 @@ shared.getAssets = (req, cb) => {
         const limitAndOffset = { limit: query.limit || 100, offset: query.offset || 0 }
         const count = await app.sdb.count('Asset', condition)
         const assets = await app.sdb.find('Asset', condition, limitAndOffset)
-        return cb(null, { count, assets: UIA.prototype.toAPIV1Assets(assets) })
+        return cb(null, { count, assets: self.toAPIV1Assets(assets) })
       } catch (dbErr) {
         return cb(`Failed to get assets: ${dbErr}`)
       }
@@ -391,7 +402,7 @@ shared.getAsset = (req, cb) => {
         const condition = { name: query.name }
         const assets = await app.sdb.find('Asset', condition)
         if (!assets || assets.length === 0) return cb('Asset not found')
-        return cb(null, { asset: UIA.prototype.toAPIV1Asset(assets[0]) })
+        return cb(null, { asset: self.toAPIV1Asset(assets[0]) })
       } catch (dbErr) {
         return cb(`Failed to get asset: ${dbErr}`)
       }
@@ -427,7 +438,7 @@ shared.getBalances = (req, cb) => {
         const count = await app.sdb.count('Balance', condition)
         const resultRange = { limit: query.limit, offset: query.offset }
         const balances = await app.sdb.find('Balance', condition, resultRange)
-        return cb(null, { count, balances })
+        return cb(null, { count, balances: self.toAPIV1UIABalances(balances) })
       } catch (dbErr) {
         return cb(`Failed to get balances: ${dbErr}`)
       }

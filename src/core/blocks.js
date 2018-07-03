@@ -83,7 +83,7 @@ priv.getIdSequence2 = (height, cb) => {
 
 Blocks.prototype.toAPIV1Blocks = (blocks) => {
   if (blocks && isArray(blocks) && blocks.length > 0) {
-    return blocks.map(b => Blocks.prototype.toAPIV1Block(b))
+    return blocks.map(b => self.toAPIV1Block(b))
   }
   return []
 }
@@ -101,7 +101,7 @@ Blocks.prototype.toAPIV1Block = (block) => {
     totalFee: block.fees,
     generatorPublicKey: block.delegate,
     blockSignature: block.signature,
-    confirmations: Blocks.prototype.getLastBlock().height - block.height,
+    confirmations: self.getLastBlock().height - block.height,
     transactions: modules.transactions.toAPIV1Transactions(block.transactions, block),
 
     // "generatorId":  => missing
@@ -424,6 +424,7 @@ Blocks.prototype.applyRound = async (block) => {
       missedDelegates.push(fd)
     }
   }
+
   for (const md of missedDelegates) {
     const addr = addressHelper.generateNormalAddress(md)
     app.sdb.getCached('Delegate', addr).missedBlocks += 1
@@ -842,7 +843,7 @@ shared.getBlock = (req, cb) => {
           return cb('Block not found')
         }
         block.reward = priv.blockStatus.calcReward(block.height)
-        return cb(null, { block: Blocks.prototype.toAPIV1Block(block) })
+        return cb(null, { block: self.toAPIV1Block(block) })
       } catch (e) {
         library.logger.error(e)
         return cb('Server error')
@@ -883,7 +884,7 @@ shared.getFullBlock = (req, cb) => {
         }
 
         if (!block) return cb('Block not found')
-        return cb(null, { block: Blocks.prototype.toAPIV1Block(block) })
+        return cb(null, { block: self.toAPIV1Block(block) })
       } catch (e) {
         library.logger.error('Failed to find block', e)
         return cb('Server error')
@@ -942,7 +943,7 @@ shared.getBlocks = (req, cb) => {
 
         const blocks = await app.sdb.getBlocksByHeightRange(minHeight, maxHeight)
         if (!blocks || !blocks.length) return cb('No blocks')
-        return cb(null, { count, blocks: Blocks.prototype.toAPIV1Blocks(blocks) })
+        return cb(null, { count, blocks: self.toAPIV1Blocks(blocks) })
       } catch (e) {
         library.logger.error('Failed to find blocks', e)
         return cb('Server error')
