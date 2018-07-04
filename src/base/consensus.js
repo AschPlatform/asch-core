@@ -1,200 +1,196 @@
-var assert = require("assert");
-var crypto = require("crypto");
-var ByteBuffer = require("bytebuffer");
-var ed = require('../utils/ed.js');
-var ip = require('ip');
-var bignum = require('bignumber');
-var slots = require('../utils/slots.js');
+const assert = require('assert')
+const crypto = require('crypto')
+const ByteBuffer = require('bytebuffer')
+const ip = require('ip')
+const bignum = require('bignumber')
+const ed = require('../utils/ed.js')
+const slots = require('../utils/slots.js')
 
 function Consensus(scope, cb) {
-  this.scope = scope;
-  this.pendingBlock = null;
-  this.pendingVotes = null;
-  this.votesKeySet = {};
-  cb && setImmediate(cb, null, this);
+  this.scope = scope
+  this.pendingBlock = null
+  this.pendingVotes = null
+  this.votesKeySet = {}
+  if (cb) setImmediate(cb, null, this)
 }
 
-Consensus.prototype.createVotes = function (keypairs, block) {
-  var hash = this.getVoteHash(block.height, block.id);
-  var votes = {
+Consensus.prototype.createVotes = (keypairs, block) => {
+  const hash = this.getVoteHash(block.height, block.id)
+  const votes = {
     height: block.height,
     id: block.id,
-    signatures: []
-  };
-  keypairs.forEach(function (el) {
+    signatures: [],
+  }
+  keypairs.forEach((el) => {
     votes.signatures.push({
       key: el.publicKey.toString('hex'),
-      sig: ed.Sign(hash, el).toString('hex')
-    });
-  });
-  return votes;
+      sig: ed.Sign(hash, el).toString('hex'),
+    })
+  })
+  return votes
 }
 
-Consensus.prototype.verifyVote = function (height, id, voteItem) {
+Consensus.prototype.verifyVote = (height, id, voteItem) => {
   try {
-    var hash = this.getVoteHash(height, id);
-    var signature = new Buffer(voteItem.sig, "hex");
-    var publicKey = new Buffer(voteItem.key, "hex");
-    return ed.Verify(hash, signature, publicKey);
+    const hash = this.getVoteHash(height, id)
+    const signature = Buffer.from(voteItem.sig, 'hex')
+    const publicKey = Buffer.from(voteItem.key, 'hex')
+    return ed.Verify(hash, signature, publicKey)
   } catch (e) {
-    return false;
+    return false
   }
 }
 
-Consensus.prototype.getVoteHash = function (height, id) {
-  var bytes = new ByteBuffer();
-  bytes.writeLong(height);
+Consensus.prototype.getVoteHash = (height, id) => {
+  const bytes = new ByteBuffer()
+  bytes.writeLong(height)
   if (global.featureSwitch.enableLongId) {
     bytes.writeString(id)
   } else {
-    var idBytes = bignum(id).toBuffer({ size: 8 });
-    for (var i = 0; i < 8; i++) {
-      bytes.writeByte(idBytes[i]);
+    const idBytes = bignum(id).toBuffer({ size: 8 })
+    for (let i = 0; i < 8; i++) {
+      bytes.writeByte(idBytes[i])
     }
   }
-  bytes.flip();
-  return crypto.createHash('sha256').update(bytes.toBuffer()).digest();
+  bytes.flip()
+  return crypto.createHash('sha256').update(bytes.toBuffer()).digest()
 }
 
-Consensus.prototype.hasEnoughVotes = function (votes) {
-  return votes && votes.signatures && votes.signatures.length > slots.delegates * 2 / 3;
-}
+Consensus.prototype.hasEnoughVotes = votes => votes && votes.signatures
+  && votes.signatures.length > slots.delegates * 2 / 3
 
-Consensus.prototype.hasEnoughVotesRemote = function (votes) {
-  return votes && votes.signatures && votes.signatures.length >= 6;
-}
+Consensus.prototype.hasEnoughVotesRemote = votes => votes && votes.signatures
+  && votes.signatures.length >= 6
 
-Consensus.prototype.getPendingBlock = function () {
-  return this.pendingBlock;
-}
+Consensus.prototype.getPendingBlock = () => this.pendingBlock
 
-Consensus.prototype.hasPendingBlock = function (timestamp) {
+Consensus.prototype.hasPendingBlock = (timestamp) => {
   if (!this.pendingBlock) {
-    return false;
+    return false
   }
-  return slots.getSlotNumber(this.pendingBlock.timestamp) == slots.getSlotNumber(timestamp);
+  return slots.getSlotNumber(this.pendingBlock.timestamp) === slots.getSlotNumber(timestamp)
 }
 
-Consensus.prototype.setPendingBlock = function (block) {
-  this.pendingVotes = null;
-  this.votesKeySet = {};
-  this.pendingBlock = block;
+Consensus.prototype.setPendingBlock = (block) => {
+  this.pendingVotes = null
+  this.votesKeySet = {}
+  this.pendingBlock = block
 }
 
-Consensus.prototype.clearState = function () {
-  this.pendingVotes = null;
-  this.votesKeySet = {};
-  this.pendingBlock = null;
+Consensus.prototype.clearState = () => {
+  this.pendingVotes = null
+  this.votesKeySet = {}
+  this.pendingBlock = null
 }
 
-Consensus.prototype.addPendingVotes = function (votes) {
-  if (!this.pendingBlock || this.pendingBlock.height != votes.height || this.pendingBlock.id != votes.id) {
-    return this.pendingVotes;
+Consensus.prototype.addPendingVotes = (votes) => {
+  if (!this.pendingBlock || this.pendingBlock.height !== votes.height
+    || this.pendingBlock.id !== votes.id) {
+    return this.pendingVotes
   }
-  for (var i = 0; i < votes.signatures.length; ++i) {
-    var item = votes.signatures[i];
+  for (let i = 0; i < votes.signatures.length; ++i) {
+    const item = votes.signatures[i]
     if (this.votesKeySet[item.key]) {
-      continue;
+      continue
     }
     if (this.verifyVote(votes.height, votes.id, item)) {
-      this.votesKeySet[item.key] = true;
+      this.votesKeySet[item.key] = true
       if (!this.pendingVotes) {
         this.pendingVotes = {
           height: votes.height,
           id: votes.id,
-          signatures: []
-        };
+          signatures: [],
+        }
       }
-      this.pendingVotes.signatures.push(item);
+      this.pendingVotes.signatures.push(item)
     }
   }
-  return this.pendingVotes;
+  return this.pendingVotes
 }
 
-Consensus.prototype.createPropose = function (keypair, block, address) {
-  assert(keypair.publicKey.toString("hex") == block.generatorPublicKey);
-  var propose = {
+Consensus.prototype.createPropose = (keypair, block, address) => {
+  assert(keypair.publicKey.toString('hex') === block.generatorPublicKey)
+  const propose = {
     height: block.height,
     id: block.id,
     timestamp: block.timestamp,
     generatorPublicKey: block.generatorPublicKey,
-    address: address
-  };
-  var hash = this.getProposeHash(propose);
-  propose.hash = hash.toString("hex");
-  propose.signature = ed.Sign(hash, keypair).toString("hex");
-  return propose;
+    address,
+  }
+  const hash = this.getProposeHash(propose)
+  propose.hash = hash.toString('hex')
+  propose.signature = ed.Sign(hash, keypair).toString('hex')
+  return propose
 }
 
-Consensus.prototype.getProposeHash  = function (propose) {
-  var bytes = new ByteBuffer();
-  bytes.writeLong(propose.height);
+Consensus.prototype.getProposeHash = (propose) => {
+  const bytes = new ByteBuffer()
+  bytes.writeLong(propose.height)
 
   if (global.featureSwitch.enableLongId) {
     bytes.writeString(propose.id)
   } else {
-    var idBytes = bignum(propose.id).toBuffer({ size: 8 });
-    for (var i = 0; i < 8; i++) {
-      bytes.writeByte(idBytes[i]);
+    const idBytes = bignum(propose.id).toBuffer({ size: 8 })
+    for (let i = 0; i < 8; i++) {
+      bytes.writeByte(idBytes[i])
     }
   }
 
-  var generatorPublicKeyBuffer = new Buffer(propose.generatorPublicKey, "hex");
-  for (var i = 0; i < generatorPublicKeyBuffer.length; i++) {
-    bytes.writeByte(generatorPublicKeyBuffer[i]);
+  const generatorPublicKeyBuffer = Buffer.from(propose.generatorPublicKey, 'hex')
+  for (let i = 0; i < generatorPublicKeyBuffer.length; i++) {
+    bytes.writeByte(generatorPublicKeyBuffer[i])
   }
 
-  bytes.writeInt(propose.timestamp);
+  bytes.writeInt(propose.timestamp)
 
-  var parts = propose.address.split(':');
-  assert(parts.length == 2);
-  bytes.writeInt(ip.toLong(parts[0]));
-  bytes.writeInt(Number(parts[1]));
+  const parts = propose.address.split(':')
+  assert(parts.length === 2)
+  bytes.writeInt(ip.toLong(parts[0]))
+  bytes.writeInt(Number(parts[1]))
 
-  bytes.flip();
-  return crypto.createHash('sha256').update(bytes.toBuffer()).digest();
+  bytes.flip()
+  return crypto.createHash('sha256').update(bytes.toBuffer()).digest()
 }
 
-Consensus.prototype.normalizeVotes = function (votes) {
-  var report = this.scope.scheme.validate(votes, {
-    type: "object",
+Consensus.prototype.normalizeVotes = (votes) => {
+  const report = this.scope.scheme.validate(votes, {
+    type: 'object',
     properties: {
       height: {
-        type: "integer"
+        type: 'integer',
       },
       id: {
-        type: "string"
+        type: 'string',
       },
       signatures: {
-        type: "array",
+        type: 'array',
         minLength: 1,
-        maxLength: 101
-      }
+        maxLength: 101,
+      },
     },
-    required: ["height", "id", "signatures"]
-  });
+    required: ['height', 'id', 'signatures'],
+  })
   if (!report) {
-    throw Error(this.scope.scheme.getLastError());
+    throw Error(this.scope.scheme.getLastError())
   }
-  return votes;
+  return votes
 }
 
-Consensus.prototype.acceptPropose = function (propose, cb) {
-  var hash = this.getProposeHash(propose);
-  if (propose.hash != hash.toString("hex")) {
-    return setImmediate(cb, "Propose hash is not correct");
+Consensus.prototype.acceptPropose = (propose, cb) => {
+  const hash = this.getProposeHash(propose)
+  if (propose.hash !== hash.toString('hex')) {
+    return setImmediate(cb, 'Propose hash is not correct')
   }
   try {
-    var signature = new Buffer(propose.signature, "hex");
-    var publicKey = new Buffer(propose.generatorPublicKey, "hex");
+    const signature = Buffer.from(propose.signature, 'hex')
+    const publicKey = Buffer.from(propose.generatorPublicKey, 'hex')
     if (ed.Verify(hash, signature, publicKey)) {
-      return setImmediate(cb);
-    } else {
-      return setImmediate(cb, "Vefify signature failed");
+      return setImmediate(cb)
     }
+    return setImmediate(cb, 'Vefify signature failed')
   } catch (e) {
-    return setImmediate(cb, "Verify signature exception: " + e.toString());
+    return setImmediate(cb, `Verify signature exception: ${e.toString()}`)
   }
 }
 
-module.exports = Consensus;
+module.exports = Consensus

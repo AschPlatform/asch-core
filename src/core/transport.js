@@ -281,8 +281,7 @@ Transport.prototype.onPeerReady = () => {
 
   modules.peer.subscribe('propose', (message) => {
     if (typeof message.body.propose === 'string') {
-      message.body.propose =
-        library.protobuf.decodeBlockPropose(Buffer.from(message.body.propose, 'base64'))
+      message.body.propose = library.protobuf.decodeBlockPropose(Buffer.from(message.body.propose, 'base64'))
     }
     library.scheme.validate(message.body.propose, {
       type: 'object',
@@ -336,8 +335,7 @@ Transport.prototype.onPeerReady = () => {
     }
 
     if (typeof message.body.transaction === 'string') {
-      message.body.transaction =
-        library.protobuf.decodeTransaction(Buffer.from(message.body.transaction, 'base64'))
+      message.body.transaction = library.protobuf.decodeTransaction(Buffer.from(message.body.transaction, 'base64'))
     }
     let transaction
     try {

@@ -83,8 +83,8 @@ Peer.prototype.list = (options, cb) => {
 }
 
 Peer.prototype.remove = (pip, port, cb) => {
-  const isFrozenList = library.config.peers.list.find(peer =>
-    peer.ip === ip.fromLong(pip) && peer.port === port)
+  const peers = library.config.peers.list
+  const isFrozenList = peers.find(peer => peer.ip === ip.fromLong(pip) && peer.port === port)
   if (isFrozenList !== undefined) return cb && cb('Peer in white list')
   // FIXME
   return cb()
@@ -116,7 +116,7 @@ Peer.prototype.isCompatible = (version) => {
   for (let i = 0; i < nums.length; ++i) {
     if (nums[i] < numsCompatible[i]) {
       return false
-    } else if (nums[i] > numsCompatible[i]) {
+    } if (nums[i] > numsCompatible[i]) {
       return true
     }
   }

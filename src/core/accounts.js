@@ -1,7 +1,7 @@
 const crypto = require('crypto')
 const util = require('util')
-const ed = require('../utils/ed.js')
 const Mnemonic = require('bitcore-mnemonic')
+const ed = require('../utils/ed.js')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const addressHelper = require('../utils/address.js')
@@ -133,8 +133,9 @@ priv.openAccount2 = (publicKey, cb) => {
   })
 }
 
-Accounts.prototype.generateAddressByPublicKey =
-  publicKey => addressHelper.generateNormalAddress(publicKey)
+Accounts.prototype.generateAddressByPublicKey = (publicKey) => {
+  addressHelper.generateNormalAddress(publicKey)
+}
 
 Accounts.prototype.generateAddressByPublicKey2 = (publicKey) => {
   if (!global.featureSwitch.enableUIA) {
