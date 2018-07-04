@@ -357,6 +357,7 @@ Blocks.prototype.processBlock = async (b, options) => {
       library.bus.message('newBlock', block, options.votes)
     }
   } catch (e) {
+    app.logger.error(block)
     app.logger.error('save block error: ', e)
     await app.sdb.rollbackBlock()
     throw new Error(`Failed to save block: ${e}`)

@@ -1,8 +1,10 @@
 const async = require('async')
 const fs = require('fs')
 const path = require('path')
+const extend = require('extend')
 const Sandbox = require('asch-sandbox')
 const ip = require('ip')
+const rmdir = require('rimraf')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 
@@ -32,28 +34,28 @@ function Chains(cb, scope) {
   self = this
 
   priv.baseDir = library.config.baseDir
-  priv.chainBaseDir = library.config.chainDir
+  priv.chainBaseDir = path.join(priv.baseDir, 'chains')
 
   priv.attachApi()
 
-  // fs.exists(path.join(library.config.publicDir, 'chains'), (exists) => {
-  //   if (exists) {
-  //     rmdir(path.join(library.config.publicDir, 'chains'), (err) => {
-  //       if (err) {
-  //         library.logger.error(err)
-  //       }
+  fs.exists(path.join(library.config.publicDir, 'chains'), (exists) => {
+    if (exists) {
+      rmdir(path.join(library.config.publicDir, 'chains'), (err) => {
+        if (err) {
+          library.logger.error(err)
+        }
 
-  //       priv.createBasePathes((err2) => {
-  //         setImmediate(cb, err2, self)
-  //       })
-  //     })
-  //   } else {
-  //     priv.createBasePathes((err) => {
-  //       setImmediate(cb, err, self)
-  //     })
-  //   }
-  // })
-  setImmediate(cb, null, self)
+        priv.createBasePathes((err2) => {
+          setImmediate(cb, err2, self)
+        })
+      })
+    } else {
+      priv.createBasePathes((err) => {
+        setImmediate(cb, err, self)
+      })
+    }
+  })
+  // setImmediate(cb, null, self)
 }
 
 priv.attachApi = () => {
@@ -313,42 +315,24 @@ priv.readJson = (file, cb) => {
 priv.launchApp = (chain, params, cb) => {
   const chainPath = path.join(priv.chainBaseDir, chain.name)
 
-  priv.readJson(path.join(chainPath, 'config.json'), (err, chainConfig) => {
-    if (err) {
-      return setImmediate(cb, `Failed to read config.json file for: ${chain.name}`)
-    }
-    return async.eachSeries(chainConfig.peers, (peer, next) => {
-      // FIXME
-      modules.peer.addChain({
-        ip: ip.toLong(peer.ip),
-        port: peer.port,
-        chain: chain.name,
-      }, next)
-    }, (err2) => {
-      if (err2) {
-        return setImmediate(cb, err2)
-      }
+  const sandbox = new Sandbox(
+    chainPath, chain.name, params,
+    priv.apiHandler, true, library.logger,
+  )
+  priv.sandboxes[chain.name] = sandbox
 
-      const sandbox = new Sandbox(
-        chainPath, chain.name, params,
-        priv.apiHandler, true, library.logger,
-      )
-      priv.sandboxes[chain.name] = sandbox
-
-      sandbox.on('exit', (code) => {
-        library.logger.info(`Chain ${chain.name} exited with code ${code}`)
-        priv.stop(chain)
-      })
-
-      sandbox.on('error', (err3) => {
-        library.logger.info(`Encountered error in chain ${chain.name}: ${err3.toString()}`)
-        priv.stop(chain)
-      })
-
-      sandbox.run()
-      return cb(null)
-    })
+  sandbox.on('exit', (code) => {
+    library.logger.info(`Chain ${chain.name} exited with code ${code}`)
+    priv.stop(chain)
   })
+
+  sandbox.on('error', (err3) => {
+    library.logger.info(`Encountered error in chain ${chain.name}: ${err3.toString()}`)
+    priv.stop(chain)
+  })
+
+  sandbox.run()
+  return cb(null)
 }
 
 priv.stop = (chain) => {
@@ -402,25 +386,24 @@ Chains.prototype.cleanup = (cb) => {
 }
 
 Chains.prototype.onBlockchainReady = () => {
-  // priv.getInstalledIds((err, chains) => {
-  //   library.logger.debug('find local installed chains', chains)
-  //   if (err) {
-  //     library.logger.error('Failed to get installed ids', err)
-  //     return
-  //   }
-  //   library.logger.info(`start to launch ${chains.length} installed chains`)
-  //   async.eachSeries(chains, (chain, next) => {
-  //     const chainParams = library.config.chain.params[chain] || []
-  //     priv.launch({ name: chain, params: chainParams }, (err2) => {
-  //       if (err2) {
-  //         library.logger.error(`Failed to launched chain[${chain}]`, err2)
-  //       } else {
-  //         library.logger.info(`Launched chain[${chain}] successfully`)
-  //       }
-  //       next()
-  //     })
-  //   })
-  // })
+  priv.getInstalledIds((err, chains) => {
+    library.logger.debug('find local installed chains', chains)
+    if (err) {
+      library.logger.error('Failed to get installed ids', err)
+      return
+    }
+    library.logger.info(`start to launch ${chains.length} installed chains`)
+    async.eachSeries(chains, (chain, next) => {
+      priv.launch({ name: chain, params: [] }, (err2) => {
+        if (err2) {
+          library.logger.error(`Failed to launched chain[${chain}]`, err2)
+        } else {
+          library.logger.info(`Launched chain[${chain}] successfully`)
+        }
+        next()
+      })
+    })
+  })
 }
 
 Chains.prototype.onDeleteBlocksBefore = (block) => {
@@ -462,8 +445,9 @@ priv.getChainByName = async (name) => {
 
 shared.getChain = (req, cb) => (async () => {
   try {
-    const chain = await priv.getChainByName(req.name)
+    let chain = await priv.getChainByName(req.chain)
     if (!chain) return cb('Not found')
+    chain = extend({}, chain)
     const delegates = await app.sdb.findAll('ChainDelegate', { condition: { chain: req.chain } })
     if (delegates && delegates.length) {
       chain.delegates = delegates.map(d => d.delegate)
