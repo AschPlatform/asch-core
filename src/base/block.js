@@ -17,8 +17,11 @@ prv.getAddressByPublicKey = (publicKey) => {
   const address = bignum.fromBuffer(temp).toString()
   return address
 }
+
+let self
 // Constructor
 function Block(scope, cb) {
+  self = this
   this.scope = scope
   genesisblock = this.scope.genesisblock
   prv.blockStatus = new BlockStatus()
@@ -44,7 +47,7 @@ Block.prototype.sortTransactions = data => data.transactions.sort((a, b) => {
 })
 
 Block.prototype.create = (data) => {
-  const transactions = this.sortTransactions(data)
+  const transactions = self.sortTransactions(data)
 
   const nextHeight = (data.previousBlock) ? data.previousBlock.height + 1 : 1
 
@@ -58,7 +61,7 @@ Block.prototype.create = (data) => {
 
   for (let i = 0; i < transactions.length; i++) {
     const transaction = transactions[i]
-    const bytes = this.scope.transaction.getBytes(transaction)
+    const bytes = self.scope.transaction.getBytes(transaction)
 
     if (size + bytes.length > constants.maxPayloadLength) {
       break
@@ -88,9 +91,9 @@ Block.prototype.create = (data) => {
   }
 
   try {
-    block.blockSignature = this.sign(block, data.keypair)
+    block.blockSignature = self.sign(block, data.keypair)
 
-    block = this.objectNormalize(block)
+    block = self.objectNormalize(block)
   } catch (e) {
     throw Error(e.toString())
   }
@@ -99,7 +102,7 @@ Block.prototype.create = (data) => {
 }
 
 Block.prototype.sign = (block, keypair) => {
-  const hash = this.getHash(block)
+  const hash = self.getHash(block)
 
   return ed.Sign(hash, keypair).toString('hex')
 }
@@ -201,7 +204,7 @@ Block.prototype.verifySignature = (block) => {
   const remove = 64
 
   try {
-    const data = this.getBytes(block)
+    const data = self.getBytes(block)
     const data2 = Buffer.alloc(data.length - remove)
 
     for (let i = 0; i < data2.length; i++) {
@@ -223,7 +226,7 @@ Block.prototype.dbSave = (block, cb) => {
     const generatorPublicKey = Buffer.from(block.generatorPublicKey, 'hex')
     const blockSignature = Buffer.from(block.blockSignature, 'hex')
 
-    return this.scope.dbLite.query('INSERT INTO blocks(id, version, timestamp, height, previousBlock,  numberOfTransactions, totalAmount, totalFee, reward, payloadLength, payloadHash, generatorPublicKey, blockSignature) VALUES($id, $version, $timestamp, $height, $previousBlock, $numberOfTransactions, $totalAmount, $totalFee, $reward, $payloadLength,  $payloadHash, $generatorPublicKey, $blockSignature)', {
+    return self.scope.dbLite.query('INSERT INTO blocks(id, version, timestamp, height, previousBlock,  numberOfTransactions, totalAmount, totalFee, reward, payloadLength, payloadHash, generatorPublicKey, blockSignature) VALUES($id, $version, $timestamp, $height, $previousBlock, $numberOfTransactions, $totalAmount, $totalFee, $reward, $payloadLength,  $payloadHash, $generatorPublicKey, $blockSignature)', {
       id: block.id,
       version: block.version,
       timestamp: block.timestamp,
@@ -250,7 +253,7 @@ Block.prototype.objectNormalize = (block) => {
     }
   }
 
-  const report = this.scope.scheme.validate(block, {
+  const report = self.scope.scheme.validate(block, {
     type: 'object',
     properties: {
       id: {
@@ -293,12 +296,12 @@ Block.prototype.objectNormalize = (block) => {
   })
 
   if (!report) {
-    throw Error(this.scope.scheme.getLastError())
+    throw Error(self.scope.scheme.getLastError())
   }
 
   try {
     for (let i = 0; i < block.transactions.length; i++) {
-      block.transactions[i] = this.scope.transaction.objectNormalize(block.transactions[i])
+      block.transactions[i] = self.scope.transaction.objectNormalize(block.transactions[i])
     }
   } catch (e) {
     throw Error(e.toString())
@@ -307,13 +310,13 @@ Block.prototype.objectNormalize = (block) => {
   return block
 }
 
-Block.prototype.getId = block => this.getId2(block)
+Block.prototype.getId = block => self.getId2(block)
 
 Block.prototype.getId_old = (block) => {
   if (global.featureSwitch.enableLongId) {
-    return this.getId2(block)
+    return self.getId2(block)
   }
-  const hash = crypto.createHash('sha256').update(this.getBytes(block)).digest()
+  const hash = crypto.createHash('sha256').update(self.getBytes(block)).digest()
   const temp = Buffer.alloc(8)
   for (let i = 0; i < 8; i++) {
     temp[i] = hash[7 - i]
@@ -324,11 +327,11 @@ Block.prototype.getId_old = (block) => {
 }
 
 Block.prototype.getId2 = (block) => {
-  const hash = crypto.createHash('sha256').update(this.getBytes(block)).digest()
+  const hash = crypto.createHash('sha256').update(self.getBytes(block)).digest()
   return hash.toString('hex')
 }
 
-Block.prototype.getHash = block => crypto.createHash('sha256').update(this.getBytes(block)).digest()
+Block.prototype.getHash = block => crypto.createHash('sha256').update(self.getBytes(block)).digest()
 
 Block.prototype.calculateFee = () => 10000000
 

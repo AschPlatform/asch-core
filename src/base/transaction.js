@@ -6,8 +6,10 @@ const slots = require('../utils/slots.js')
 const addressHelper = require('../utils/address.js')
 const feeCalculators = require('../utils/calculate-fee.js')
 
+let self
 // Constructor
 function Transaction(scope, cb) {
+  self = this
   this.scope = scope
   genesisblock = this.scope.genesisblock
   if (cb) setImmediate(cb, null, this)
@@ -38,13 +40,13 @@ Transaction.prototype.create = (data) => {
   } else {
     trs.senderId = signerId
   }
-  trs.signatures = [this.sign(data.keypair, trs)]
+  trs.signatures = [self.sign(data.keypair, trs)]
 
   if (data.secondKeypair) {
-    trs.secondSignature = this.sign(data.secondKeypair, trs)
+    trs.secondSignature = self.sign(data.secondKeypair, trs)
   }
 
-  trs.id = this.getId(trs)
+  trs.id = self.getId(trs)
 
   return trs
 }
@@ -64,21 +66,21 @@ Transaction.prototype.attachAssetType = (typeId, instance) => {
 }
 
 Transaction.prototype.sign = (keypair, trs) => {
-  const hash = this.getHash(trs)
+  const hash = self.getHash(trs)
   return ed.Sign(hash, keypair).toString('hex')
 }
 
 Transaction.prototype.multisign = (keypair, trs) => {
-  const bytes = this.getBytes(trs, true, true)
+  const bytes = self.getBytes(trs, true, true)
   const hash = crypto.createHash('sha256').update(bytes).digest()
   return ed.Sign(hash, keypair).toString('hex')
 }
 
-Transaction.prototype.getId = trs => this.getId2(trs)
+Transaction.prototype.getId = trs => self.getId2(trs)
 
-Transaction.prototype.getId2 = trs => this.getHash(trs).toString('hex')
+Transaction.prototype.getId2 = trs => self.getHash(trs).toString('hex')
 
-Transaction.prototype.getHash = trs => crypto.createHash('sha256').update(this.getBytes(trs)).digest()
+Transaction.prototype.getHash = trs => crypto.createHash('sha256').update(self.getBytes(trs)).digest()
 
 Transaction.prototype.getBytes = (trs, skipSignature, skipSecondSignature) => {
   const bb = new ByteBuffer(1, true)
@@ -126,11 +128,11 @@ Transaction.prototype.getBytes = (trs, skipSignature, skipSecondSignature) => {
 }
 
 Transaction.prototype.verifyNormalSignature = (trs, requestor, bytes) => {
-  if (!this.verifyBytes(bytes, trs.senderPublicKey, trs.signatures[0])) {
+  if (!self.verifyBytes(bytes, trs.senderPublicKey, trs.signatures[0])) {
     return 'Invalid signature'
   }
   if (requestor.secondPublicKey) {
-    if (!this.verifyBytes(bytes, requestor.secondPublicKey, trs.secondSignature)) {
+    if (!self.verifyBytes(bytes, requestor.secondPublicKey, trs.secondSignature)) {
       return 'Invalid second signature'
     }
   }
@@ -159,7 +161,7 @@ Transaction.prototype.verifyGroupSignature = async (trs, sender, bytes) => {
     if (ks.length !== 192) return 'Invalid key-signature format'
     const key = ks.substr(0, 64)
     const signature = ks.substr(64, 192)
-    if (!this.verifyBytes(bytes, key, signature)) {
+    if (!self.verifyBytes(bytes, key, signature)) {
       return 'Invalid multi signatures'
     }
   }
@@ -189,7 +191,7 @@ Transaction.prototype.verifyChainSignature = async (trs, sender, bytes) => {
     if (ks.length !== 192) return 'Invalid key-signature format'
     const key = ks.substr(0, 64)
     const signature = ks.substr(64, 192)
-    if (!this.verifyBytes(bytes, key, signature)) {
+    if (!self.verifyBytes(bytes, key, signature)) {
       return 'Invalid multi signatures'
     }
   }
@@ -213,25 +215,25 @@ Transaction.prototype.verify = async (context) => {
     if (trs.fee < minFee) return 'Fee not enough'
   }
 
-  const id = this.getId(trs)
+  const id = self.getId(trs)
   if (trs.id !== id) {
     return 'Invalid transaction id'
   }
 
   try {
-    const bytes = this.getBytes(trs, true, true)
+    const bytes = self.getBytes(trs, true, true)
     if (trs.senderPublicKey) {
-      const error = this.verifyNormalSignature(trs, requestor, bytes)
+      const error = self.verifyNormalSignature(trs, requestor, bytes)
       if (error) return error
     }
     if (!trs.senderPublicKey && trs.signatures && trs.signatures.length > 1) {
       const ADDRESS_TYPE = app.util.address.TYPE
       const addrType = app.util.address.getType(trs.senderId)
       if (addrType === ADDRESS_TYPE.CHAIN) {
-        const error = await this.verifyChainSignature(trs, sender, bytes)
+        const error = await self.verifyChainSignature(trs, sender, bytes)
         if (error) return error
       } else if (addrType === ADDRESS_TYPE.GROUP) {
-        const error = await this.verifyGroupSignature(trs, sender, bytes)
+        const error = await self.verifyGroupSignature(trs, sender, bytes)
         if (error) return error
       } else {
         return 'Invalid account type'
@@ -248,8 +250,8 @@ Transaction.prototype.verifySignature = (trs, publicKey, signature) => {
   if (!signature) return false
 
   try {
-    const bytes = this.getBytes(trs, true, true)
-    return this.verifyBytes(bytes, publicKey, signature)
+    const bytes = self.getBytes(trs, true, true)
+    return self.verifyBytes(bytes, publicKey, signature)
   } catch (e) {
     throw Error(e.toString())
   }
@@ -336,7 +338,7 @@ Transaction.prototype.objectNormalize = (trs) => {
   }
 
   // FIXME
-  const report = this.scope.scheme.validate(trs, {
+  const report = self.scope.scheme.validate(trs, {
     type: 'object',
     properties: {
       id: { type: 'string' },
@@ -354,8 +356,8 @@ Transaction.prototype.objectNormalize = (trs) => {
   })
 
   if (!report) {
-    library.logger.error(`Failed to normalize transaction body: ${this.scope.scheme.getLastError().details[0].message}`, trs)
-    throw Error(this.scope.scheme.getLastError())
+    library.logger.error(`Failed to normalize transaction body: ${self.scope.scheme.getLastError().details[0].message}`, trs)
+    throw Error(self.scope.scheme.getLastError())
   }
 
   return trs

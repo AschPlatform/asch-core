@@ -6,7 +6,9 @@ const bignum = require('bignumber')
 const ed = require('../utils/ed.js')
 const slots = require('../utils/slots.js')
 
+let self
 function Consensus(scope, cb) {
+  self = this
   this.scope = scope
   this.pendingBlock = null
   this.pendingVotes = null
@@ -15,7 +17,7 @@ function Consensus(scope, cb) {
 }
 
 Consensus.prototype.createVotes = (keypairs, block) => {
-  const hash = this.getVoteHash(block.height, block.id)
+  const hash = self.getVoteHash(block.height, block.id)
   const votes = {
     height: block.height,
     id: block.id,
@@ -32,7 +34,7 @@ Consensus.prototype.createVotes = (keypairs, block) => {
 
 Consensus.prototype.verifyVote = (height, id, voteItem) => {
   try {
-    const hash = this.getVoteHash(height, id)
+    const hash = self.getVoteHash(height, id)
     const signature = Buffer.from(voteItem.sig, 'hex')
     const publicKey = Buffer.from(voteItem.key, 'hex')
     return ed.Verify(hash, signature, publicKey)
@@ -62,50 +64,50 @@ Consensus.prototype.hasEnoughVotes = votes => votes && votes.signatures
 Consensus.prototype.hasEnoughVotesRemote = votes => votes && votes.signatures
   && votes.signatures.length >= 6
 
-Consensus.prototype.getPendingBlock = () => this.pendingBlock
+Consensus.prototype.getPendingBlock = () => self.pendingBlock
 
 Consensus.prototype.hasPendingBlock = (timestamp) => {
-  if (!this.pendingBlock) {
+  if (!self.pendingBlock) {
     return false
   }
-  return slots.getSlotNumber(this.pendingBlock.timestamp) === slots.getSlotNumber(timestamp)
+  return slots.getSlotNumber(self.pendingBlock.timestamp) === slots.getSlotNumber(timestamp)
 }
 
 Consensus.prototype.setPendingBlock = (block) => {
-  this.pendingVotes = null
-  this.votesKeySet = {}
-  this.pendingBlock = block
+  self.pendingVotes = null
+  self.votesKeySet = {}
+  self.pendingBlock = block
 }
 
 Consensus.prototype.clearState = () => {
-  this.pendingVotes = null
-  this.votesKeySet = {}
-  this.pendingBlock = null
+  self.pendingVotes = null
+  self.votesKeySet = {}
+  self.pendingBlock = null
 }
 
 Consensus.prototype.addPendingVotes = (votes) => {
-  if (!this.pendingBlock || this.pendingBlock.height !== votes.height
-    || this.pendingBlock.id !== votes.id) {
-    return this.pendingVotes
+  if (!self.pendingBlock || self.pendingBlock.height !== votes.height
+    || self.pendingBlock.id !== votes.id) {
+    return self.pendingVotes
   }
   for (let i = 0; i < votes.signatures.length; ++i) {
     const item = votes.signatures[i]
-    if (this.votesKeySet[item.key]) {
+    if (self.votesKeySet[item.key]) {
       continue
     }
-    if (this.verifyVote(votes.height, votes.id, item)) {
-      this.votesKeySet[item.key] = true
-      if (!this.pendingVotes) {
-        this.pendingVotes = {
+    if (self.verifyVote(votes.height, votes.id, item)) {
+      self.votesKeySet[item.key] = true
+      if (!self.pendingVotes) {
+        self.pendingVotes = {
           height: votes.height,
           id: votes.id,
           signatures: [],
         }
       }
-      this.pendingVotes.signatures.push(item)
+      self.pendingVotes.signatures.push(item)
     }
   }
-  return this.pendingVotes
+  return self.pendingVotes
 }
 
 Consensus.prototype.createPropose = (keypair, block, address) => {
@@ -117,7 +119,7 @@ Consensus.prototype.createPropose = (keypair, block, address) => {
     generatorPublicKey: block.generatorPublicKey,
     address,
   }
-  const hash = this.getProposeHash(propose)
+  const hash = self.getProposeHash(propose)
   propose.hash = hash.toString('hex')
   propose.signature = ed.Sign(hash, keypair).toString('hex')
   return propose
@@ -153,7 +155,7 @@ Consensus.prototype.getProposeHash = (propose) => {
 }
 
 Consensus.prototype.normalizeVotes = (votes) => {
-  const report = this.scope.scheme.validate(votes, {
+  const report = self.scope.scheme.validate(votes, {
     type: 'object',
     properties: {
       height: {
@@ -171,13 +173,13 @@ Consensus.prototype.normalizeVotes = (votes) => {
     required: ['height', 'id', 'signatures'],
   })
   if (!report) {
-    throw Error(this.scope.scheme.getLastError())
+    throw Error(self.scope.scheme.getLastError())
   }
   return votes
 }
 
 Consensus.prototype.acceptPropose = (propose, cb) => {
-  const hash = this.getProposeHash(propose)
+  const hash = self.getProposeHash(propose)
   if (propose.hash !== hash.toString('hex')) {
     return setImmediate(cb, 'Propose hash is not correct')
   }
