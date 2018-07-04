@@ -446,13 +446,13 @@ Transport.prototype.sendVotes = (votes, address) => {
   })
 }
 
-Transport.prototype.onMessage = (msg) => {
-  const message = {
-    chain: msg.chain,
-    body: msg,
-  }
-  self.broadcast('chainMessage', message)
-}
+// Transport.prototype.onMessage = (msg) => {
+//   const message = {
+//     chain: msg.chain,
+//     body: msg,
+//   }
+//   self.broadcast('chainMessage', message)
+// }
 
 Transport.prototype.cleanup = (cb) => {
   priv.loaded = false
@@ -463,7 +463,7 @@ shared.message = (msg, cb) => {
   msg.timestamp = (new Date()).getTime()
   msg.hash = priv.hashsum(msg.body, msg.timestamp)
 
-  self.broadcast('chainMessage', msg)
+  // self.broadcast('chainMessage', msg)
 
   cb(null, {})
 }
