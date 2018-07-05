@@ -111,12 +111,12 @@ Consensus.prototype.addPendingVotes = (votes) => {
 }
 
 Consensus.prototype.createPropose = (keypair, block, address) => {
-  assert(keypair.publicKey.toString('hex') === block.generatorPublicKey)
+  assert(keypair.publicKey.toString('hex') === block.delegate)
   const propose = {
     height: block.height,
     id: block.id,
     timestamp: block.timestamp,
-    generatorPublicKey: block.generatorPublicKey,
+    generatorPublicKey: block.delegate,
     address,
   }
   const hash = self.getProposeHash(propose)

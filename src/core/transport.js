@@ -197,7 +197,7 @@ Transport.prototype.onPeerReady = () => {
   })
 
   modules.peer.handle('votes', (req, res) => {
-    // TODO validate req.params.query{height, id, signature}
+    library.logger.debug('--------receive votes', req)
     library.bus.message('receiveVotes', req.params.body.votes)
     res.send({})
   })
@@ -298,7 +298,7 @@ Transport.prototype.onPeerReady = () => {
         library.logger.error('Received propose is invalid', { propose: message.body.propose, error: err })
         return
       }
-      library.bus.message('receivePropose', req.body.propose)
+      library.bus.message('receivePropose', message.body.propose)
     })
   })
 
@@ -411,10 +411,12 @@ Transport.prototype.sendVotes = (votes, address) => {
   const contact = {
     hostname: parts[0],
     port: parts[1],
+    protocol: 'http:',
   }
   const identity = modules.peer.getIdentity(contact)
   const target = [identity, contact]
-  modules.peer.request('votes', params, contact, target, (err) => {
+  console.log('sendVotes', target)
+  modules.peer.request('votes', params, target, (err) => {
     if (err) {
       library.logger.error('send votes error', err)
     }

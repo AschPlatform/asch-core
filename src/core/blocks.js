@@ -529,6 +529,9 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
 }
 
 Blocks.prototype.generateBlock = async (keypair, timestamp) => {
+  if (library.base.consensus.hasPendingBlock(timestamp)) {
+    return null
+  }
   const unconfirmedList = modules.transactions.getUnconfirmedTransactionList()
   const payloadHash = crypto.createHash('sha256')
   let payloadLength = 0
@@ -581,14 +584,16 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
     return null
   }
   if (!library.config.publicIp) {
-    return next('No public ip')
+    library.logger.error('No public ip')
+    return null
   }
-  const serverAddr = `${library.config.publicIp}:${library.config.port}`
+  const serverAddr = `${library.config.publicIp}:${library.config.peerPort}`
   let propose
   try {
     propose = library.base.consensus.createPropose(keypair, block, serverAddr)
   } catch (e) {
-    return next(`Failed to create propose: ${e.toString()}`)
+    library.logger.error('Failed to create propose', e)
+    return null
   }
   library.base.consensus.setPendingBlock(block)
   library.base.consensus.addPendingVotes(localVotes)
