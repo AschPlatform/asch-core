@@ -73,7 +73,7 @@ priv.initNode = () => {
   const peerCacheDir = path.join(global.Config.dataDir, 'peer')
   node.rolodex = node.plugin(kadence.rolodex(peerCacheDir))
   node.plugin(kadence.quasar())
-  node.listen(port)
+  node.listen(port, global.Config.address)
 }
 
 Peer.prototype.list = (options, cb) => {

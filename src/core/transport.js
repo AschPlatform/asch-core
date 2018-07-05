@@ -197,7 +197,6 @@ Transport.prototype.onPeerReady = () => {
   })
 
   modules.peer.handle('votes', (req, res) => {
-    library.logger.debug('--------receive votes', req)
     library.bus.message('receiveVotes', req.params.body.votes)
     res.send({})
   })
