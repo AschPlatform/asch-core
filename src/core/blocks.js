@@ -262,7 +262,7 @@ Blocks.prototype.verifyBlockVotes = async (block, votes) => {
   const delegateList = await PIFY(modules.delegates.generateDelegateList)(block.height)
   const publicKeySet = new Set(delegateList)
   for (const item of votes.signatures) {
-    if (!publicKeySet[item.key]) {
+    if (!publicKeySet.has(item.key)) {
       throw new Error(`Votes key is not in the top list: ${item.key}`)
     }
     if (!library.base.consensus.verifyVote(votes.height, votes.id, item)) {

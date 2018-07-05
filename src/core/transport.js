@@ -91,17 +91,6 @@ priv.attachApi = () => {
   library.network.app.use('/peer', router)
 }
 
-priv.hashsum = (obj) => {
-  const buf = Buffer.from(JSON.stringify(obj), 'utf8')
-  const hashdig = crypto.createHash('sha256').update(buf).digest()
-  const temp = Buffer.alloc(8)
-  for (let i = 0; i < 8; i++) {
-    temp[i] = hashdig[7 - i]
-  }
-
-  return bignum.fromBuffer(temp).toString()
-}
-
 Transport.prototype.broadcast = (topic, message) => {
   modules.peer.publish(topic, message)
 }
@@ -225,20 +214,10 @@ Transport.prototype.onPeerReady = () => {
 
   modules.peer.handle('chainRequest', (req, res) => {
     const params = req.params
-    const query = req.params.body
+    const body = req.params.body
     try {
       if (!params.chain) {
         return res.send({ success: false, error: 'missed chain' })
-      }
-      if (!params.timestamp || !params.hash) {
-        return res.status(200).json({
-          success: false,
-          error: 'missed hash sum',
-        })
-      }
-      const newHash = priv.hashsum(query, params.timestamp)
-      if (newHash !== params.hash) {
-        return res.send({ success: false, error: 'wrong hash sum' })
       }
     } catch (e) {
       library.logger.error('receive invalid chain request', { error: e.toString(), params })
@@ -247,9 +226,9 @@ Transport.prototype.onPeerReady = () => {
 
     return modules.chains.request(
       params.chain,
-      query.method,
-      query.path,
-      { query: params.query },
+      body.method,
+      body.path,
+      { query: body.query },
       (err, ret) => {
         if (!err && ret.error) {
           err = ret.error
@@ -369,10 +348,6 @@ Transport.prototype.onPeerReady = () => {
       if (!message.timestamp || !message.hash) {
         return
       }
-      const newHash = priv.hashsum(message.body, message.timestamp)
-      if (newHash !== message.hash) {
-        return
-      }
     } catch (e) {
       library.logger.error(e)
       library.logger.debug('receive invalid chain message', message)
@@ -461,7 +436,6 @@ Transport.prototype.cleanup = (cb) => {
 
 shared.message = (msg, cb) => {
   msg.timestamp = (new Date()).getTime()
-  msg.hash = priv.hashsum(msg.body, msg.timestamp)
 
   // self.broadcast('chainMessage', msg)
 
@@ -469,11 +443,13 @@ shared.message = (msg, cb) => {
 }
 
 shared.request = (req, cb) => {
-  req.timestamp = (new Date()).getTime()
-  req.hash = priv.hashsum(req.body, req.timestamp)
-
   if (req.body.peer) {
-    modules.peer.request('chainRequest', req, req.body.peer, cb)
+    modules.peer.request('chainRequest', req, req.body.peer, (err, res) => {
+      if (res) {
+        res.peer = req.body.peer
+      }
+      cb(err, res)
+    })
   } else {
     modules.peer.randomRequest('chainRequest', req, cb)
   }

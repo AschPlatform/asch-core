@@ -62,7 +62,7 @@ async function loadModels(dir) {
     app.logger.info('loading model', modelFile)
     const basename = path.basename(modelFile, '.js')
     const modelName = changeCase.pascalCase(basename)
-    const fullpath = path.join(dir, modelFile)
+    const fullpath = path.resolve(dir, modelFile)
     const schema = require(fullpath)
     schemas.push(new AschCore.ModelSchema(schema, modelName))
   })
@@ -84,7 +84,7 @@ async function loadContracts(dir) {
     app.logger.info('loading contract', contractFile)
     const basename = path.basename(contractFile, '.js')
     const contractName = changeCase.snakeCase(basename)
-    const fullpath = path.join(dir, contractFile)
+    const fullpath = path.resolve(dir, contractFile)
     const contract = require(fullpath)
     if (contractFile !== 'index.js') {
       app.contract[contractName] = contract
@@ -104,7 +104,7 @@ async function loadInterfaces(dir, routes) {
     app.logger.info('loading interface', f)
     const basename = path.basename(f, '.js')
     const rw = new RouteWrapper()
-    require(path.join(dir, f))(rw)
+    require(path.resolve(dir, f))(rw)
     const router = new Router()
     for (const h of rw.handlers) {
       router[h.method](h.path, (req, res) => {
