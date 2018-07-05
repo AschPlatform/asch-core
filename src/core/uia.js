@@ -46,12 +46,6 @@ priv.attachApi = () => {
     'get /assets/:name': 'getAsset',
     'get /balances/:address': 'getBalances',
     'get /balances/:address/:currency': 'getBalance',
-    /*
-    'get /assets/:name/acl/:flag': 'getAssetAcl',
-    'get /transactions/my/:address/': 'getMyTransactions',
-    'get /transactions/my/:address/:currency': 'getMyTransactions',
-    'get /transactions/:currency': 'getTransactions',
-    */
     'put /transfers': 'transferAsset',
   })
 
@@ -118,125 +112,7 @@ UIA.prototype.onBind = (scope) => {
   modules = scope
 }
 
-priv.queryTransactions = (query, cb) => {
-  let func = 'list'
-  let param = query
-  let list = true
-  if (typeof query.id !== 'undefined') {
-    func = 'getById'
-    param = query.id
-    list = false
-  }
-
-  modules.transactions[func](param, (err, data) => {
-    if (err) return cb(`Failed to get transactions: ${err}`)
-
-    if (!list) data = { transactions: [data] }
-    const sqls = []
-    const typeToTable = {
-      9: {
-        model: 'Issuer',
-        fields: ['transactionId', 'name', 'desc'],
-      },
-      10: {
-        model: 'Asset',
-        fields: ['transactionId', 'name', 'desc', 'maximum', 'precision', 'strategy'],
-      },
-      11: {
-        model: 'Flag',
-        fields: ['transactionId', 'currency', 'flagType', 'flag'],
-      },
-      12: {
-        model: 'Acl',
-        fields: ['transactionId', 'currency', 'operator', 'flag', 'list'],
-      },
-      13: {
-        model: 'Issue',
-        fields: ['transactionId', 'currency', 'amount'],
-      },
-      14: {
-        model: 'Transfer',
-        fields: ['transactionId', 'currency', 'amount'],
-      },
-    }
-    data.transactions.forEach((trs) => {
-      if (!typeToTable[trs.type]) return
-
-      trs.t_id = trs.id
-      sqls.push({
-        model: typeToTable[trs.type].model,
-        fields: typeToTable[trs.type].fields,
-      })
-    })
-    return async.mapSeries(sqls, (sql, next) => {
-      // FIXME: to fix this function
-      next()
-      // app.sdb.findAll({ })
-      // library.dbLite.query(sql.query, {}, sql.fields, next)
-    }, (sqlErr, rows) => {
-      if (sqlErr) return cb(`Failed to get transaction assets: ${sqlErr}`)
-
-      for (let i = 0; i < rows.length; ++i) {
-        if (rows[i].length === 0) continue
-        const t = data.transactions[i]
-        const type = t.type
-        const table = typeToTable[type].table
-        const asset = rows[i][0]
-        for (const k in asset) {
-          if (asset[k] || true) {
-            asset[`${table}_${k}`] = asset[k]
-          }
-        }
-        if (asset.transactionId === t.id) {
-          asset.t_id = asset.transactionId
-          t.asset = library.base.transaction.dbReadAsset(t.type, asset)
-        }
-        delete t.t_id
-      }
-      let assetNames = new Set()
-      data.transactions.forEach((trs) => {
-        if (trs.type === 13) {
-          assetNames.add(trs.asset.uiaIssue.currency)
-        } else if (trs.type === 14) {
-          assetNames.add(trs.asset.uiaTransfer.currency)
-        }
-      })
-      assetNames = Array.from(assetNames)
-      return async.mapSeries(assetNames, (name, next) => {
-        library.model.getAssetByName(name, next)
-      }, (assetErr, assets) => {
-        if (assetErr) return cb(`Failed to asset info: ${assetErr}`)
-        const precisionMap = new Map()
-        assets.forEach((a) => {
-          precisionMap.set(a.name, a.precision)
-        })
-        data.transactions.forEach((trs) => {
-          let obj = null
-          if (trs.type === 13) {
-            obj = trs.asset.uiaIssue
-          } else if (trs.type === 14) {
-            obj = trs.asset.uiaTransfer
-          }
-          if (obj != null && precisionMap.has(obj.currency)) {
-            const precision = precisionMap.get(obj.currency)
-            obj.amountShow = amountHelper.calcRealAmount(obj.amount, precision)
-            obj.precision = precision
-          }
-        })
-        return cb(null, data)
-      })
-    })
-  })
-}
-
 // Shared
-shared.getFee = (req, cb) => {
-  let fee = null
-
-  // FIXME(qingfeng)
-  fee = 5 * constants.fixedPoint
-  cb(null, { fee })
-}
 
 shared.getIssuers = (req, cb) => {
   const query = req.body
@@ -464,89 +340,6 @@ shared.getBalance = (req, cb) => {
   })()
 }
 
-shared.getMyTransactions = (req, cb) => {
-  if (!req.params || !addressHelper.isAddress(req.params.address)) {
-    return cb('Invalid parameters')
-  }
-  const query = req.body
-  return library.scheme.validate(query, {
-    type: 'object',
-    properties: {
-      limit: {
-        type: 'integer',
-        minimum: 0,
-        maximum: 100,
-      },
-      offset: {
-        type: 'integer',
-        minimum: 0,
-      },
-    },
-  }, (err) => {
-    if (err) return cb(`Invalid parameters: ${err[0]}`)
-    if (req.params.currency) {
-      query.currency = req.params.currency
-    } else {
-      query.uia = 1
-    }
-    query.ownerAddress = req.params.address
-    return priv.queryTransactions(query, cb)
-  })
-}
-
-shared.getTransactions = (req, cb) => {
-  if (!req.params || !req.params.currency) {
-    return cb('Invalid parameters')
-  }
-  let single = false
-  const query = req.body
-  if (req.params.currency.length === 64) {
-    query.id = req.params.currency
-    single = true
-  } else {
-    query.currency = req.params.currency
-  }
-  return library.scheme.validate(query, {
-    type: 'object',
-    properties: {
-      limit: {
-        type: 'integer',
-        minimum: 0,
-        maximum: 100,
-      },
-      offset: {
-        type: 'integer',
-        minimum: 0,
-      },
-    },
-  }, (err) => {
-    if (err) return cb(`Invalid parameters: ${err[0]}`)
-    return priv.queryTransactions(query, (queryErr, data) => {
-      if (queryErr) return cb(queryErr)
-      if (single) {
-        return cb(null, { transaction: data.transactions[0] })
-      }
-      return cb(null, data)
-    })
-  })
-}
-
-shared.registerIssuer = function (req, cb) {
-  cb(null, req)
-}
-
-shared.registerAssets = function (req, cb) {
-  cb(null, req)
-}
-
-shared.updateAssetAcl = function (req, cb) {
-  cb(null, req)
-}
-
-shared.issueAsset = function (req, cb) {
-  cb(null, req)
-}
-
 shared.transferAsset = (req, cb) => {
   const body = req.body
   return library.scheme.validate(body, {
@@ -701,10 +494,6 @@ shared.transferAsset = (req, cb) => {
       return cb(null, { transactionId: transaction[0].id })
     })
   })
-}
-
-shared.updateFlags = (req, cb) => {
-  cb(null, req)
 }
 
 module.exports = UIA

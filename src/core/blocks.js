@@ -467,11 +467,6 @@ Blocks.prototype.applyRound = async (block) => {
       await updateDelegate(fd, feeAverage, rewardAverage)
     }
     await updateDelegate(block.delegate, feeRemainder, rewardRemainder)
-
-    // let totalClubFounds = feeFounds + rewardFounds
-    // app.logger.info('Asch witness club get new founds: ' + totalClubFounds)
-    // // FIXME dapp id
-    // app.balances.increase('club_dapp_id', 'XAS', totalClubFounds)
   }
 
   if (block.height % 101 === 0) {
