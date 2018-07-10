@@ -1,10 +1,11 @@
 const crypto = require('crypto')
+const isArray = require('util').isArray
 const ed = require('../utils/ed.js')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const LimitCache = require('../utils/limit-cache.js')
 const addressHelper = require('../utils/address.js')
-const isArray = require('util').isArray
+
 
 // let genesisblock = null
 // Private fields
@@ -141,8 +142,8 @@ Transactions.prototype.hasUnconfirmed = id => self.pool.has(id)
 
 Transactions.prototype.clearUnconfirmed = () => self.pool.clear()
 
-Transactions.prototype.getUnconfirmedTransactions = (_, cb) =>
-  setImmediate(cb, null, { transactions: self.getUnconfirmedTransactionList() })
+Transactions.prototype.getUnconfirmedTransactions = (_, cb) => setImmediate(cb, null,
+  { transactions: self.getUnconfirmedTransactionList() })
 
 Transactions.prototype.getTransactions = (req, cb) => {
   const limit = Number(req.query.limit) || 100
@@ -376,6 +377,7 @@ function toV1TypeAndArgs(type, argsString) {
       break
   }
 
+  result.recipientId = result.recipientId || ''
   return Object.assign(result, { type: v1Type, args: v1Args, argsNew: args })
 }
 
@@ -409,11 +411,13 @@ Transactions.prototype.toAPIV1Transaction = (trans, block) => {
 }
 
 
-Transactions.prototype.addTransactionUnsigned = (transaction, cb) =>
+Transactions.prototype.addTransactionUnsigned = (transaction, cb) => {
   shared.addTransactionUnsigned({ body: transaction }, cb)
+}
 
-Transactions.prototype.sandboxApi = (call, args, cb) =>
+Transactions.prototype.sandboxApi = (call, args, cb) => {
   sandboxHelper.callMethod(shared, call, args, cb)
+}
 
 Transactions.prototype.list = (query, cb) => priv.list(query, cb)
 
@@ -509,16 +513,15 @@ shared.getTransaction = (req, cb) => {
     if (err) {
       return cb(err[0].message)
     }
-    const callback = (err2, ret) =>
-      (async () => {
-        if (!ret || !ret.transaction) {
-          cb(err2, ret)
-        } else {
-          let block = await app.sdb.getBlockByHeight(ret.transaction.height)
-          block = modules.blocks.toAPIV1Block(block)
-          cb(err2, { transaction: self.toAPIV1Transaction(ret.transaction, block) })
-        }
-      })()
+    const callback = (err2, ret) => (async () => {
+      if (!ret || !ret.transaction) {
+        cb(err2, ret)
+      } else {
+        let block = await app.sdb.getBlockByHeight(ret.transaction.height)
+        block = modules.blocks.toAPIV1Block(block)
+        cb(err2, { transaction: self.toAPIV1Transaction(ret.transaction, block) })
+      }
+    })()
     return self.getTransaction({ params: query }, callback)
   })
 }
@@ -542,9 +545,9 @@ shared.getUnconfirmedTransaction = (req, cb) => {
 
     const unconfirmedTransaction = self.getUnconfirmedTransaction(query.id)
 
-    return !unconfirmedTransaction ?
-      cb('Transaction not found') :
-      cb(null, { transaction: unconfirmedTransaction })
+    return !unconfirmedTransaction
+      ? cb('Transaction not found')
+      : cb(null, { transaction: unconfirmedTransaction })
   })
 }
 
@@ -571,8 +574,8 @@ shared.getUnconfirmedTransactions = (req, cb) => {
 
     if (query.senderPublicKey || query.address) {
       for (let i = 0; i < transactions.length; i++) {
-        if (transactions[i].senderPublicKey === query.senderPublicKey ||
-          transactions[i].recipientId === query.address) {
+        if (transactions[i].senderPublicKey === query.senderPublicKey
+          || transactions[i].recipientId === query.address) {
           toSend.push(transactions[i])
         }
       }

@@ -1,106 +1,98 @@
-var crypto = require('crypto');
-var extend = require('util-extend');
-var ByteBuffer = require("bytebuffer");
-var ed = require('../utils/ed.js');
-var bignum = require('bignumber');
-var constants = require('../utils/constants.js');
-var slots = require('../utils/slots.js');
-var addressHelper = require('../utils/address.js')
-var feeCalculators = require('../utils/calculate-fee.js')
+const crypto = require('crypto')
+const ByteBuffer = require('bytebuffer')
+const ed = require('../utils/ed.js')
+const constants = require('../utils/constants.js')
+const slots = require('../utils/slots.js')
+const addressHelper = require('../utils/address.js')
+const feeCalculators = require('../utils/calculate-fee.js')
 
-var genesisblock = null;
-
+let self
 // Constructor
 function Transaction(scope, cb) {
-  this.scope = scope;
-  genesisblock = this.scope.genesisblock;
-  cb && setImmediate(cb, null, this);
+  self = this
+  this.scope = scope
+  genesisblock = this.scope.genesisblock
+  if (cb) setImmediate(cb, null, this)
 }
 
 // Private methods
-var private = {};
-private.types = {};
+const prv = {}
+prv.types = {}
 
-function calc(height) {
-  return Math.floor(height / slots.delegates) + (height % slots.delegates > 0 ? 1 : 0);
-}
+// function calc(height) {
+//   return Math.floor(height / slots.delegates) + (height % slots.delegates > 0 ? 1 : 0)
+// }
 
 // Public methods
-Transaction.prototype.create = function (data) {
-  var trs = {
+Transaction.prototype.create = (data) => {
+  const trs = {
     type: data.type,
     senderId: data.senderId,
     senderPublicKey: data.keypair.publicKey.toString('hex'),
     timestamp: slots.getTime(),
     message: data.message,
     args: data.args,
-    fee: data.fee
-  };
+    fee: data.fee,
+  }
   const signerId = addressHelper.generateNormalAddress(trs.senderPublicKey)
   if (trs.senderId) {
     trs.requestorId = signerId
   } else {
     trs.senderId = signerId
   }
-  trs.signatures = [this.sign(data.keypair, trs)];
+  trs.signatures = [self.sign(data.keypair, trs)]
 
   if (data.secondKeypair) {
-    trs.secondSignature = this.sign(data.secondKeypair, trs);
+    trs.secondSignature = self.sign(data.secondKeypair, trs)
   }
 
-  trs.id = this.getId(trs);
+  trs.id = self.getId(trs)
 
-  return trs;
+  return trs
 }
 
-Transaction.prototype.attachAssetType = function (typeId, instance) {
-  if (instance && typeof instance.create == 'function' && typeof instance.getBytes == 'function' &&
-    typeof instance.calculateFee == 'function' && typeof instance.verify == 'function' &&
-    typeof instance.objectNormalize == 'function' && typeof instance.dbRead == 'function' &&
-    typeof instance.apply == 'function' && typeof instance.undo == 'function' &&
-    typeof instance.applyUnconfirmed == 'function' && typeof instance.undoUnconfirmed == 'function' &&
-    typeof instance.ready == 'function' && typeof instance.process == 'function'
+Transaction.prototype.attachAssetType = (typeId, instance) => {
+  if (instance && typeof instance.create === 'function' && typeof instance.getBytes === 'function'
+    && typeof instance.calculateFee === 'function' && typeof instance.verify === 'function'
+    && typeof instance.objectNormalize === 'function' && typeof instance.dbRead === 'function'
+    && typeof instance.apply === 'function' && typeof instance.undo === 'function'
+    && typeof instance.applyUnconfirmed === 'function' && typeof instance.undoUnconfirmed === 'function'
+    && typeof instance.ready === 'function' && typeof instance.process === 'function'
   ) {
-    private.types[typeId] = instance;
+    prv.types[typeId] = instance
   } else {
-    throw Error('Invalid instance interface');
+    throw Error('Invalid instance interface')
   }
 }
 
-Transaction.prototype.sign = function (keypair, trs) {
-  var hash = this.getHash(trs);
-  return ed.Sign(hash, keypair).toString('hex');
+Transaction.prototype.sign = (keypair, trs) => {
+  const hash = self.getHash(trs)
+  return ed.Sign(hash, keypair).toString('hex')
 }
 
-Transaction.prototype.multisign = function (keypair, trs) {
-  var bytes = this.getBytes(trs, true, true);
-  var hash = crypto.createHash('sha256').update(bytes).digest();
-  return ed.Sign(hash, keypair).toString('hex');
+Transaction.prototype.multisign = (keypair, trs) => {
+  const bytes = self.getBytes(trs, true, true)
+  const hash = crypto.createHash('sha256').update(bytes).digest()
+  return ed.Sign(hash, keypair).toString('hex')
 }
 
-Transaction.prototype.getId = function (trs) {
-  return this.getId2(trs);
-}
+Transaction.prototype.getId = trs => self.getId2(trs)
 
-Transaction.prototype.getId2 = function (trs) {
-  return this.getHash(trs).toString('hex')
-}
+Transaction.prototype.getId2 = trs => self.getHash(trs).toString('hex')
 
-Transaction.prototype.getHash = function (trs) {
-  return crypto.createHash('sha256').update(this.getBytes(trs)).digest();
-}
+Transaction.prototype.getHash = trs => crypto.createHash('sha256').update(self.getBytes(trs)).digest()
 
-Transaction.prototype.getBytes = function (trs, skipSignature, skipSecondSignature) {
-  var bb = new ByteBuffer(1, true);
-  bb.writeInt(trs.type);
-  bb.writeInt(trs.timestamp);
-  bb.writeLong(trs.fee);
+Transaction.prototype.getBytes = (trs, skipSignature, skipSecondSignature) => {
+  const bb = new ByteBuffer(1, true)
+  bb.writeInt(trs.type)
+  bb.writeInt(trs.timestamp)
+  bb.writeLong(trs.fee)
   bb.writeString(trs.senderId)
   if (trs.requestorId) {
     bb.writeString(trs.requestorId)
   }
 
-  if (trs.message) bb.writeString(trs.message);
+  if (trs.message) bb.writeString(trs.message)
   if (trs.args) {
     let args
     if (typeof trs.args === 'string') {
@@ -115,130 +107,133 @@ Transaction.prototype.getBytes = function (trs, skipSignature, skipSecondSignatu
 
   // FIXME
   if (!skipSignature && trs.signatures) {
-    for (let signature of trs.signatures) {
-      var signatureBuffer = new Buffer(signature, 'hex');
-      for (var i = 0; i < signatureBuffer.length; i++) {
-        bb.writeByte(signatureBuffer[i]);
+    for (const signature of trs.signatures) {
+      const signatureBuffer = Buffer.from(signature, 'hex')
+      for (let i = 0; i < signatureBuffer.length; i++) {
+        bb.writeByte(signatureBuffer[i])
       }
     }
   }
 
   if (!skipSecondSignature && trs.signSignature) {
-    var signSignatureBuffer = new Buffer(trs.signSignature, 'hex');
-    for (var i = 0; i < signSignatureBuffer.length; i++) {
-      bb.writeByte(signSignatureBuffer[i]);
+    const signSignatureBuffer = Buffer.from(trs.signSignature, 'hex')
+    for (let i = 0; i < signSignatureBuffer.length; i++) {
+      bb.writeByte(signSignatureBuffer[i])
     }
   }
 
-  bb.flip();
+  bb.flip()
 
-  return bb.toBuffer();
+  return bb.toBuffer()
 }
 
-Transaction.prototype.verifyNormalSignature = function (trs, requestor, bytes) {
-  if (!this.verifyBytes(bytes, trs.senderPublicKey, trs.signatures[0])) {
+Transaction.prototype.verifyNormalSignature = (trs, requestor, bytes) => {
+  if (!self.verifyBytes(bytes, trs.senderPublicKey, trs.signatures[0])) {
     return 'Invalid signature'
   }
   if (requestor.secondPublicKey) {
-    if (!this.verifyBytes(bytes, requestor.secondPublicKey, trs.secondSignature)) {
+    if (!self.verifyBytes(bytes, requestor.secondPublicKey, trs.secondSignature)) {
       return 'Invalid second signature'
     }
   }
+  return undefined
 }
 
-Transaction.prototype.verifyGroupSignature = async function(trs, sender, bytes) {
-  let group = await app.sdb.findOne('Group', { name: sender.name })
+Transaction.prototype.verifyGroupSignature = async (trs, sender, bytes) => {
+  const group = await app.sdb.findOne('Group', { name: sender.name })
   if (!group) return 'Group not found'
-  let groupMembers = await app.sdb.findAll('GroupMember', { name: sender.name })
+  const groupMembers = await app.sdb.findAll('GroupMember', { name: sender.name })
   if (!groupMembers) return 'Group members not found'
-  let memberMap = new Map()
+  const memberMap = new Map()
   for (const item of groupMembers) {
     memberMap.set(item.member, item)
   }
   let totalWeight = 0
-  for (let ks of trs.signatures) {
-    let k = ks.substr(0, 64)
-    let address = addressHelper.generateNormalAddress(k)
+  for (const ks of trs.signatures) {
+    const k = ks.substr(0, 64)
+    const address = addressHelper.generateNormalAddress(k)
     if (!memberMap.has(address)) return 'Invalid member address'
     totalWeight += memberMap.get(address).weight
   }
   if (totalWeight < group.m) return 'Signature weight not enough'
 
-  for (let ks of trs.signatures) {
+  for (const ks of trs.signatures) {
     if (ks.length !== 192) return 'Invalid key-signature format'
-    let key = ks.substr(0, 64)
-    let signature = ks.substr(64, 192)
-    if (!this.verifyBytes(bytes, key, signature)) {
+    const key = ks.substr(0, 64)
+    const signature = ks.substr(64, 192)
+    if (!self.verifyBytes(bytes, key, signature)) {
       return 'Invalid multi signatures'
     }
   }
+  return undefined
 }
 
-Transaction.prototype.verifyChainSignature = async function (trs, sender, bytes) {
-  let chain = await app.sdb.findOne('Chain', { condition: { address: sender.senderId } })
+Transaction.prototype.verifyChainSignature = async (trs, sender, bytes) => {
+  const chain = await app.sdb.findOne('Chain', { condition: { address: sender.senderId } })
   if (!chain) return 'Chain not found'
-  let validators = await app.sdb.findAll('ChainDelegate', { condition: { address: sender.senderId } })
+  const validators = await app.sdb.findAll('ChainDelegate', { condition: { address: sender.senderId } })
   if (!validators || !validators.length) return 'Chain delegates not found'
 
-  let validatorPublicKeySet = new Set
-  for (let v of validators) {
+  const validatorPublicKeySet = new Set()
+  for (const v of validators) {
     validatorPublicKeySet.add(v.delegate)
   }
   let validSignatureNumber = 0
-  for (let s of trs.signatures) {
-    let k = s.substr(0, 64)
+  for (const s of trs.signatures) {
+    const k = s.substr(0, 64)
     if (validatorPublicKeySet.has(k)) {
       validSignatureNumber++
     }
   }
   if (validSignatureNumber < chain.unlockNumber) return 'Signature not enough'
 
-  for (let ks of trs.signatures) {
+  for (const ks of trs.signatures) {
     if (ks.length !== 192) return 'Invalid key-signature format'
-    let key = ks.substr(0, 64)
-    let signature = ks.substr(64, 192)
-    if (!this.verifyBytes(bytes, key, signature)) {
+    const key = ks.substr(0, 64)
+    const signature = ks.substr(64, 192)
+    if (!self.verifyBytes(bytes, key, signature)) {
       return 'Invalid multi signatures'
     }
   }
+  return undefined
 }
 
-Transaction.prototype.verify = async function (context) {
+Transaction.prototype.verify = async (context) => {
   const { trs, sender, requestor } = context
   if (slots.getSlotNumber(trs.timestamp) > slots.getSlotNumber()) {
-    return "Invalid transaction timestamp"
+    return 'Invalid transaction timestamp'
   }
 
   if (!trs.type) {
-    return "Invalid function"
+    return 'Invalid function'
   }
 
   if (sender === requestor || !requestor) {
-    let feeCalculator = feeCalculators[trs.type]
+    const feeCalculator = feeCalculators[trs.type]
     if (!feeCalculator) return 'Fee calculator not found'
-    let minFee = 100000000 * feeCalculator(trs)
+    const minFee = 100000000 * feeCalculator(trs)
     if (trs.fee < minFee) return 'Fee not enough'
   }
 
-  let id = this.getId(trs)
+  const id = self.getId(trs)
   if (trs.id !== id) {
     return 'Invalid transaction id'
   }
 
   try {
-    let bytes = this.getBytes(trs, true, true)
+    const bytes = self.getBytes(trs, true, true)
     if (trs.senderPublicKey) {
-      let error = this.verifyNormalSignature(trs, requestor, bytes)
+      const error = self.verifyNormalSignature(trs, requestor, bytes)
       if (error) return error
     }
     if (!trs.senderPublicKey && trs.signatures && trs.signatures.length > 1) {
-      let ADDRESS_TYPE = app.util.address.TYPE
-      let addrType = app.util.address.getType(trs.senderId)
+      const ADDRESS_TYPE = app.util.address.TYPE
+      const addrType = app.util.address.getType(trs.senderId)
       if (addrType === ADDRESS_TYPE.CHAIN) {
-        let error = await this.verifyChainSignature(trs, sender, bytes)
+        const error = await self.verifyChainSignature(trs, sender, bytes)
         if (error) return error
       } else if (addrType === ADDRESS_TYPE.GROUP) {
-        let error = await this.verifyGroupSignature(trs, sender, bytes)
+        const error = await self.verifyGroupSignature(trs, sender, bytes)
         if (error) return error
       } else {
         return 'Invalid account type'
@@ -248,51 +243,50 @@ Transaction.prototype.verify = async function (context) {
     library.logger.error('verify signature excpetion', e)
     return 'Faied to verify signature'
   }
+  return undefined
 }
 
-Transaction.prototype.verifySignature = function (trs, publicKey, signature) {
-  if (!signature) return false;
+Transaction.prototype.verifySignature = (trs, publicKey, signature) => {
+  if (!signature) return false
 
   try {
-    var bytes = this.getBytes(trs, true, true);
-    var res = this.verifyBytes(bytes, publicKey, signature);
+    const bytes = self.getBytes(trs, true, true)
+    return self.verifyBytes(bytes, publicKey, signature)
   } catch (e) {
-    throw Error(e.toString());
+    throw Error(e.toString())
   }
-
-  return res;
 }
 
-Transaction.prototype.verifyBytes = function (bytes, publicKey, signature) {
+Transaction.prototype.verifyBytes = (bytes, publicKey, signature) => {
   try {
-    var data2 = new Buffer(bytes.length);
+    const data2 = Buffer.alloc(bytes.length)
 
-    for (var i = 0; i < data2.length; i++) {
-      data2[i] = bytes[i];
+    for (let i = 0; i < data2.length; i++) {
+      data2[i] = bytes[i]
     }
 
-    var hash = crypto.createHash('sha256').update(data2).digest();
-    var signatureBuffer = new Buffer(signature, 'hex');
-    var publicKeyBuffer = new Buffer(publicKey, 'hex');
-    var res = ed.Verify(hash, signatureBuffer || ' ', publicKeyBuffer || ' ');
+    const hash = crypto.createHash('sha256').update(data2).digest()
+    const signatureBuffer = Buffer.from(signature, 'hex')
+    const publicKeyBuffer = Buffer.from(publicKey, 'hex')
+    return ed.Verify(hash, signatureBuffer || ' ', publicKeyBuffer || ' ')
   } catch (e) {
-    throw Error(e.toString());
+    throw Error(e.toString())
   }
-
-  return res;
 }
 
-Transaction.prototype.apply = async function (context) {
-  const { block, trs, sender, requestor } = context
-  let name = app.getContractName(trs.type)
+Transaction.prototype.apply = async (context) => {
+  const {
+    block, trs, sender, requestor,
+  } = context
+  const name = app.getContractName(trs.type)
   if (!name) {
-    throw new Error('Unsupported transaction type: ' + trs.type)
+    throw new Error(`Unsupported transaction type: ${trs.type}`)
   }
-  let [mod, func] = name.split('.')
+  const [mod, func] = name.split('.')
   if (!mod || !func) {
     throw new Error('Invalid transaction function')
   }
-  let fn = app.contract[mod][func]
+  const fn = app.contract[mod][func]
   if (!fn) {
     throw new Error('Contract not found')
   }
@@ -304,7 +298,7 @@ Transaction.prototype.apply = async function (context) {
       requestor.xas -= requestorFee
       trs.executed = 0
       return
-    } else if (sender) {
+    } if (sender) {
       if (sender.xas < trs.fee) throw new Error('Insufficient requestor balance')
       sender.xas -= trs.fee
     } else {
@@ -313,16 +307,16 @@ Transaction.prototype.apply = async function (context) {
   }
 
   trs.executed = 1
-  let error = await fn.apply(context, trs.args)
+  const error = await fn.apply(context, trs.args)
   if (error) {
     throw new Error(error)
   }
 }
 
-Transaction.prototype.objectNormalize = function (trs) {
-  for (var i in trs) {
+Transaction.prototype.objectNormalize = (trs) => {
+  for (const i in trs) {
     if (trs[i] === null || typeof trs[i] === 'undefined') {
-      delete trs[i];
+      delete trs[i]
     }
   }
 
@@ -331,7 +325,7 @@ Transaction.prototype.objectNormalize = function (trs) {
       trs.args = JSON.parse(trs.args)
       if (!Array.isArray(trs.args)) throw new Error('Transaction args must be json array')
     } catch (e) {
-      throw new Error('Failed to parse args: ' + e)
+      throw new Error(`Failed to parse args: ${e}`)
     }
   }
 
@@ -339,34 +333,34 @@ Transaction.prototype.objectNormalize = function (trs) {
     try {
       trs.signatures = JSON.parse(trs.signatures)
     } catch (e) {
-      throw new Error('Failed to parse signatures: ' + e)
+      throw new Error(`Failed to parse signatures: ${e}`)
     }
   }
 
   // FIXME
-  var report = this.scope.scheme.validate(trs, {
-    type: "object",
+  const report = self.scope.scheme.validate(trs, {
+    type: 'object',
     properties: {
-      id: { type: "string" },
-      height: { type: "integer" },
-      type: { type: "integer" },
-      timestamp: { type: "integer" },
-      senderId: { type: "string" },
-      fee: { type: "integer", minimum: 0, maximum: constants.totalAmount },
-      secondSignature: { type: "string", format: "signature" },
-      signatures: { type: "array" },
+      id: { type: 'string' },
+      height: { type: 'integer' },
+      type: { type: 'integer' },
+      timestamp: { type: 'integer' },
+      senderId: { type: 'string' },
+      fee: { type: 'integer', minimum: 0, maximum: constants.totalAmount },
+      secondSignature: { type: 'string', format: 'signature' },
+      signatures: { type: 'array' },
       // args: { type: "array" },
-      message: { type: "string", maxLength: 256 }
+      message: { type: 'string', maxLength: 256 },
     },
-    required: ['type', 'timestamp', 'senderId', 'signatures']
-  });
+    required: ['type', 'timestamp', 'senderId', 'signatures'],
+  })
 
   if (!report) {
-    library.logger.error('Failed to normalize transaction body: ' + this.scope.scheme.getLastError().details[0].message, trs)
-    throw Error(this.scope.scheme.getLastError());
+    library.logger.error(`Failed to normalize transaction body: ${self.scope.scheme.getLastError().details[0].message}`, trs)
+    throw Error(self.scope.scheme.getLastError())
   }
 
-  return trs;
+  return trs
 }
 
 module.exports = Transaction

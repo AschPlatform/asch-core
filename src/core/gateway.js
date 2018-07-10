@@ -1,6 +1,6 @@
 const PIFY = require('util').promisify
-const utils = require('../utils')
 const gatewayLib = require('asch-gateway')
+const utils = require('../utils')
 
 let modules
 let library
@@ -34,52 +34,51 @@ function Gateway(cb, scope) {
   library = scope
   self = this
 
-  const gatewayConfig = global.Config.gateway.rpc
+  if (global.Config.gateway && global.Config.gateway.name) {
+    const gatewayConfig = global.Config.gateway.rpc
 
-  if (gatewayConfig.username) {
-    self.client = new gatewayLib.bitcoin.Client(
-      gatewayConfig.username,
-      gatewayConfig.password,
-      'testnet',
-      gatewayConfig.port,
-      gatewayConfig.host,
-    )
-    self.gatewayUtil = new gatewayLib.bitcoin.Utils('testnet')
+    if (gatewayConfig.username) {
+      self.client = new gatewayLib.bitcoin.Client(
+        gatewayConfig.username,
+        gatewayConfig.password,
+        'testnet',
+        gatewayConfig.port,
+        gatewayConfig.host,
+      )
+      self.gatewayUtil = new gatewayLib.bitcoin.Utils('testnet')
+    }
   }
 
   setImmediate(cb, null, self)
 }
 
-priv.importAddress = address =>
-  new Promise((resolve, reject) =>
-    self.client.importAddress(address, (err, result) => {
-      if (err) reject(err)
-      else resolve(result)
-    }))
-
-priv.getTransactionsFromBlockHeight = height =>
-  new Promise((resolve, reject) => {
-    self.client.getTransactionsFromBlockHeight(height, (err, result) => {
-      if (err) reject(err)
-      else resolve(result)
-    })
+priv.importAddress = address => new Promise((resolve, reject) => {
+  self.client.importAddress(address, (err, result) => {
+    if (err) reject(err)
+    else resolve(result)
   })
+})
 
-priv.createNewTransaction = (multiAccount, output, spentTids, fee) =>
-  new Promise((resolve, reject) => {
-    self.client.createNewTransaction(multiAccount, output, spentTids, fee, (err, result) => {
-      if (err) reject(err)
-      else resolve(result)
-    })
+priv.getTransactionsFromBlockHeight = height => new Promise((resolve, reject) => {
+  self.client.getTransactionsFromBlockHeight(height, (err, result) => {
+    if (err) reject(err)
+    else resolve(result)
   })
+})
 
-priv.sendRawTransaction = t =>
-  new Promise((resolve, reject) => {
-    self.client.sendRawTransaction(t, (err, result) => {
-      if (err) reject(err)
-      else resolve(result)
-    })
+priv.createNewTransaction = (multiAccount, output, spentTids, fee) => new Promise((resolve, reject) => {
+  self.client.createNewTransaction(multiAccount, output, spentTids, fee, (err, result) => {
+    if (err) reject(err)
+    else resolve(result)
   })
+})
+
+priv.sendRawTransaction = t => new Promise((resolve, reject) => {
+  self.client.sendRawTransaction(t, (err, result) => {
+    if (err) reject(err)
+    else resolve(result)
+  })
+})
 
 priv.getSpentTids = async (gateway) => {
   let spentTids = []
@@ -146,8 +145,8 @@ Gateway.prototype.processDeposits = async () => {
   let lastDepositLog = app.sdb.getCached('GatewayLog', gatewayLogKey)
   library.logger.debug('==========find DEPOSIT log============', lastDepositLog)
 
-  lastDepositLog = lastDepositLog ||
-    app.sdb.create('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.DEPOSIT, seq: 0 })
+  lastDepositLog = lastDepositLog
+    || app.sdb.create('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.DEPOSIT, seq: 0 })
 
   const lastSeq = lastDepositLog.seq
   const ret = await priv.getTransactionsFromBlockHeight(lastSeq)
@@ -219,8 +218,8 @@ Gateway.prototype.processWithdrawals = async () => {
   let lastWithdrawalLog = await app.sdb.get('GatewayLog', withdrawalLogKey)
   library.logger.debug('find ==========WITHDRAWAL============ log', lastWithdrawalLog)
 
-  lastWithdrawalLog = lastWithdrawalLog ||
-    app.sdb.create('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.WITHDRAWAL, seq: 0 })
+  lastWithdrawalLog = lastWithdrawalLog
+    || app.sdb.create('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.WITHDRAWAL, seq: 0 })
 
   const lastSeq = lastWithdrawalLog.seq
 

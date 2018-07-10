@@ -69,8 +69,8 @@ function getPublicIp() {
 }
 
 function isNumberOrNumberString(value) {
-  return !(Number.isNaN(value) || Number.isNaN(parseInt(value, 10)) ||
-    String(parseInt(value, 10)) !== String(value))
+  return !(Number.isNaN(value) || Number.isNaN(parseInt(value, 10))
+    || String(parseInt(value, 10)) !== String(value))
 }
 
 module.exports = function init(options, done) {
@@ -149,16 +149,6 @@ module.exports = function init(options, done) {
         } catch (e) {
           return false
         }
-      })
-
-      ZSchema.registerFormat('listQuery', (obj) => {
-        obj.limit = 100
-        return true
-      })
-
-      ZSchema.registerFormat('listDelegates', (obj) => {
-        obj.limit = 101
-        return true
       })
 
       ZSchema.registerFormat('checkInt', value => !isNumberOrNumberString(value))
@@ -296,8 +286,8 @@ module.exports = function init(options, done) {
         const { blackList } = scope.config.peers
 
         const forbidden = isApiOrPeer && (
-          (whiteList.length > 0 && whiteList.indexOf(ip) < 0) ||
-          (blackList.length > 0 && blackList.indexOf(ip) >= 0))
+          (whiteList.length > 0 && whiteList.indexOf(ip) < 0)
+          || (blackList.length > 0 && blackList.indexOf(ip) >= 0))
 
         if (isApiOrPeer && forbidden) {
           res.sendStatus(403)
