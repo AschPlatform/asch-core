@@ -24,6 +24,7 @@ priv.isActive = false
 priv.blockCache = {}
 priv.proposeCache = {}
 priv.lastPropose = null
+priv.isCollectingVotes = false
 
 // Constructor
 function Blocks(cb, scope) {
@@ -365,6 +366,7 @@ Blocks.prototype.processBlock = async (b, options) => {
     priv.blockCache = {}
     priv.proposeCache = {}
     priv.lastVoteTime = null
+    priv.isCollectingVotes = false
     library.base.consensus.clearState()
   }
 }
@@ -593,6 +595,7 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
   library.base.consensus.setPendingBlock(block)
   library.base.consensus.addPendingVotes(localVotes)
   priv.proposeCache[propose.hash] = true
+  priv.isCollectingVotes = true
   library.bus.message('newPropose', propose, true)
   return null
 }
@@ -779,6 +782,8 @@ Blocks.prototype.getCirculatingSupply = () => {
   const height = priv.lastBlock.height
   return priv.blockStatus.calcSupply(height)
 }
+
+Blocks.prototype.isCollectingVotes = () => priv.isCollectingVotes
 
 Blocks.prototype.onBind = (scope) => {
   modules = scope

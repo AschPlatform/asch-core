@@ -219,6 +219,10 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
       transaction.id = library.base.transaction.getId(transaction)
     }
 
+    if (modules.blocks.isCollectingVotes()) {
+      throw new Error('Block consensus in processing')
+    }
+
     if (self.processedTrsCache.has(transaction.id)) {
       throw new Error('Transaction already processed')
     }
