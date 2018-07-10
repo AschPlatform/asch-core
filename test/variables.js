@@ -268,7 +268,8 @@ function genNormalAccount(password) {
   var password = password || randomPassword()
   var keys = asch.crypto.getKeys(password)
   return {
-    address: addressHelper.generateBase58CheckAddress(keys.publicKey),
+    // address: addressHelper.generateBase58CheckAddress(keys.publicKey),
+    address: addressHelper.generateNormalAddress(keys.publicKey),
     publicKey: keys.publicKey,
     password: password,
     secret: password
