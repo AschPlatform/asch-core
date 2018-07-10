@@ -20,12 +20,10 @@ prv.getAddressByPublicKey = (publicKey) => {
 
 let self
 // Constructor
-function Block(scope, cb) {
+function Block(scope) {
   self = this
   this.scope = scope
-  genesisblock = this.scope.genesisblock
   prv.blockStatus = new BlockStatus()
-  if (cb) setImmediate(cb, null, this)
 }
 
 // Public methods

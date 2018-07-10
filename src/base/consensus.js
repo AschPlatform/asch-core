@@ -7,13 +7,12 @@ const ed = require('../utils/ed.js')
 const slots = require('../utils/slots.js')
 
 let self
-function Consensus(scope, cb) {
+function Consensus(scope) {
   self = this
   this.scope = scope
   this.pendingBlock = null
   this.pendingVotes = null
   this.votesKeySet = {}
-  if (cb) setImmediate(cb, null, this)
 }
 
 Consensus.prototype.createVotes = (keypairs, block) => {

@@ -358,13 +358,13 @@ module.exports = function init(options, done) {
             cb(null, { block: genesisblock })
           },
           consensus: ['bus', 'scheme', 'genesisblock', (cb, scope) => {
-            new Consensus(scope, cb)
+            cb(null, new Consensus(scope))
           }],
           transaction: ['bus', 'scheme', 'genesisblock', (cb, scope) => {
-            new Transaction(scope, cb)
+            cb(null, new Transaction(scope))
           }],
           block: ['bus', 'scheme', 'genesisblock', 'transaction', (cb, scope) => {
-            new Block(scope, cb)
+            cb(null, new Block(scope))
           }],
         }, outerCallback)
       }],

@@ -8,10 +8,9 @@ const feeCalculators = require('../utils/calculate-fee.js')
 
 let self
 // Constructor
-function Transaction(scope, cb) {
+function Transaction(scope) {
   self = this
   this.scope = scope
-  if (cb) setImmediate(cb, null, this)
 }
 
 // Private methods
