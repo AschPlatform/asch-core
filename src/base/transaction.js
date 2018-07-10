@@ -11,7 +11,6 @@ let self
 function Transaction(scope, cb) {
   self = this
   this.scope = scope
-  genesisblock = this.scope.genesisblock
   if (cb) setImmediate(cb, null, this)
 }
 
