@@ -169,13 +169,15 @@ module.exports = async function runtime(options) {
   }
   app.validators = {
     amount: value => amountHelper.validate(value),
-    name: value => {
+    name: (value) => {
       const regname = /^[a-z0-9_]{2,20}$/
       if (!regname.test(value)) return 'Invalid name'
+      return null
     },
-    publickey: value => {
+    publickey: (value) => {
       const reghex = /^[0-9a-fA-F]{64}$/
       if (!reghex.test(value)) return 'Invalid public key'
+      return null
     },
     string: (value, constraints) => {
       if (constraints.length) {
