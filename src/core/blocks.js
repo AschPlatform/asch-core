@@ -83,7 +83,7 @@ priv.getIdSequence2 = (height, cb) => {
 
 Blocks.prototype.toAPIV1Blocks = (blocks) => {
   if (blocks && isArray(blocks) && blocks.length > 0) {
-    return blocks.map(b => Blocks.prototype.toAPIV1Block(b))
+    return blocks.map(b => self.toAPIV1Block(b))
   }
   return []
 }
@@ -101,7 +101,7 @@ Blocks.prototype.toAPIV1Block = (block) => {
     totalFee: block.fees,
     generatorPublicKey: block.delegate,
     blockSignature: block.signature,
-    confirmations: Blocks.prototype.getLastBlock().height - block.height,
+    confirmations: self.getLastBlock().height - block.height,
     transactions: modules.transactions.toAPIV1Transactions(block.transactions, block),
 
     // "generatorId":  => missing
@@ -262,7 +262,7 @@ Blocks.prototype.verifyBlockVotes = async (block, votes) => {
   const delegateList = await PIFY(modules.delegates.generateDelegateList)(block.height)
   const publicKeySet = new Set(delegateList)
   for (const item of votes.signatures) {
-    if (!publicKeySet[item.key]) {
+    if (!publicKeySet.has(item.key)) {
       throw new Error(`Votes key is not in the top list: ${item.key}`)
     }
     if (!library.base.consensus.verifyVote(votes.height, votes.id, item)) {
@@ -357,6 +357,7 @@ Blocks.prototype.processBlock = async (b, options) => {
       library.bus.message('newBlock', block, options.votes)
     }
   } catch (e) {
+    app.logger.error(block)
     app.logger.error('save block error: ', e)
     await app.sdb.rollbackBlock()
     throw new Error(`Failed to save block: ${e}`)
@@ -424,6 +425,7 @@ Blocks.prototype.applyRound = async (block) => {
       missedDelegates.push(fd)
     }
   }
+
   for (const md of missedDelegates) {
     const addr = addressHelper.generateNormalAddress(md)
     app.sdb.getCached('Delegate', addr).missedBlocks += 1
@@ -465,11 +467,6 @@ Blocks.prototype.applyRound = async (block) => {
       await updateDelegate(fd, feeAverage, rewardAverage)
     }
     await updateDelegate(block.delegate, feeRemainder, rewardRemainder)
-
-    // let totalClubFounds = feeFounds + rewardFounds
-    // app.logger.info('Asch witness club get new founds: ' + totalClubFounds)
-    // // FIXME dapp id
-    // app.balances.increase('club_dapp_id', 'XAS', totalClubFounds)
   }
 
   if (block.height % 101 === 0) {
@@ -527,6 +524,9 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
 }
 
 Blocks.prototype.generateBlock = async (keypair, timestamp) => {
+  if (library.base.consensus.hasPendingBlock(timestamp)) {
+    return null
+  }
   const unconfirmedList = modules.transactions.getUnconfirmedTransactionList()
   const payloadHash = crypto.createHash('sha256')
   let payloadLength = 0
@@ -579,14 +579,16 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
     return null
   }
   if (!library.config.publicIp) {
-    return next('No public ip')
+    library.logger.error('No public ip')
+    return null
   }
-  const serverAddr = `${library.config.publicIp}:${library.config.port}`
+  const serverAddr = `${library.config.publicIp}:${library.config.peerPort}`
   let propose
   try {
     propose = library.base.consensus.createPropose(keypair, block, serverAddr)
   } catch (e) {
-    return next(`Failed to create propose: ${e.toString()}`)
+    library.logger.error('Failed to create propose', e)
+    return null
   }
   library.base.consensus.setPendingBlock(block)
   library.base.consensus.addPendingVotes(localVotes)
@@ -625,7 +627,7 @@ Blocks.prototype.onReceiveBlock = (block, votes) => {
           }
           modules.transactions.clearUnconfirmed()
           await app.sdb.rollbackBlock()
-          await self.processBlock(block, { votes, broadcast: true })
+          await self.processBlock(block, { votes })
         } catch (e) {
           library.logger.error('Failed to process received block', e)
         } finally {
@@ -842,7 +844,7 @@ shared.getBlock = (req, cb) => {
           return cb('Block not found')
         }
         block.reward = priv.blockStatus.calcReward(block.height)
-        return cb(null, { block: Blocks.prototype.toAPIV1Block(block) })
+        return cb(null, { block: self.toAPIV1Block(block) })
       } catch (e) {
         library.logger.error(e)
         return cb('Server error')
@@ -883,7 +885,7 @@ shared.getFullBlock = (req, cb) => {
         }
 
         if (!block) return cb('Block not found')
-        return cb(null, { block: Blocks.prototype.toAPIV1Block(block) })
+        return cb(null, { block: self.toAPIV1Block(block) })
       } catch (e) {
         library.logger.error('Failed to find block', e)
         return cb('Server error')
@@ -942,7 +944,7 @@ shared.getBlocks = (req, cb) => {
 
         const blocks = await app.sdb.getBlocksByHeightRange(minHeight, maxHeight)
         if (!blocks || !blocks.length) return cb('No blocks')
-        return cb(null, { count, blocks: Blocks.prototype.toAPIV1Blocks(blocks) })
+        return cb(null, { count, blocks: self.toAPIV1Blocks(blocks) })
       } catch (e) {
         library.logger.error('Failed to find blocks', e)
         return cb('Server error')

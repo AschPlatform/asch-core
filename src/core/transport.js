@@ -78,7 +78,7 @@ priv.attachApi = () => {
         const errMsg = err.message ? err.message : err.toString()
         res.status(200).json({ success: false, error: errMsg })
       } else {
-        library.bus.message('unconfirmedTransaction', transaction, true)
+        // library.bus.message('unconfirmedTransaction', transaction, true)
         res.status(200).json({ success: true, transactionId: transaction.id })
       }
     })
@@ -89,17 +89,6 @@ priv.attachApi = () => {
   })
 
   library.network.app.use('/peer', router)
-}
-
-priv.hashsum = (obj) => {
-  const buf = Buffer.from(JSON.stringify(obj), 'utf8')
-  const hashdig = crypto.createHash('sha256').update(buf).digest()
-  const temp = Buffer.alloc(8)
-  for (let i = 0; i < 8; i++) {
-    temp[i] = hashdig[7 - i]
-  }
-
-  return bignum.fromBuffer(temp).toString()
 }
 
 Transport.prototype.broadcast = (topic, message) => {
@@ -208,7 +197,6 @@ Transport.prototype.onPeerReady = () => {
   })
 
   modules.peer.handle('votes', (req, res) => {
-    // TODO validate req.params.query{height, id, signature}
     library.bus.message('receiveVotes', req.params.body.votes)
     res.send({})
   })
@@ -225,20 +213,10 @@ Transport.prototype.onPeerReady = () => {
 
   modules.peer.handle('chainRequest', (req, res) => {
     const params = req.params
-    const query = req.params.body
+    const body = req.params.body
     try {
       if (!params.chain) {
         return res.send({ success: false, error: 'missed chain' })
-      }
-      if (!params.timestamp || !params.hash) {
-        return res.status(200).json({
-          success: false,
-          error: 'missed hash sum',
-        })
-      }
-      const newHash = priv.hashsum(query, params.timestamp)
-      if (newHash !== params.hash) {
-        return res.send({ success: false, error: 'wrong hash sum' })
       }
     } catch (e) {
       library.logger.error('receive invalid chain request', { error: e.toString(), params })
@@ -247,9 +225,9 @@ Transport.prototype.onPeerReady = () => {
 
     return modules.chains.request(
       params.chain,
-      query.method,
-      query.path,
-      { query: params.query },
+      body.method,
+      body.path,
+      { query: body.query },
       (err, ret) => {
         if (!err && ret.error) {
           err = ret.error
@@ -281,8 +259,7 @@ Transport.prototype.onPeerReady = () => {
 
   modules.peer.subscribe('propose', (message) => {
     if (typeof message.body.propose === 'string') {
-      message.body.propose =
-        library.protobuf.decodeBlockPropose(Buffer.from(message.body.propose, 'base64'))
+      message.body.propose = library.protobuf.decodeBlockPropose(Buffer.from(message.body.propose, 'base64'))
     }
     library.scheme.validate(message.body.propose, {
       type: 'object',
@@ -320,7 +297,7 @@ Transport.prototype.onPeerReady = () => {
         library.logger.error('Received propose is invalid', { propose: message.body.propose, error: err })
         return
       }
-      library.bus.message('receivePropose', req.body.propose)
+      library.bus.message('receivePropose', message.body.propose)
     })
   })
 
@@ -336,8 +313,7 @@ Transport.prototype.onPeerReady = () => {
     }
 
     if (typeof message.body.transaction === 'string') {
-      message.body.transaction =
-        library.protobuf.decodeTransaction(Buffer.from(message.body.transaction, 'base64'))
+      message.body.transaction = library.protobuf.decodeTransaction(Buffer.from(message.body.transaction, 'base64'))
     }
     let transaction
     try {
@@ -358,7 +334,7 @@ Transport.prototype.onPeerReady = () => {
       if (err) {
         library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
       } else {
-        library.bus.message('unconfirmedTransaction', transaction, true)
+        // library.bus.message('unconfirmedTransaction', transaction, true)
       }
     })
   })
@@ -369,10 +345,6 @@ Transport.prototype.onPeerReady = () => {
         return
       }
       if (!message.timestamp || !message.hash) {
-        return
-      }
-      const newHash = priv.hashsum(message.body, message.timestamp)
-      if (newHash !== message.hash) {
         return
       }
     } catch (e) {
@@ -438,23 +410,25 @@ Transport.prototype.sendVotes = (votes, address) => {
   const contact = {
     hostname: parts[0],
     port: parts[1],
+    protocol: 'http:',
   }
   const identity = modules.peer.getIdentity(contact)
   const target = [identity, contact]
-  modules.peer.request('votes', params, contact, target, (err) => {
+  console.log('sendVotes', target)
+  modules.peer.request('votes', params, target, (err) => {
     if (err) {
       library.logger.error('send votes error', err)
     }
   })
 }
 
-Transport.prototype.onMessage = (msg) => {
-  const message = {
-    chain: msg.chain,
-    body: msg,
-  }
-  self.broadcast('chainMessage', message)
-}
+// Transport.prototype.onMessage = (msg) => {
+//   const message = {
+//     chain: msg.chain,
+//     body: msg,
+//   }
+//   self.broadcast('chainMessage', message)
+// }
 
 Transport.prototype.cleanup = (cb) => {
   priv.loaded = false
@@ -463,19 +437,20 @@ Transport.prototype.cleanup = (cb) => {
 
 shared.message = (msg, cb) => {
   msg.timestamp = (new Date()).getTime()
-  msg.hash = priv.hashsum(msg.body, msg.timestamp)
 
-  self.broadcast('chainMessage', msg)
+  // self.broadcast('chainMessage', msg)
 
   cb(null, {})
 }
 
 shared.request = (req, cb) => {
-  req.timestamp = (new Date()).getTime()
-  req.hash = priv.hashsum(req.body, req.timestamp)
-
   if (req.body.peer) {
-    modules.peer.request('chainRequest', req, req.body.peer, cb)
+    modules.peer.request('chainRequest', req, req.body.peer, (err, res) => {
+      if (res) {
+        res.peer = req.body.peer
+      }
+      cb(err, res)
+    })
   } else {
     modules.peer.randomRequest('chainRequest', req, cb)
   }
