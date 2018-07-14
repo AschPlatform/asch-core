@@ -414,7 +414,6 @@ Transport.prototype.sendVotes = (votes, address) => {
   }
   const identity = modules.peer.getIdentity(contact)
   const target = [identity, contact]
-  console.log('sendVotes', target)
   modules.peer.request('votes', params, target, (err) => {
     if (err) {
       library.logger.error('send votes error', err)
