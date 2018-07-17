@@ -176,10 +176,6 @@ Blocks.prototype.verifyBlock = async (block, options) => {
     throw new Error(`Failed to get block id: ${e.toString()}`)
   }
 
-  if (typeof block.height !== 'undefined' && !!priv.lastBlock.id) {
-    block.height = priv.lastBlock.height + 1
-  }
-
   library.logger.debug(`verifyBlock, id: ${block.id}, h: ${block.height}`)
 
   if (!block.prevBlockId && block.height !== 0) {
@@ -191,6 +187,7 @@ Blocks.prototype.verifyBlock = async (block, options) => {
       throw new Error('Failed to verify block signature')
     }
   } catch (e) {
+    library.logger.error({e, block})
     throw new Error(`Got exception while verify block signature: ${e.toString()}`)
   }
 

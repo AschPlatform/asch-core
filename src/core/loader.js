@@ -83,7 +83,7 @@ priv.findUpdate = (lastBlock, peer, cb) => {
       return cb()
     }
 
-    library.logger.info(`Found common block ${commonBlock.id} (at ${commonBlock.height}) 
+    library.logger.info(`Found common block ${commonBlock.id} (at ${commonBlock.height})
       with peer ${peerStr}, last block height is ${lastBlock.height}`)
     const toRemove = lastBlock.height - commonBlock.height
 
@@ -94,14 +94,12 @@ priv.findUpdate = (lastBlock, peer, cb) => {
 
     return (async () => {
       try {
-        // FIXME
-        await app.sdb.rollbackBlock()
-        modules.transactions.clearUnconfirmed()
         if (toRemove > 0) {
-          for (let h = lastBlock.height; h > commonBlock.height; h--) {
-            library.logger.info(`rollback block height: ${h}`)
-            await app.sdb.rollbackBlock(h)
-          }
+          await app.sdb.rollbackBlock(commonBlock.height)
+          modules.blocks.setLastBlock(app.sdb.lastBlock)
+          library.logger.debug('set new last block', app.sdb.lastBlock)
+        } else {
+          await app.sdb.rollbackBlock()
         }
       } catch (e) {
         library.logger.error('Failed to rollback block', e)
