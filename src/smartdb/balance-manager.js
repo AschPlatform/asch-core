@@ -1,4 +1,3 @@
-const bignum = require('bignumber')
 
 function getCurrencyFlag(currency) {
   if (currency === 'XAS') {
@@ -23,16 +22,16 @@ class BalanceManager {
   get(address, currency) {
     const item = this.sdb.getCached('Balance', this.getBalanceId(address, currency))
     const balance = item ? item.balance : '0'
-    return bignum(balance)
+    return app.util.bignumber(balance)
   }
 
   increase(address, currency, amount) {
-    if (bignum(amount).eq(0)) return
+    if (app.util.bignumber(amount).eq(0)) return
 
     const balanceId = this.getBalanceId(address, currency)
     let item = this.sdb.getCached('Balance', balanceId)
     if (item) {
-      item.balance = bignum(item.balance).plus(amount).toString(10)
+      item.balance = app.util.bignumber(item.balance).plus(amount).toString(10)
     } else {
       item = this.sdb.create('Balance', {
         address,

@@ -1,4 +1,3 @@
-const bignum = require('bignumber')
 
 module.exports = {
   validate(amount) {
@@ -7,7 +6,7 @@ module.exports = {
 
     let bnAmount
     try {
-      bnAmount = bignum(amount)
+      bnAmount = app.util.bignumber(amount)
     } catch (e) {
       return 'Failed to convert'
     }
@@ -16,7 +15,7 @@ module.exports = {
   },
 
   calcRealAmount(amount, precision) {
-    let ba = bignum(amount)
+    let ba = app.util.bignumber(amount)
     let p = precision
     while (p > 0) {
       if (pprecision > 8) {
