@@ -1,6 +1,5 @@
 const crypto = require('crypto')
 const ByteBuffer = require('bytebuffer')
-const bignum = require('bignumber')
 const ed = require('../utils/ed.js')
 const BlockStatus = require('../utils/block-status.js')
 const constants = require('../utils/constants.js')
@@ -14,7 +13,7 @@ prv.getAddressByPublicKey = (publicKey) => {
     temp[i] = publicKeyHash[7 - i]
   }
 
-  const address = bignum.fromBuffer(temp).toString()
+  const address = app.util.bignumber.fromBuffer(temp).toString()
   return address
 }
 
@@ -156,7 +155,7 @@ Block.prototype.getBytes_old = (block) => {
         bb.writeString('0')
       }
     } else if (block.previousBlock) {
-      const pb = bignum(block.previousBlock).toBuffer({ size: '8' })
+      const pb = app.util.bignumber(block.previousBlock).toBuffer({ size: '8' })
 
       for (let i = 0; i < 8; i++) {
         bb.writeByte(pb[i])
@@ -320,7 +319,7 @@ Block.prototype.getId_old = (block) => {
     temp[i] = hash[7 - i]
   }
 
-  const id = bignum.fromBuffer(temp).toString()
+  const id = app.util.bignumber.fromBuffer(temp).toString()
   return id
 }
 

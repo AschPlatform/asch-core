@@ -300,6 +300,7 @@ module.exports = async function runtime(options) {
 
   app.util = {
     address: require('./utils/address.js'),
+    bignumber: require('./utils/bignumber')
   }
 
   await loadModels(path.join(appDir, 'model'))

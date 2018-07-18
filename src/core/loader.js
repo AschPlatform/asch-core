@@ -1,4 +1,3 @@
-const bignum = require('bignumber')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const slots = require('../utils/slots.js')
@@ -145,7 +144,7 @@ priv.loadBlocks = (lastBlock, cb) => {
       return cb()
     }
 
-    if (bignum(lastBlock.height).lt(ret.height)) {
+    if (app.util.bignumber(lastBlock.height).lt(ret.height)) {
       priv.blocksToSync = ret.height
 
       if (lastBlock.id !== priv.genesisBlock.block.id) {

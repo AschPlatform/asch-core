@@ -2,7 +2,6 @@ const assert = require('assert')
 const crypto = require('crypto')
 const ByteBuffer = require('bytebuffer')
 const ip = require('ip')
-const bignum = require('bignumber')
 const ed = require('../utils/ed.js')
 const slots = require('../utils/slots.js')
 
@@ -48,7 +47,7 @@ Consensus.prototype.getVoteHash = (height, id) => {
   if (global.featureSwitch.enableLongId) {
     bytes.writeString(id)
   } else {
-    const idBytes = bignum(id).toBuffer({ size: 8 })
+    const idBytes = app.util.bignumber(id).toBuffer({ size: 8 })
     for (let i = 0; i < 8; i++) {
       bytes.writeByte(idBytes[i])
     }
@@ -131,7 +130,7 @@ Consensus.prototype.getProposeHash = (propose) => {
   if (global.featureSwitch.enableLongId) {
     bytes.writeString(propose.id)
   } else {
-    const idBytes = bignum(propose.id).toBuffer({ size: 8 })
+    const idBytes = app.util.bignumber(propose.id).toBuffer({ size: 8 })
     for (let i = 0; i < 8; i++) {
       bytes.writeByte(idBytes[i])
     }
