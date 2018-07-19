@@ -113,6 +113,7 @@ Block.prototype.getBytes = (block, skipSignature) => {
   bb.writeLong(block.height)
   bb.writeInt(block.count)
   bb.writeLong(block.fees)
+  bb.writeLong(block.reward)
   bb.writeString(block.delegate)
 
   if (block.previousBlock) {
@@ -140,63 +141,6 @@ Block.prototype.getBytes = (block, skipSignature) => {
   return b
 }
 
-Block.prototype.getBytes_old = (block) => {
-  const size = 4 + 4 + 64 + 4 + 8 + 8 + 8 + 4 + 32 + 32 + 64
-
-  try {
-    const bb = new ByteBuffer(size, true)
-    bb.writeInt(block.version)
-    bb.writeInt(block.timestamp)
-
-    if (global.featureSwitch.enableLongId) {
-      if (block.previousBlock) {
-        bb.writeString(block.previousBlock)
-      } else {
-        bb.writeString('0')
-      }
-    } else if (block.previousBlock) {
-      const pb = app.util.bignumber(block.previousBlock).toBuffer({ size: '8' })
-
-      for (let i = 0; i < 8; i++) {
-        bb.writeByte(pb[i])
-      }
-    } else {
-      for (let i = 0; i < 8; i++) {
-        bb.writeByte(0)
-      }
-    }
-
-    bb.writeInt(block.numberOfTransactions)
-    bb.writeLong(block.totalAmount)
-    bb.writeLong(block.totalFee)
-    bb.writeLong(block.reward)
-
-    bb.writeInt(block.payloadLength)
-
-    const payloadHashBuffer = Buffer.from(block.payloadHash, 'hex')
-    for (let i = 0; i < payloadHashBuffer.length; i++) {
-      bb.writeByte(payloadHashBuffer[i])
-    }
-
-    const generatorPublicKeyBuffer = Buffer.from(block.generatorPublicKey, 'hex')
-    for (let i = 0; i < generatorPublicKeyBuffer.length; i++) {
-      bb.writeByte(generatorPublicKeyBuffer[i])
-    }
-
-    if (block.blockSignature) {
-      const blockSignatureBuffer = Buffer.from(block.blockSignature, 'hex')
-      for (let i = 0; i < blockSignatureBuffer.length; i++) {
-        bb.writeByte(blockSignatureBuffer[i])
-      }
-    }
-
-    bb.flip()
-    return bb.toBuffer()
-  } catch (e) {
-    throw Error(`Failed to getBytes: ${e.toString()}`)
-  }
-}
-
 Block.prototype.verifySignature = (block) => {
   const remove = 64
 
@@ -214,32 +158,6 @@ Block.prototype.verifySignature = (block) => {
     return ed.Verify(hash, blockSignatureBuffer || ' ', generatorPublicKeyBuffer || ' ')
   } catch (e) {
     throw Error(e.toString())
-  }
-}
-
-Block.prototype.dbSave = (block, cb) => {
-  try {
-    const payloadHash = Buffer.from(block.payloadHash, 'hex')
-    const generatorPublicKey = Buffer.from(block.generatorPublicKey, 'hex')
-    const blockSignature = Buffer.from(block.blockSignature, 'hex')
-
-    return self.scope.dbLite.query('INSERT INTO blocks(id, version, timestamp, height, previousBlock,  numberOfTransactions, totalAmount, totalFee, reward, payloadLength, payloadHash, generatorPublicKey, blockSignature) VALUES($id, $version, $timestamp, $height, $previousBlock, $numberOfTransactions, $totalAmount, $totalFee, $reward, $payloadLength,  $payloadHash, $generatorPublicKey, $blockSignature)', {
-      id: block.id,
-      version: block.version,
-      timestamp: block.timestamp,
-      height: block.height,
-      previousBlock: block.previousBlock || null,
-      numberOfTransactions: block.numberOfTransactions,
-      totalAmount: block.totalAmount,
-      totalFee: block.totalFee,
-      reward: block.reward || 0,
-      payloadLength: block.payloadLength,
-      payloadHash,
-      generatorPublicKey,
-      blockSignature,
-    }, cb)
-  } catch (e) {
-    return cb(e.toString())
   }
 }
 
@@ -288,8 +206,12 @@ Block.prototype.objectNormalize = (block) => {
         type: 'integer',
         minimum: 0,
       },
+      reward: {
+        type: 'integer',
+        minimum: 0,
+      },
     },
-    required: ['signature', 'delegate', 'payloadHash', 'timestamp', 'transactions', 'version'],
+    required: ['signature', 'delegate', 'payloadHash', 'timestamp', 'transactions', 'version', 'reward'],
   })
 
   if (!report) {
