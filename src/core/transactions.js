@@ -318,9 +318,9 @@ Transactions.prototype.toAPIV1Transactions = (transArray, block) => {
   return []
 }
 
-function toV1TypeAndArgs(type, argsString) {
+function toV1TypeAndArgs(type, args) {
   let v1Type
-  const args = JSON.parse(argsString)
+
   const v1Args = { }
   let result = { }
   switch (type) {
