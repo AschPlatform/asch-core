@@ -494,7 +494,7 @@ shared.submitOutTransfer = (req, cb) => {
     if (modules.transactions.hasUnconfirmed(trs)) {
       return done('Already exists')
     }
-    library.logger.log(`Submit outtransfer transaction ${trs.id} from chain ${req.chain}`)
+    library.logger.info(`Submit outtransfer transaction ${trs.id} from chain ${req.chain}`)
     return modules.transactions.processUnconfirmedTransaction(trs, done)
   }, cb)
 }

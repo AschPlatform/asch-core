@@ -140,7 +140,7 @@ priv.loadBlocks = (lastBlock, cb) => {
     })
 
     if (!report) {
-      library.logger.log(`Failed to parse blockchain height: ${peerStr}\n${library.scheme.getLastError()}`)
+      library.logger.info(`Failed to parse blockchain height: ${peerStr}\n${library.scheme.getLastError()}`)
       return cb()
     }
 
@@ -185,7 +185,7 @@ priv.loadUnconfirmedTransactions = (cb) => {
       try {
         transactions[i] = library.base.transaction.objectNormalize(transactions[i])
       } catch (e) {
-        library.logger.log(`Transaction ${transactions[i] ? transactions[i].id : 'null'} is not valid, ban 60 min`, peerStr)
+        library.logger.info(`Transaction ${transactions[i] ? transactions[i].id : 'null'} is not valid, ban 60 min`, peerStr)
         return cb()
       }
     }

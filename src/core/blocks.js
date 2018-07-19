@@ -237,6 +237,11 @@ Blocks.prototype.verifyBlock = async (block, options) => {
     throw new Error('Invalid total fees')
   }
 
+  const expectedReward = priv.blockStatus.calcReward(block.height)
+  if (expectedReward !== block.reward) {
+    throw new Error('Invalid block reward')
+  }
+
   if (payloadHash.digest().toString('hex') !== block.payloadHash) {
     throw new Error(`Invalid payload hash: ${block.id}`)
   }
@@ -408,7 +413,7 @@ Blocks.prototype.applyRound = async (block) => {
   }
 
   round.fees += transFee
-  round.rewards += priv.blockStatus.calcReward(block.height)
+  round.rewards += block.reward
 
   if (block.height % 101 !== 0) return
 
@@ -495,7 +500,7 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
         const contact = peer[1]
         const peerStr = `${contact.hostname}:${contact.port}`
         const blocks = ret.blocks
-        library.logger.log(`Loading ${blocks.length} blocks from`, peerStr)
+        library.logger.info(`Loading ${blocks.length} blocks from`, peerStr)
         if (blocks.length === 0) {
           loaded = true
           return next()
@@ -506,7 +511,7 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
               await self.processBlock(block, { syncing: true })
               lastCommonBlockId = block.id
               lastValidBlock = block
-              library.logger.log(`Block ${block.id} loaded from ${peerStr} at`, block.height)
+              library.logger.info(`Block ${block.id} loaded from ${peerStr} at`, block.height)
             }
             return next()
           } catch (e) {
@@ -540,16 +545,18 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
     payloadHash.update(bytes)
     payloadLength += bytes.length
   }
+  const height = priv.lastBlock.height + 1
   const block = {
     version: 0,
     delegate: keypair.publicKey.toString('hex'),
-    height: priv.lastBlock.height + 1,
+    height,
     prevBlockId: priv.lastBlock.id,
     timestamp,
     transactions: unconfirmedList,
     count: unconfirmedList.length,
     fees,
     payloadHash: payloadHash.digest().toString('hex'),
+    reward: priv.blockStatus.calcReward(height),
   }
 
   block.signature = library.base.block.sign(block, keypair)
@@ -562,7 +569,6 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
     throw new Error(`Failed to get active delegate keypairs: ${e}`)
   }
 
-  const height = block.height
   const id = block.id
   assert(activeKeypairs && activeKeypairs.length > 0, 'Active keypairs should not be empty')
   library.logger.info(`get active delegate keypairs len: ${activeKeypairs.length}`)
@@ -570,11 +576,7 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
   if (library.base.consensus.hasEnoughVotes(localVotes)) {
     modules.transactions.clearUnconfirmed()
     await self.processBlock(block, { local: true, broadcast: true, votes: localVotes })
-    library.logger.log(`Forged new block id: ${id},
-      height: ${height},
-      round: ${modules.round.calc(height)},
-      slot: ${slots.getSlotNumber(block.timestamp)},
-      reward: ${priv.blockStatus.calcReward(block.height)}`)
+    library.logger.info(`Forged new block id: ${id}, height: ${height}, round: ${modules.round.calc(height)}, slot: ${slots.getSlotNumber(block.timestamp)}, reward: ${block.reward}`)
     return null
   }
   if (!library.config.publicIp) {
@@ -755,11 +757,7 @@ Blocks.prototype.onReceiveVotes = (votes) => {
         try {
           modules.transactions.clearUnconfirmed()
           await self.processBlock(block, { votes: totalVotes, local: true, broadcast: true })
-          library.logger.log(`Forged new block id: ${id},
-            height: ${height},
-            round: ${modules.round.calc(height)},
-            slot: ${slots.getSlotNumber(block.timestamp)},
-            reward: ${priv.blockStatus.calcReward(block.height)}`)
+          library.logger.info(`Forged new block id: ${id}, height: ${height}, round: ${modules.round.calc(height)}, slot: ${slots.getSlotNumber(block.timestamp)}, reward: ${block.reward}`)
         } catch (e) {
           library.logger.error(`Failed to process confirmed block height: ${height} id: ${id} error: ${err}`)
         }
@@ -845,7 +843,6 @@ shared.getBlock = (req, cb) => {
         if (!block) {
           return cb('Block not found')
         }
-        block.reward = priv.blockStatus.calcReward(block.height)
         return cb(null, { block: self.toAPIV1Block(block) })
       } catch (e) {
         library.logger.error(e)

@@ -69,7 +69,7 @@ priv.attachApi = () => {
     }
 
     return library.sequence.add((cb) => {
-      library.logger.log(`Received transaction ${transaction.id} from http client`)
+      library.logger.info(`Received transaction ${transaction.id} from http client`)
       modules.transactions.processUnconfirmedTransaction(transaction, cb)
     }, (err) => {
       if (err) {
@@ -251,7 +251,7 @@ Transport.prototype.onPeerReady = () => {
       block = library.base.block.objectNormalize(block)
       votes = library.base.consensus.normalizeVotes(votes)
     } catch (e) {
-      library.logger.log(`normalize block or votes object error: ${e.toString()}`)
+      library.logger.info(`normalize block or votes object error: ${e.toString()}`)
     }
     library.bus.message('receiveBlock', block, votes)
   })
@@ -327,7 +327,7 @@ Transport.prototype.onPeerReady = () => {
     }
 
     library.sequence.add((cb) => {
-      library.logger.log(`Received transaction ${transaction.id} from remote peer`)
+      library.logger.info(`Received transaction ${transaction.id} from remote peer`)
       modules.transactions.processUnconfirmedTransaction(transaction, cb)
     }, (err) => {
       if (err) {
