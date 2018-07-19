@@ -318,9 +318,9 @@ Transactions.prototype.toAPIV1Transactions = (transArray, block) => {
   return []
 }
 
-function toV1TypeAndArgs(type, argsString) {
+function toV1TypeAndArgs(type, args) {
   let v1Type
-  const args = JSON.parse(argsString)
+
   const v1Args = { }
   let result = { }
   switch (type) {
@@ -388,7 +388,7 @@ function toV1TypeAndArgs(type, argsString) {
 Transactions.prototype.toAPIV1Transaction = (trans, block) => {
   if (!trans) return trans
 
-  const signArray = JSON.parse(trans.signatures)
+  const signArray = trans.signatures
   const result = {
     id: trans.id,
     height: trans.height,
