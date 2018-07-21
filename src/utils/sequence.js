@@ -1,17 +1,35 @@
 const util = require('util')
 const async = require('async')
 
+const TASK_TIMEOUT_MS = 10 * 1000
+
 function tick(task, cb) {
-  let args = [(err, res) => {
+  let isCallbacked = false
+  const done = (err, res) => {
+    if (isCallbacked) {
+      return
+    }
+    isCallbacked = true
     if (task.done) {
       setImmediate(task.done, err, res)
     }
     setImmediate(cb)
-  }];
+  }
+  setTimeout(() => {
+    if (!isCallbacked) {
+      done('Worker task timeout')
+    }
+  }, TASK_TIMEOUT_MS)
+  let args = [done]
   if (task.args) {
     args = args.concat(task.args)
   }
-  task.worker.apply(task.worker, args)
+  try {
+    task.worker.apply(task.worker, args)
+  } catch (e) {
+    library.logger.error('Worker task failed:', e)
+    done(e.toString())
+  }
 }
 
 class Sequence {
