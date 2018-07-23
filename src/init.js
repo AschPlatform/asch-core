@@ -224,7 +224,6 @@ module.exports = function init(options, done) {
     connect: ['config', 'genesisblock', 'logger', 'network', (cb, scope) => {
       const PAYLOAD_LIMIT_SIZE = '8mb'
       scope.network.app.engine('html', require('ejs').renderFile)
-      scope.network.app.use(require('express-domain-middleware'))
       scope.network.app.set('view engine', 'ejs')
       scope.network.app.set('views', scope.config.publicDir)
       scope.network.app.use(scope.network.express.static(scope.config.publicDir))
