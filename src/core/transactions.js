@@ -90,6 +90,7 @@ priv.attachApi = () => {
     'get /unconfirmed/get': 'getUnconfirmedTransaction',
     'get /unconfirmed': 'getUnconfirmedTransactions',
     'put /': 'addTransactionUnsigned',
+    'put /batch': 'addTransactions',
   })
 
   router.use((req, res) => {
@@ -641,6 +642,23 @@ shared.addTransactionUnsigned = (req, cb) => {
     })()
   }, cb)
   return null
+}
+
+shared.addTransactions = (req, cb) => {
+  if (!req.body || !req.body.transactions) {
+    return cb('Invalid params')
+  }
+  const trs = req.body.transactions
+  try {
+    for (let t of trs) {
+      library.base.transaction.objectNormalize(t)
+    }
+  } catch (e) {
+    return cb('Invalid transaction body: ' + e.toString())
+  }
+  library.sequence.add((callback) => {
+    self.processUnconfirmedTransactions(trs, callback)
+  }, cb)
 }
 
 // Export
