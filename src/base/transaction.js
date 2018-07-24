@@ -294,9 +294,11 @@ Transaction.prototype.apply = async (context) => {
       const requestorFee = 20000000
       if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
       requestor.xas -= requestorFee
+      app.addRoundFee(requestorFee)
       trs.executed = 0
       return
-    } if (sender) {
+    }
+    if (sender) {
       if (sender.xas < trs.fee) throw new Error('Insufficient requestor balance')
       sender.xas -= trs.fee
     } else {
@@ -304,11 +306,11 @@ Transaction.prototype.apply = async (context) => {
     }
   }
 
-  trs.executed = 1
   const error = await fn.apply(context, trs.args)
   if (error) {
     throw new Error(error)
   }
+  trs.executed = 1
 }
 
 Transaction.prototype.objectNormalize = (trs) => {

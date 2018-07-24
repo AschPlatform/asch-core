@@ -187,7 +187,7 @@ Blocks.prototype.verifyBlock = async (block, options) => {
       throw new Error('Failed to verify block signature')
     }
   } catch (e) {
-    library.logger.error({e, block})
+    library.logger.error({ e, block })
     throw new Error(`Got exception while verify block signature: ${e.toString()}`)
   }
 
@@ -365,6 +365,7 @@ Blocks.prototype.processBlock = async (b, options) => {
     priv.lastVoteTime = null
     priv.isCollectingVotes = false
     library.base.consensus.clearState()
+    app.round = await self.getRound(block.height + 1)
   }
 }
 
@@ -385,6 +386,13 @@ Blocks.prototype.saveBlockTransactions = (block) => {
 //   }
 // }
 
+Blocks.prototype.getRound = async (height) => {
+  const roundNumber = modules.round.calc(height)
+  const round = await app.sdb.get('Round', roundNumber)
+    || app.sdb.create('Round', { fees: 0, rewards: 0, round: roundNumber })
+  return round
+}
+
 Blocks.prototype.applyRound = async (block) => {
   if (block.height === 0) {
     modules.delegates.updateBookkeeper()
@@ -399,12 +407,13 @@ Blocks.prototype.applyRound = async (block) => {
   // process fee
   const roundNumber = Math.floor(((block.height + delegates.length) - 1) / delegates.length)
 
-  const round = await app.sdb.get('Round', roundNumber)
-    || app.sdb.create('Round', { fees: 0, rewards: 0, round: roundNumber })
+  const round = await self.getRound(block.height)
 
   let transFee = 0
   for (const t of block.transactions) {
-    transFee += t.fee
+    if (t.executed) {
+      transFee += t.fee
+    }
   }
 
   round.fees += transFee
