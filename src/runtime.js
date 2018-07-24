@@ -219,6 +219,10 @@ module.exports = async function runtime(options) {
     app.defaultFee.min = min
   }
 
+  app.addRoundFee = (fee) => {
+    app.round.fees += fee
+  }
+
   app.getRealTime = epochTime => slots.getRealTime(epochTime)
 
   app.registerHook = (name, func) => {
@@ -281,6 +285,7 @@ module.exports = async function runtime(options) {
     if (!error) {
       const trs = await app.sdb.get('Transaction', context.trs.id)
       trs.executed = 1
+      app.addRoundFee(trs.fee)
     }
     return error
   }
