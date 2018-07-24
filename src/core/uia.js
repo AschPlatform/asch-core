@@ -74,7 +74,7 @@ function trimPrecision(amount, precision) {
 UIA.prototype.toAPIV1UIABalances = (balances) => {
   if (!(balances && isArray(balances) && balances.length > 0)) return balances
   const assetMap = new Map()
-  app.sdb.getAllCached('Asset').forEach(asset => assetMap.set(asset.name, self.toAPIV1Asset(asset)))
+  app.sdb.getAll('Asset').forEach(asset => assetMap.set(asset.name, self.toAPIV1Asset(asset)))
 
   return balances.map(b => (
     assetMap.has(b.currency) ? Object.assign(b, assetMap.get(b.currency)) : b))

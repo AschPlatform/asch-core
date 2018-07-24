@@ -396,15 +396,16 @@ Blocks.prototype.applyRound = async (block) => {
     return
   }
 
-  const delegate = app.sdb.getCached('Delegate', addressHelper.generateNormalAddress(block.delegate))
+  const delegate = app.sdb.get('Delegate', addressHelper.generateNormalAddress(block.delegate))
   delegate.producedBlocks += 1
+  app.sdb.update('Delegate', delegate)
 
   const delegates = await PIFY(modules.delegates.generateDelegateList)(block.height)
 
   // process fee
   const roundNumber = Math.floor(((block.height + delegates.length) - 1) / delegates.length)
 
-  const round = await app.sdb.get('Round', roundNumber)
+  const round = await app.sdb.load('Round', roundNumber)
     || app.sdb.create('Round', { fees: 0, rewards: 0, round: roundNumber })
 
   let transFee = 0
@@ -414,6 +415,7 @@ Blocks.prototype.applyRound = async (block) => {
 
   round.fees += transFee
   round.rewards += block.reward
+  app.sdb.update('Round', round)
 
   if (block.height % 101 !== 0) return
 
@@ -432,17 +434,21 @@ Blocks.prototype.applyRound = async (block) => {
 
   for (const md of missedDelegates) {
     const addr = addressHelper.generateNormalAddress(md)
-    app.sdb.getCached('Delegate', addr).missedBlocks += 1
+    const missedDelegate = app.sdb.get('Delegate', addr)
+    missedDelegate.missedBlocks += 1
+    app.sdb.update('Delegate', missedDelegate)
   }
 
   async function updateDelegate(pk, fee, reward) {
     const addr = addressHelper.generateNormalAddress(pk)
-    const d = app.sdb.getCached('Delegate', addr)
+    const d = app.sdb.get('Delegate', addr)
     d.fees += fee
     d.rewards += reward
+    app.sdb.update('Delegate', d)
     // TODO should account be all cached?
-    const account = await app.sdb.get('Account', d.address)
+    const account = await app.sdb.load('Account', d.address)
     account.xas += (fee + reward)
+    app.sdb.update('Account', account)
   }
 
   const fees = round.fees
@@ -450,10 +456,11 @@ Blocks.prototype.applyRound = async (block) => {
   const councilControl = 1
   if (councilControl) {
     const councilAddress = 'GADQ2bozmxjBfYHDQx3uwtpwXmdhafUdkN'
-    const account = await app.sdb.get('Account', councilAddress)
+    const account = await app.sdb.load('Account', councilAddress)
       || app.sdb.create('Account', { xas: 0, address: councilAddress, name: '' })
     const totalIncome = fees + rewards
     account.xas += totalIncome
+    app.sdb.update('Account', account)
   } else {
     const ratio = 1
 

@@ -120,7 +120,7 @@ priv.get = (name, cb) => (async () => {
 
 priv.getByNames = (names, cb) => (async () => {
   try {
-    const chains = app.sdb.getAllCached('Chain', c => names.indexOf(c.name) >= 0)
+    const chains = app.sdb.getAll('Chain', c => names.includes(c.name))
     return cb(null, chains)
   } catch (e) {
     library.logger.error(e)
@@ -439,7 +439,7 @@ Chains.prototype.onNewBlock = (block) => {
 }
 
 priv.getChainByName = async (name) => {
-  const chains = app.sdb.getAllCached('Chain', c => c.name === name)
+  const chains = app.sdb.get('Chain', { name })
   return chains !== undefined ? chains[0] : undefined
 }
 
@@ -480,7 +480,7 @@ shared.getLastWithdrawal = (req, cb) => (async () => {
 
 shared.getDeposits = (req, cb) => (async () => {
   try {
-    const deposits = await app.sdb.getMany('Deposit', { seq: { $gt: req.body.seq }, chain: req.chain }, 100)
+    const deposits = await app.sdb.loadMany('Deposit', { seq: { $gt: req.body.seq }, chain: req.chain }, 100)
     return cb(null, deposits)
   } catch (e) {
     library.logger.error('getDeposits error', e)

@@ -321,7 +321,7 @@ shared.myVotedDelegates = (req, cb) => {
       try {
         let addr
         if (query.name) {
-          const account = await app.sdb.getBy('Account', { name: query.name })
+          const account = await app.sdb.load('Account', { name: query.name })
           if (!account) {
             return cb('Account not found')
           }
@@ -382,7 +382,7 @@ shared.getAccount = (req, cb) => {
             lockHeight: 0,
           }
         } else {
-          const unconfirmedAccount = await app.sdb.attach('Account', account)
+          const unconfirmedAccount = await app.sdb.load('Account', { address: account.address })
           accountData = {
             address: account.address,
             unconfirmedBalance: unconfirmedAccount.xas,

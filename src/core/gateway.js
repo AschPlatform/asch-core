@@ -99,8 +99,8 @@ Gateway.prototype.importAccounts = async () => {
   if (modules.loader.syncing() || !GATEWAY || !self.client) {
     return
   }
-  const key = app.sdb.getEntityKey('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.IMPORT_ADDRESS })
-  let lastImportAddressLog = app.sdb.getCached('GatewayLog', key)
+  const key = { gateway: GATEWAY, type: GatewayLogType.IMPORT_ADDRESS }
+  let lastImportAddressLog = app.sdb.get('GatewayLog', key)
 
   library.logger.debug('find last import address log', lastImportAddressLog)
   let lastSeq = 0
@@ -119,6 +119,7 @@ Gateway.prototype.importAccounts = async () => {
     }
 
     lastImportAddressLog.seq = gatewayAccounts[len - 1].seq
+    app.sdb.update('GatewayLog', lastImportAddressLog)
     app.sdb.saveLocalChanges()
   }
 }
@@ -141,8 +142,8 @@ Gateway.prototype.processDeposits = async () => {
     return
   }
 
-  const gatewayLogKey = app.sdb.getEntityKey('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.DEPOSIT })
-  let lastDepositLog = app.sdb.getCached('GatewayLog', gatewayLogKey)
+  const gatewayLogKey = { gateway: GATEWAY, type: GatewayLogType.DEPOSIT } 
+  let lastDepositLog = app.sdb.get('GatewayLog', gatewayLogKey)
   library.logger.debug('==========find DEPOSIT log============', lastDepositLog)
 
   lastDepositLog = lastDepositLog
@@ -192,6 +193,7 @@ Gateway.prototype.processDeposits = async () => {
       }
     }
     lastDepositLog.seq = outTransactions[len - 1].height
+    app.sdb.update('GatewayLog', lastDepositLog)
     app.sdb.saveLocalChanges()
   }
 }
@@ -214,8 +216,8 @@ Gateway.prototype.processWithdrawals = async () => {
   const multiAccount = app.gateway.createMultisigAddress(GATEWAY, unlockNumber, outPublicKeys, true)
   library.logger.debug('gateway validators cold account', multiAccount)
 
-  const withdrawalLogKey = app.sdb.getEntityKey('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.WITHDRAWAL })
-  let lastWithdrawalLog = await app.sdb.get('GatewayLog', withdrawalLogKey)
+  const withdrawalLogKey = { gateway: GATEWAY, type: GatewayLogType.WITHDRAWAL }
+  let lastWithdrawalLog = app.sdb.get('GatewayLog', withdrawalLogKey)
   library.logger.debug('find ==========WITHDRAWAL============ log', lastWithdrawalLog)
 
   lastWithdrawalLog = lastWithdrawalLog
@@ -237,7 +239,7 @@ Gateway.prototype.processWithdrawals = async () => {
     if (w.ready) continue
     async function processWithdrawal() {
       let contractParams = null
-      w = await app.sdb.get('GatewayWithdrawal', w.tid)
+      w = await app.sdb.load('GatewayWithdrawal', w.tid)
       if (!w.outTransaction) {
         const output = [{ address: w.recipientId, value: Number(w.amount) }]
         library.logger.debug('gateway spent tids', spentTids)
@@ -281,6 +283,7 @@ Gateway.prototype.processWithdrawals = async () => {
     }
   }
   lastWithdrawalLog.seq = withdrawals[withdrawals.length - 1].seq
+  app.sdb.update('GatewayLog', lastWithdrawalLog)
   app.sdb.saveLocalChanges()
 }
 
@@ -291,11 +294,8 @@ Gateway.prototype.sendWithdrawals = async () => {
   }
   const PAGE_SIZE = 25
   let lastSeq = 0
-  const logKey = app.sdb.getEntityKey('GatewayLog', {
-    gateway: GATEWAY,
-    type: GatewayLogType.SEND_WITHDRAWAL,
-  })
-  let lastLog = app.sdb.getCached('GatewayLog', logKey)
+  const logKey = { gateway: GATEWAY, type: GatewayLogType.SEND_WITHDRAWAL }
+  let lastLog = app.sdb.get('GatewayLog', logKey)
   library.logger.debug('find ======SEND_WITHDRAWAL====== log', lastLog)
   if (lastLog) {
     lastSeq = lastLog.seq
@@ -343,6 +343,7 @@ Gateway.prototype.sendWithdrawals = async () => {
       library.logger.debug('not enough signature')
       return
     }
+    // todo: make outTransacion as Json type
     const ot = JSON.parse(w.outTransaction)
     const ots = []
     for (let i = 0; i < unlockNumber; i++) {
@@ -374,6 +375,7 @@ Gateway.prototype.sendWithdrawals = async () => {
       library.logger.error('Failed to send gateway withdrawal', { error: e, transaction: w })
     }
     lastLog.seq = w.seq
+    app.sdb.update('GatewayLog', lastLog)
     app.sdb.saveLocalChanges()
   }
 }

@@ -16,22 +16,22 @@ class BalanceManager {
   }
 
   getBalanceId(address, currency) {
-    return this.sdb.getEntityKey('Balance', { address, currency })
+    return { address, currency }
   }
 
   get(address, currency) {
-    const item = this.sdb.getCached('Balance', this.getBalanceId(address, currency))
+    const item = this.sdb.get('Balance', { address, currency })
     const balance = item ? item.balance : '0'
     return app.util.bignumber(balance)
   }
 
   increase(address, currency, amount) {
     if (app.util.bignumber(amount).eq(0)) return
-
-    const balanceId = this.getBalanceId(address, currency)
-    let item = this.sdb.getCached('Balance', balanceId)
+    const key = { address, currency }
+    let item = this.sdb.get('Balance', key)
     if (item) {
       item.balance = app.util.bignumber(item.balance).plus(amount).toString(10)
+      app.sdb.update('Balance', key, { balance : item.balance })
     } else {
       item = this.sdb.create('Balance', {
         address,

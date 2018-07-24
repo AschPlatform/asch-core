@@ -275,7 +275,7 @@ priv.loadMyDelegates = (cb) => {
 
   return (async () => {
     try {
-      const delegates = app.sdb.getAllCached('Delegate')
+      const delegates = app.sdb.getAll('Delegate')
       if (!delegates || !delegates.length) {
         return cb('Delegates not found in db')
       }
@@ -383,8 +383,9 @@ Delegates.prototype.validateBlockSlot = (block, cb) => {
   })
 }
 
+// fixme ?? : get method should not modify anything....
 Delegates.prototype.getDelegates = (query, cb) => {
-  let delegates = app.sdb.getAllCached('Delegate').map(d => Object.assign({}, d))
+  let delegates = app.sdb.getAll('Delegate').map(d => Object.assign({}, d))
   if (!delegates || !delegates.length) return cb('No delegates')
 
   delegates = delegates.sort(self.compare)
@@ -392,6 +393,7 @@ Delegates.prototype.getDelegates = (query, cb) => {
   const lastBlock = modules.blocks.getLastBlock()
   const totalSupply = priv.blockStatus.calcSupply(lastBlock.height)
   for (let i = 0; i < delegates.length; ++i) {
+    // fixme? d === delegates[i] ???
     const d = delegates[i]
     d.rate = i + 1
     delegates[i].approval = ((d.votes / totalSupply) * 100).toFixed(2)
@@ -403,6 +405,7 @@ Delegates.prototype.getDelegates = (query, cb) => {
     delegates[i].vote = delegates[i].votes
     delegates[i].missedblocks = delegates[i].missedBlocks
     delegates[i].producedblocks = delegates[i].producedBlocks
+    app.sdb.update('Delegate', delegates[i])
   }
   return cb(null, delegates)
 }
@@ -451,7 +454,7 @@ Delegates.prototype.cleanup = (cb) => {
 }
 
 Delegates.prototype.getTopDelegates = () => {
-  const allDelegates = app.sdb.getAllCached('Delegate')
+  const allDelegates = app.sdb.getAll('Delegate')
   return allDelegates.sort(self.compare).map(d => d.publicKey).slice(0, 101)
 }
 
@@ -466,17 +469,20 @@ Delegates.prototype.getBookkeeperAddresses = () => {
 }
 
 Delegates.prototype.getBookkeeper = () => {
-  const item = app.sdb.getCached('Variable', BOOK_KEEPER_NAME)
+  const item = app.sdb.get('Variable', BOOK_KEEPER_NAME)
   if (!item) throw new Error('Bookkeeper variable not found')
+
+  // fixme ?? make field type as Json 
   return JSON.parse(item.value)
 }
 
 Delegates.prototype.updateBookkeeper = (delegates) => {
   const value = JSON.stringify(delegates || self.getTopDelegates())
-  const bookKeeper = app.sdb.getCached('Variable', BOOK_KEEPER_NAME)
-    || app.sdb.create('Variable', BOOK_KEEPER_NAME, { key: BOOK_KEEPER_NAME, value })
+  const bookKeeper = app.sdb.get('Variable', BOOK_KEEPER_NAME)
+    || app.sdb.create('Variable', { key: BOOK_KEEPER_NAME, value })
 
   bookKeeper.value = value
+  app.sdb.update('Variable', bookKeeper)
 }
 
 shared.getDelegate = (req, cb) => {
@@ -528,7 +534,7 @@ shared.getDelegate = (req, cb) => {
 
 shared.count = (req, cb) => (async () => {
   try {
-    const count = app.sdb.getAllCached('Delegate').length
+    const count = app.sdb.getAll('Delegate').length
     return cb(null, { count })
   } catch (e) {
     library.logger.error('get delegate count error', e)
