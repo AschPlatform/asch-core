@@ -147,7 +147,7 @@ function adaptSmartDBLogger( getLogLevel ) {
   {
     createLog: (name) => app.logger,
     format: false,
-    getLevel: () => levelMap[getLogLevel()] || LogLevel.All
+    getLevel: () => levelMap[getLogLevel()] || LogLevel.Warn
   }
 }
 
@@ -280,9 +280,8 @@ module.exports = async function runtime(options) {
   app.executeContract = async (context) => {
     const error = await library.base.transaction.apply(context)
     if (!error) {
-      const trs = await app.sdb.load('Transaction', context.trs.id)
-      trs.executed = 1
-      app.sdb.update('Transaction', context.trs.id, { execute : trs.execute })
+      const id = context.trs.id
+      app.sdb.update('Transaction', { execute : 1 }, { id })
     }
     return error
   }

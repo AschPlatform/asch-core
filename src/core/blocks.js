@@ -396,26 +396,22 @@ Blocks.prototype.applyRound = async (block) => {
     return
   }
 
-  const delegate = app.sdb.get('Delegate', addressHelper.generateNormalAddress(block.delegate))
-  delegate.producedBlocks += 1
-  app.sdb.update('Delegate', delegate)
+  const address = addressHelper.generateNormalAddress(block.delegate)
+  app.sdb.increase('Delegate', { producedBlocks: 1 }, { address })
 
   const delegates = await PIFY(modules.delegates.generateDelegateList)(block.height)
 
   // process fee
   const roundNumber = Math.floor(((block.height + delegates.length) - 1) / delegates.length)
 
-  const round = await app.sdb.load('Round', roundNumber)
-    || app.sdb.create('Round', { fees: 0, rewards: 0, round: roundNumber })
+  app.sdb.createOrLoad('Round', { fees: 0, rewards: 0, round: roundNumber })
 
   let transFee = 0
   for (const t of block.transactions) {
     transFee += t.fee
   }
 
-  round.fees += transFee
-  round.rewards += block.reward
-  app.sdb.update('Round', round)
+  const { fees, rewards } = app.sdb.increase('Round', { fees: transFee, rewards: block.reward }, { round: roundNumber })
 
   if (block.height % 101 !== 0) return
 
@@ -423,44 +419,26 @@ Blocks.prototype.applyRound = async (block) => {
   app.logger.debug('delegate length', delegates.length)
 
   const forgedBlocks = await app.sdb.getBlocksByHeightRange(block.height - 100, block.height - 1)
-  const forgedDelegates = forgedBlocks.map(b => b.delegate)
-  forgedDelegates.push(block.delegate)
-  const missedDelegates = []
-  for (const fd of forgedDelegates) {
-    if (delegates.indexOf(fd) === -1) {
-      missedDelegates.push(fd)
-    }
-  }
+  const forgedDelegates = [...forgedBlocks.map(b => b.delegate), block.delegate]
 
-  for (const md of missedDelegates) {
-    const addr = addressHelper.generateNormalAddress(md)
-    const missedDelegate = app.sdb.get('Delegate', addr)
-    missedDelegate.missedBlocks += 1
-    app.sdb.update('Delegate', missedDelegate)
-  }
-
+  const missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
+  missedDelegates.forEach( md =>{
+    const address = addressHelper.generateNormalAddress(md)
+    app.sdb.increase('Delegate', { missedDelegate : 1 }, { address })
+  })
+  
   async function updateDelegate(pk, fee, reward) {
-    const addr = addressHelper.generateNormalAddress(pk)
-    const d = app.sdb.get('Delegate', addr)
-    d.fees += fee
-    d.rewards += reward
-    app.sdb.update('Delegate', d)
+    const address = addressHelper.generateNormalAddress(pk)
+    app.sdb.increase('Delegate', { fees: fee, rewards : reward }, { address })
     // TODO should account be all cached?
-    const account = await app.sdb.load('Account', d.address)
-    account.xas += (fee + reward)
-    app.sdb.update('Account', account)
+    app.sdb.increase('Account', { xas : fee + reward }, { address })
   }
 
-  const fees = round.fees
-  const rewards = round.rewards
   const councilControl = 1
   if (councilControl) {
     const councilAddress = 'GADQ2bozmxjBfYHDQx3uwtpwXmdhafUdkN'
-    const account = await app.sdb.load('Account', councilAddress)
-      || app.sdb.create('Account', { xas: 0, address: councilAddress, name: '' })
-    const totalIncome = fees + rewards
-    account.xas += totalIncome
-    app.sdb.update('Account', account)
+    app.sdb.createOrLoad('Account', { xas: 0, address: councilAddress, name: null })
+    app.sdb.increase('Account', { xas: fees + rewards }, { address: councilAddress })
   } else {
     const ratio = 1
 

@@ -99,8 +99,8 @@ Gateway.prototype.importAccounts = async () => {
   if (modules.loader.syncing() || !GATEWAY || !self.client) {
     return
   }
-  const key = { gateway: GATEWAY, type: GatewayLogType.IMPORT_ADDRESS }
-  let lastImportAddressLog = app.sdb.get('GatewayLog', key)
+  const lastLogKey = { gateway: GATEWAY, type: GatewayLogType.IMPORT_ADDRESS }
+  let lastImportAddressLog = app.sdb.get('GatewayLog', lastLogKey)
 
   library.logger.debug('find last import address log', lastImportAddressLog)
   let lastSeq = 0
@@ -118,8 +118,8 @@ Gateway.prototype.importAccounts = async () => {
       await priv.importAddress(a.outAddress)
     }
 
-    lastImportAddressLog.seq = gatewayAccounts[len - 1].seq
-    app.sdb.update('GatewayLog', lastImportAddressLog)
+    const seq =  gatewayAccounts[len - 1].seq
+    app.sdb.update('GatewayLog', { seq }, lastLogKey )
     app.sdb.saveLocalChanges()
   }
 }
@@ -192,8 +192,8 @@ Gateway.prototype.processDeposits = async () => {
         library.logger.warn('Failed to process gateway deposit', { error: e, outTransaction: ot })
       }
     }
-    lastDepositLog.seq = outTransactions[len - 1].height
-    app.sdb.update('GatewayLog', lastDepositLog)
+    const seq = outTransactions[len - 1].height
+    app.sdb.update('GatewayLog', { seq }, gatewayLogKey)
     app.sdb.saveLocalChanges()
   }
 }
@@ -282,8 +282,8 @@ Gateway.prototype.processWithdrawals = async () => {
       library.logger.warn('Failed to process gateway withdrawal', { error: e, transaction: w })
     }
   }
-  lastWithdrawalLog.seq = withdrawals[withdrawals.length - 1].seq
-  app.sdb.update('GatewayLog', lastWithdrawalLog)
+  const seq = withdrawals[withdrawals.length - 1].seq
+  app.sdb.update('GatewayLog', { seq }, withdrawalLogKey)
   app.sdb.saveLocalChanges()
 }
 
@@ -374,8 +374,8 @@ Gateway.prototype.sendWithdrawals = async () => {
     } catch (e) {
       library.logger.error('Failed to send gateway withdrawal', { error: e, transaction: w })
     }
-    lastLog.seq = w.seq
-    app.sdb.update('GatewayLog', lastLog)
+    const seq = w.seq
+    app.sdb.update('GatewayLog', { seq }, logKey)
     app.sdb.saveLocalChanges()
   }
 }

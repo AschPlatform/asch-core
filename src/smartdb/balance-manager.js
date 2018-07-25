@@ -31,7 +31,7 @@ class BalanceManager {
     let item = this.sdb.get('Balance', key)
     if (item) {
       item.balance = app.util.bignumber(item.balance).plus(amount).toString(10)
-      app.sdb.update('Balance', key, { balance : item.balance })
+      app.sdb.update('Balance', { balance: item.balance }, key)
     } else {
       item = this.sdb.create('Balance', {
         address,

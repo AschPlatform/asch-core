@@ -405,7 +405,7 @@ Delegates.prototype.getDelegates = (query, cb) => {
     delegates[i].vote = delegates[i].votes
     delegates[i].missedblocks = delegates[i].missedBlocks
     delegates[i].producedblocks = delegates[i].producedBlocks
-    app.sdb.update('Delegate', delegates[i])
+    app.sdb.update('Delegate', delegates[i], { address: delegates[i].address })
   }
   return cb(null, delegates)
 }
@@ -478,11 +478,10 @@ Delegates.prototype.getBookkeeper = () => {
 
 Delegates.prototype.updateBookkeeper = (delegates) => {
   const value = JSON.stringify(delegates || self.getTopDelegates())
-  const bookKeeper = app.sdb.get('Variable', BOOK_KEEPER_NAME)
-    || app.sdb.create('Variable', { key: BOOK_KEEPER_NAME, value })
-
-  bookKeeper.value = value
-  app.sdb.update('Variable', bookKeeper)
+  const { create } = app.sdb.createOrLoad('Variable', { key: BOOK_KEEPER_NAME, value })
+  if (!create) {
+    app.sdb.update('Variable', { value }, { key: BOOK_KEEPER_NAME })
+  }
 }
 
 shared.getDelegate = (req, cb) => {
