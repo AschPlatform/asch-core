@@ -78,22 +78,31 @@ class BitcoinGateway {
     return this._client
   }
   _getUtil() {
-    return this._util || new BitcoinUtil(this._netType)
+    if (!this._util) {
+      this._uitl = new BitcoinUtil(this._netType)
+    }
+    return this._util
   }
   async _importAccounts() {
     const GATEWAY = this.name
-    const key = this._sdb.getEntityKey('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.IMPORT_ADDRESS })
-    let lastImportAddressLog = this._sdb.getCached('GatewayLog', key)
+    const key = { gateway: GATEWAY, type: GatewayLogType.IMPORT_ADDRESS }
+    let lastImportAddressLog = this._sdb.get('GatewayLog', key)
 
     library.logger.debug('find last import address log', lastImportAddressLog)
     let lastSeq = 0
     if (lastImportAddressLog) {
       lastSeq = lastImportAddressLog.seq
     } else {
-      lastImportAddressLog = this._sdb.create('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.IMPORT_ADDRESS, seq: 0 })
+      const value = { gateway: GATEWAY, type: GatewayLogType.IMPORT_ADDRESS, seq: 0 }
+      lastImportAddressLog = this._sdb.create('GatewayLog', value)
     }
     // query( model, condition, fields, limit, offset, sort, join )
-    const gatewayAccounts = await this._sdb.find('GatewayAccount', { gateway: GATEWAY, seq: { $gt: lastSeq } }, 100, { seq: 1 })
+    const gatewayAccounts = await this._sdb.find(
+      'GatewayAccount',
+      { gateway: GATEWAY, seq: { $gt: lastSeq } },
+      100,
+      { seq: 1 },
+    )
     library.logger.debug('find gateway account', gatewayAccounts)
     const len = gatewayAccounts.length
     if (len > 0) {
@@ -128,8 +137,8 @@ class BitcoinGateway {
       return
     }
 
-    const gatewayLogKey = this._sdb.getEntityKey('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.DEPOSIT })
-    let lastDepositLog = this._sdb.getCached('GatewayLog', gatewayLogKey)
+    const gatewayLogKey = { gateway: GATEWAY, type: GatewayLogType.DEPOSIT }
+    let lastDepositLog = this._sdb.get('GatewayLog', gatewayLogKey)
     library.logger.debug('==========find DEPOSIT log============', lastDepositLog)
 
     lastDepositLog = lastDepositLog
@@ -222,8 +231,8 @@ class BitcoinGateway {
     const multiAccount = this._getUtil().createMultisigAddress(unlockNumber, outPublicKeys)
     library.logger.debug('gateway validators cold account', multiAccount)
 
-    const withdrawalLogKey = this._sdb.getEntityKey('GatewayLog', { gateway: GATEWAY, type: GatewayLogType.WITHDRAWAL })
-    let lastWithdrawalLog = await this._sdb.get('GatewayLog', withdrawalLogKey)
+    const withdrawalLogKey = { gateway: GATEWAY, type: GatewayLogType.WITHDRAWAL }
+    let lastWithdrawalLog = await this._sdb.load('GatewayLog', withdrawalLogKey)
     library.logger.debug('find ==========WITHDRAWAL============ log', lastWithdrawalLog)
 
     lastWithdrawalLog = lastWithdrawalLog
@@ -256,7 +265,7 @@ class BitcoinGateway {
   }
   async _processWithdrawal(wid) {
     let contractParams = null
-    const w = await this._sdb.get('GatewayWithdrawal', wid)
+    const w = await this._sdb.load('GatewayWithdrawal', wid)
     if (!w.outTransaction) {
       const output = [{ address: w.recipientId, value: Number(w.amount) }]
       library.logger.debug('gateway spent tids', this._spentTids)
@@ -276,7 +285,7 @@ class BitcoinGateway {
       const account = {
         privateKey: this._outSecret,
       }
-      const ots = this._getUtil().signTransaction(ot, account, inputAccountInfo)
+      const ots = this._signTransaction(ot, account, inputAccountInfo)
       library.logger.debug('sign withdrawl out transaction', ots)
 
       contractParams = {
@@ -287,8 +296,8 @@ class BitcoinGateway {
       }
     } else {
       const ot = JSON.parse(w.outTransaction)
-      const inputAccountInfo = await getGatewayAccountByOutAddress(ot.input, multiAccount)
-      const ots = this._getUtil().signTransaction(ot, account, inputAccountInfo)
+      const inputAccountInfo = await this._getGatewayAccountByOutAddress(ot.input, multiAccount)
+      const ots = this._signTransaction(ot, account, inputAccountInfo)
       contractParams = {
         type: 405,
         secret: global.Config.gateway.secret,
@@ -298,15 +307,18 @@ class BitcoinGateway {
     }
     await PIFY(modules.transactions.addTransactionUnsigned)(contractParams)
   }
+  async _signTransaction(outTransaction, account, inputAccountInfo) {
+    return this._getUtil().signTransaction(outTransaction, account, inputAccountInfo)
+  }
   async _sendWithdrawals() {
     const GATEWAY = this.name
     const PAGE_SIZE = 25
     let lastSeq = 0
-    const logKey = this._sdb.getEntityKey('GatewayLog', {
+    const logKey = {
       gateway: GATEWAY,
       type: GatewayLogType.SEND_WITHDRAWAL,
-    })
-    let lastLog = this._sdb.getCached('GatewayLog', logKey)
+    }
+    let lastLog = this._sdb.get('GatewayLog', logKey)
     library.logger.debug('find ======SEND_WITHDRAWAL====== log', lastLog)
     if (lastLog) {
       lastSeq = lastLog.seq

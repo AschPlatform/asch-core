@@ -1,13 +1,13 @@
 const gatewayClassMap = new Map()
 
 gatewayClassMap.set('bitcoin', require('./bitcoin-gateway'))
-// gatewayClassMap.set('bitcoincash', require('./bitcoincash-gateway'))
+gatewayClassMap.set('bitcoincash', require('./bitcoincash-gateway'))
 
 const gatewayInstanceMap = new Map()
 
 const utilClassMap = new Map()
 utilClassMap.set('bitcoin', require('./bitcoin-util'))
-// utilClassMap.set('bitcoincash', require('./bitcoincash-util'))
+utilClassMap.set('bitcoincash', require('./bitcoincash-util'))
 
 const utilMap = new Map()
 
