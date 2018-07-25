@@ -259,12 +259,12 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
   }
 
   let requestor = null
-  let sender = await app.sdb.get('Account', senderId)
+  let sender = await app.sdb.load('Account', senderId)
   if (!sender) {
     if (height > 0) throw new Error('Sender account not found')
     sender = app.sdb.create('Account', {
       address: senderId,
-      name: '',
+      name: null,
       xas: 0,
     })
   }
@@ -274,7 +274,7 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
       throw new Error('Invalid requestor address')
     }
 
-    requestor = await app.sdb.get('Account', requestorId)
+    requestor = await app.sdb.load('Account', requestorId)
     if (!requestor) {
       throw new Error('Requestor account not found')
     }
@@ -650,13 +650,13 @@ shared.addTransactions = (req, cb) => {
   }
   const trs = req.body.transactions
   try {
-    for (let t of trs) {
+    for (const t of trs) {
       library.base.transaction.objectNormalize(t)
     }
   } catch (e) {
-    return cb('Invalid transaction body: ' + e.toString())
+    return cb(`Invalid transaction body: ${e.toString()}`)
   }
-  library.sequence.add((callback) => {
+  return library.sequence.add((callback) => {
     self.processUnconfirmedTransactions(trs, callback)
   }, cb)
 }

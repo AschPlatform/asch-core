@@ -296,11 +296,14 @@ Transaction.prototype.apply = async (context) => {
       requestor.xas -= requestorFee
       app.addRoundFee(requestorFee)
       trs.executed = 0
+      app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
+      //app.sdb.update('Transaction', trs.id, { executed: trs.executed })
       return
     }
     if (sender) {
       if (sender.xas < trs.fee) throw new Error('Insufficient requestor balance')
       sender.xas -= trs.fee
+      app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
     } else {
       throw new Error('Unexpected sender account')
     }
