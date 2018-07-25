@@ -131,23 +131,25 @@ async function loadInterfaces(dir, routes) {
   }
 }
 
-function adaptSmartDBLogger( getLogLevel ) {
+function adaptSmartDBLogger() {
   const { LogLevel } = AschCore
   const levelMap = {
-    'trace': LogLevel.Trace,
-    'debug': LogLevel.Debug,
-    'log': LogLevel.Log,
-    'info': LogLevel.Info,
-    'warn': LogLevel.Warn,
-    'error': LogLevel.Error,
-    'fatal': LogLevel.Fatal,
+    trace: LogLevel.Trace,
+    debug: LogLevel.Debug,
+    log: LogLevel.Log,
+    info: LogLevel.Info,
+    warn: LogLevel.Warn,
+    error: LogLevel.Error,
+    fatal: LogLevel.Fatal,
   }
 
-  AschCore.LogManager.logFactory = 
-  {
-    createLog: (name) => app.logger,
+  AschCore.LogManager.logFactory = {
+    createLog: () => app.logger,
     format: false,
-    getLevel: () => levelMap[getLogLevel()] || LogLevel.Warn
+    getLevel: () => {
+      const appLogLevel = String(options.appConfig.LogLevel).toLocaleLowerCase()
+      return levelMap[appLogLevel] || LogLevel.Info
+    },
   }
 }
 
@@ -220,6 +222,10 @@ module.exports = async function runtime(options) {
     app.defaultFee.min = min
   }
 
+  app.addRoundFee = (fee) => {
+    app.round.fees += fee
+  }
+
   app.getRealTime = epochTime => slots.getRealTime(epochTime)
 
   app.registerHook = (name, func) => {
@@ -280,8 +286,10 @@ module.exports = async function runtime(options) {
   app.executeContract = async (context) => {
     const error = await library.base.transaction.apply(context)
     if (!error) {
-      const id = context.trs.id
-      app.sdb.update('Transaction', { execute : 1 }, { id })
+      const trs = await app.sdb.get('Transaction', { id: context.trs.id })
+      trs.executed = 1
+      app.sdb.update('Transaction', { executed: 1 }, { id: context.trs.id })
+      app.addRoundFee(trs.fee)
     }
     return error
   }
@@ -293,7 +301,7 @@ module.exports = async function runtime(options) {
   const BLOCK_HEADER_DIR = path.resolve(dataDir, 'blocks')
   const BLOCK_DB_PATH = path.resolve(dataDir, 'blockchain.db')
 
-  adaptSmartDBLogger(() => options.appConfig.LogLevel)
+  adaptSmartDBLogger()
   app.sdb = new AschCore.SmartDB(BLOCK_DB_PATH, BLOCK_HEADER_DIR)
   app.balances = new BalanceManager(app.sdb)
   app.autoID = new AutoIncrement(app.sdb)
