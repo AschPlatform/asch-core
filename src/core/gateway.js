@@ -118,8 +118,8 @@ Gateway.prototype.importAccounts = async () => {
       await priv.importAddress(a.outAddress)
     }
 
-    const seq =  gatewayAccounts[len - 1].seq
-    app.sdb.update('GatewayLog', { seq }, lastLogKey )
+    const seq = gatewayAccounts[len - 1].seq
+    app.sdb.update('GatewayLog', { seq }, lastLogKey)
     app.sdb.saveLocalChanges()
   }
 }
@@ -142,7 +142,7 @@ Gateway.prototype.processDeposits = async () => {
     return
   }
 
-  const gatewayLogKey = { gateway: GATEWAY, type: GatewayLogType.DEPOSIT } 
+  const gatewayLogKey = { gateway: GATEWAY, type: GatewayLogType.DEPOSIT }
   let lastDepositLog = app.sdb.get('GatewayLog', gatewayLogKey)
   library.logger.debug('==========find DEPOSIT log============', lastDepositLog)
 
@@ -161,6 +161,20 @@ Gateway.prototype.processDeposits = async () => {
 
   library.logger.debug('get gateway transactions', outTransactions)
   const len = outTransactions.length
+
+  async function processDeposit() {
+    const params = {
+      type: 402,
+      secret: global.Config.gateway.secret,
+      fee: 10000000,
+      args: [GATEWAY, ot.address, CURRENCY, String(ot.amount * 100000000), ot.txid],
+    }
+    await PIFY(modules.transactions.addTransactionUnsigned)(params)
+  }
+  const onError = (err) => {
+    library.logger.error('process gateway deposit error, will retry...', err)
+  }
+
   if (len > 0) {
     for (const ot of outTransactions) {
       const isAccountOpened = await app.sdb.exists('GatewayAccount', { outAddress: ot.address })
@@ -173,18 +187,6 @@ Gateway.prototype.processDeposits = async () => {
         continue
       }
 
-      async function processDeposit() {
-        const params = {
-          type: 402,
-          secret: global.Config.gateway.secret,
-          fee: 10000000,
-          args: [GATEWAY, ot.address, CURRENCY, String(ot.amount * 100000000), ot.txid],
-        }
-        await PIFY(modules.transactions.addTransactionUnsigned)(params)
-      }
-      const onError = (err) => {
-        library.logger.error('process gateway deposit error, will retry...', err)
-      }
       try {
         await utils.retryAsync(processDeposit, 3, 10 * 1000, onError)
         library.logger.info('Gateway deposit processed', { address: ot.address, amount: ot.amount, gateway: GATEWAY })
@@ -234,49 +236,51 @@ Gateway.prototype.processWithdrawals = async () => {
   const account = {
     privateKey: global.Config.gateway.outSecret,
   }
-  let spentTids = await priv.getSpentTids(GATEWAY)
-  for (let w of withdrawals) {
-    if (w.ready) continue
-    async function processWithdrawal() {
-      let contractParams = null
-      w = await app.sdb.load('GatewayWithdrawal', w.tid)
-      if (!w.outTransaction) {
-        const output = [{ address: w.recipientId, value: Number(w.amount) }]
-        library.logger.debug('gateway spent tids', spentTids)
-        const ot = await priv.createNewTransaction(multiAccount, output, spentTids, Number(w.fee))
-        spentTids = spentTids.concat(self.gatewayUtil.getSpentTidsFromRawTransaction(ot.txhex))
-        library.logger.debug('create withdrawl out transaction', ot)
 
-        const inputAccountInfo = await getGatewayAccountByOutAddress(ot.input, multiAccount)
-        library.logger.debug('input account info', inputAccountInfo)
+  async function processWithdrawal(spentTids) {
+    let contractParams = null
+    w = await app.sdb.load('GatewayWithdrawal', w.tid)
+    if (!w.outTransaction) {
+      const output = [{ address: w.recipientId, value: Number(w.amount) }]
+      library.logger.debug('gateway spent tids', spentTids)
+      const ot = await priv.createNewTransaction(multiAccount, output, spentTids, Number(w.fee))
+      spentTids = spentTids.concat(self.gatewayUtil.getSpentTidsFromRawTransaction(ot.txhex))
+      library.logger.debug('create withdrawl out transaction', ot)
 
-        const ots = self.gatewayUtil.signTransaction(ot, account, inputAccountInfo)
-        library.logger.debug('sign withdrawl out transaction', ots)
+      const inputAccountInfo = await getGatewayAccountByOutAddress(ot.input, multiAccount)
+      library.logger.debug('input account info', inputAccountInfo)
 
-        contractParams = {
-          type: 404,
-          secret: global.Config.gateway.secret,
-          fee: 10000000,
-          args: [w.tid, JSON.stringify(ot), JSON.stringify(ots)],
-        }
-      } else {
-        const ot = JSON.parse(w.outTransaction)
-        const inputAccountInfo = await getGatewayAccountByOutAddress(ot.input, multiAccount)
-        const ots = self.gatewayUtil.signTransaction(ot, account, inputAccountInfo)
-        contractParams = {
-          type: 405,
-          secret: global.Config.gateway.secret,
-          fee: 10000000,
-          args: [w.tid, JSON.stringify(ots)],
-        }
+      const ots = self.gatewayUtil.signTransaction(ot, account, inputAccountInfo)
+      library.logger.debug('sign withdrawl out transaction', ots)
+
+      contractParams = {
+        type: 404,
+        secret: global.Config.gateway.secret,
+        fee: 10000000,
+        args: [w.tid, JSON.stringify(ot), JSON.stringify(ots)],
       }
-      await PIFY(modules.transactions.addTransactionUnsigned)(contractParams)
+    } else {
+      const ot = JSON.parse(w.outTransaction)
+      const inputAccountInfo = await getGatewayAccountByOutAddress(ot.input, multiAccount)
+      const ots = self.gatewayUtil.signTransaction(ot, account, inputAccountInfo)
+      contractParams = {
+        type: 405,
+        secret: global.Config.gateway.secret,
+        fee: 10000000,
+        args: [w.tid, JSON.stringify(ots)],
+      }
     }
-    const onError = function (err) {
-      library.logger.error('Process gateway withdrawal error, will retry', err)
-    }
+    await PIFY(modules.transactions.addTransactionUnsigned)(contractParams)
+  }
+  const onError = (err) => {
+    library.logger.error('Process gateway withdrawal error, will retry', err)
+  }
+
+  const spentTids = await priv.getSpentTids(GATEWAY)
+  for (const w of withdrawals) {
+    if (w.ready) continue
     try {
-      await utils.retryAsync(processWithdrawal, 3, 10 * 1000, onError)
+      await utils.retryAsync(async () => processWithdrawal(spentTids), 3, 10 * 1000, onError)
       library.logger.info('Gateway withdrawal processed', w.tid)
     } catch (e) {
       library.logger.warn('Failed to process gateway withdrawal', { error: e, transaction: w })

@@ -1,17 +1,14 @@
 const crypto = require('crypto')
-const async = require('async')
 const isArray = require('util').isArray
 const jsonSql = require('json-sql')()
 
 jsonSql.setDialect('sqlite')
 
 const ed = require('../utils/ed.js')
-const constants = require('../utils/constants.js')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 
 const addressHelper = require('../utils/address.js')
-const amountHelper = require('../utils/amount.js')
 
 
 // Private fields

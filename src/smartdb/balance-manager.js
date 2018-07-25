@@ -2,7 +2,7 @@
 function getCurrencyFlag(currency) {
   if (currency === 'XAS') {
     return 1
-  } else if (currency.indexOf('.') !== -1) {
+  } if (currency.indexOf('.') !== -1) {
     // UIA
     return 2
   }
@@ -13,10 +13,6 @@ function getCurrencyFlag(currency) {
 class BalanceManager {
   constructor(sdb) {
     this.sdb = sdb
-  }
-
-  getBalanceId(address, currency) {
-    return { address, currency }
   }
 
   get(address, currency) {

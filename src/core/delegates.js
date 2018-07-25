@@ -472,7 +472,7 @@ Delegates.prototype.getBookkeeper = () => {
   const item = app.sdb.get('Variable', BOOK_KEEPER_NAME)
   if (!item) throw new Error('Bookkeeper variable not found')
 
-  // fixme ?? make field type as Json 
+  // TODO: ?? make field type as JSON
   return JSON.parse(item.value)
 }
 

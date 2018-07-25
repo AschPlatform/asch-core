@@ -1,5 +1,4 @@
 const extend = require('extend')
-const crypto = require('crypto')
 const Router = require('../utils/router.js')
 const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
