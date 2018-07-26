@@ -109,8 +109,7 @@ class BitcoinGateway {
       for (const a of gatewayAccounts) {
         await this._importAddress(a.outAddress)
       }
-
-      lastImportAddressLog.seq = gatewayAccounts[len - 1].seq
+      app.sdb.update('GatewayLog', { seq: gatewayAccounts[len - 1].seq }, key)
       this._sdb.saveLocalChanges()
     }
   }
@@ -188,7 +187,7 @@ class BitcoinGateway {
           library.logger.warn('Failed to process gateway deposit', { error: e, outTransaction: ot })
         }
       }
-      lastDepositLog.seq = outTransactions[len - 1].height
+      app.sdb.update('GatewayLog', { seq: outTransactions[len - 1].height }, gatewayLogKey)
       this._sdb.saveLocalChanges()
     }
   }
@@ -226,11 +225,6 @@ class BitcoinGateway {
     }
     library.logger.debug('find gateway validators', validators)
 
-    const outPublicKeys = validators.map(v => v.outPublicKey).sort((l, r) => l - r)
-    const unlockNumber = Math.floor(outPublicKeys.length / 2) + 1
-    const multiAccount = this._getUtil().createMultisigAccount(unlockNumber, outPublicKeys)
-    library.logger.debug('gateway validators cold account', multiAccount)
-
     const withdrawalLogKey = { gateway: GATEWAY, type: GatewayLogType.WITHDRAWAL }
     let lastWithdrawalLog = await this._sdb.load('GatewayLog', withdrawalLogKey)
     library.logger.debug('find ==========WITHDRAWAL============ log', lastWithdrawalLog)
@@ -246,6 +240,11 @@ class BitcoinGateway {
       return
     }
 
+    const outPublicKeys = validators.map(v => v.outPublicKey).sort((l, r) => l - r)
+    const unlockNumber = Math.floor(outPublicKeys.length / 2) + 1
+    const multiAccount = this._getUtil().createMultisigAccount(unlockNumber, outPublicKeys)
+    library.logger.debug('gateway validators cold account', multiAccount)
+
     const onError = (err) => {
       library.logger.error('Process gateway withdrawal error, will retry', err)
     }
@@ -260,7 +259,7 @@ class BitcoinGateway {
         library.logger.warn('Failed to process gateway withdrawal', { error: e, transaction: w })
       }
     }
-    lastWithdrawalLog.seq = withdrawals[withdrawals.length - 1].seq
+    app.sdb.update('GatewayLog', { seq: withdrawals[withdrawals.length - 1].seq }, withdrawalLogKey)
     this._sdb.saveLocalChanges()
   }
   async _processWithdrawal(wid) {
@@ -388,7 +387,7 @@ class BitcoinGateway {
       } catch (e) {
         library.logger.error('Failed to send gateway withdrawal', { error: e, transaction: w })
       }
-      lastLog.seq = w.seq
+      app.sdb.update('GatewayLog', { seq: w.seq }, logKey)
       this._sdb.saveLocalChanges()
     }
   }
