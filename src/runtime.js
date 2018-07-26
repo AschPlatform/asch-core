@@ -131,7 +131,7 @@ async function loadInterfaces(dir, routes) {
   }
 }
 
-function adaptSmartDBLogger() {
+function adaptSmartDBLogger(config) {
   const { LogLevel } = AschCore
   const levelMap = {
     trace: LogLevel.Trace,
@@ -147,7 +147,7 @@ function adaptSmartDBLogger() {
     createLog: () => app.logger,
     format: false,
     getLevel: () => {
-      const appLogLevel = String(options.appConfig.LogLevel).toLocaleLowerCase()
+      const appLogLevel = String(config.LogLevel).toLocaleLowerCase()
       return levelMap[appLogLevel] || LogLevel.Info
     },
   }
@@ -301,7 +301,7 @@ module.exports = async function runtime(options) {
   const BLOCK_HEADER_DIR = path.resolve(dataDir, 'blocks')
   const BLOCK_DB_PATH = path.resolve(dataDir, 'blockchain.db')
 
-  adaptSmartDBLogger()
+  adaptSmartDBLogger(options.appConfig)
   app.sdb = new AschCore.SmartDB(BLOCK_DB_PATH, BLOCK_HEADER_DIR)
   app.balances = new BalanceManager(app.sdb)
   app.autoID = new AutoIncrement(app.sdb)
