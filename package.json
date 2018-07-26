@@ -30,7 +30,7 @@
     "json-sql": "https://github.com/AschPlatform/json-sql/tarball/v0.2.4+asch.1",
     "knuth-shuffle": "=1.0.8",
     "lodash": "=3.9.3",
-    "method-override": "=2.3.6",
+    "method-override": "=2.3.10",
     "protocol-buffers": "=3.2.1",
     "randomstring": "=1.1.5",
     "request": "=2.74.0",
