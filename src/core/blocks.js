@@ -393,7 +393,7 @@ Blocks.prototype.saveBlockTransactions = (block) => {
 
 Blocks.prototype.getRound = (height) => {
   const round = modules.round.calc(height)
-  return app.sdb.createOrLoad('Round', { fees: 0, rewards: 0, round })
+  return app.sdb.createOrLoad('Round', { fees: 0, rewards: 0, round }).entity
 }
 
 Blocks.prototype.applyRound = async (block) => {
@@ -411,7 +411,6 @@ Blocks.prototype.applyRound = async (block) => {
       transFee += t.fee
     }
   }
-
   const roundNumber = app.round.round
   const { fees, rewards } = app.sdb.increase(
     'Round',
