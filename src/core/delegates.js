@@ -332,7 +332,7 @@ Delegates.prototype.validateProposeSlot = (propose, cb) => {
 }
 
 // Public methods
-Delegates.prototype.generateDelegateList = (height, cb) => (async () => {
+Delegates.prototype.generateDelegateList = (height, cb) => (() => {
   try {
     const truncDelegateList = self.getBookkeeper()
     const seedSource = modules.round.calc(height).toString()
