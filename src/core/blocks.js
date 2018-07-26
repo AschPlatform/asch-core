@@ -146,6 +146,7 @@ Blocks.prototype.getBlock = (filter, cb) => {
 }
 
 Blocks.prototype.setLastBlock = (block) => {
+  app.round = self.getRound(block.height + 1)
   priv.lastBlock = block
   if (global.Config.netVersion === 'mainnet') {
     global.featureSwitch.enableLongId = priv.lastBlock.height >= 1700000
@@ -434,7 +435,7 @@ Blocks.prototype.applyRound = async (block) => {
     const address = addressHelper.generateNormalAddress(md)
     app.sdb.increase('Delegate', { missedDelegate : 1 }, { address })
   })
-  
+
   async function updateDelegate(pk, fee, reward) {
     const address = addressHelper.generateNormalAddress(pk)
     app.sdb.increase('Delegate', { fees: fee, rewards : reward }, { address })
