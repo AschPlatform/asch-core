@@ -268,7 +268,7 @@ module.exports = async function runtime(options) {
 
   app.gateway = {
     createMultisigAddress: (gateway, m, accounts) =>
-      gatewayLib.getGatewayUtil(gateway).createMultiSigAccount(m, accounts),
+      gatewayLib.getGatewayUtil(gateway).createMultisigAccount(m, accounts),
     isValidAddress: (gateway, address) =>
       gatewayLib.getGatewayUtil(gateway).isValidAddress(address),
   }
