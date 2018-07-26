@@ -79,7 +79,7 @@ class BitcoinGateway {
   }
   _getUtil() {
     if (!this._util) {
-      this._uitl = new BitcoinUtil(this._netType)
+      this._util = new BitcoinUtil(this._netType)
     }
     return this._util
   }
@@ -228,7 +228,7 @@ class BitcoinGateway {
 
     const outPublicKeys = validators.map(v => v.outPublicKey).sort((l, r) => l - r)
     const unlockNumber = Math.floor(outPublicKeys.length / 2) + 1
-    const multiAccount = this._getUtil().createMultisigAddress(unlockNumber, outPublicKeys)
+    const multiAccount = this._getUtil().createMultisigAccount(unlockNumber, outPublicKeys)
     library.logger.debug('gateway validators cold account', multiAccount)
 
     const withdrawalLogKey = { gateway: GATEWAY, type: GatewayLogType.WITHDRAWAL }

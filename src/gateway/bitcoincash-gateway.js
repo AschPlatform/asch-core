@@ -23,7 +23,7 @@ class BitcoinCashGateway extends BitcoinGateway {
   }
   _getUtil() {
     if (!this._util) {
-      this._uitl = new BitcoinCashUtil(this._netType)
+      this._util = new BitcoinCashUtil(this._netType)
     }
     return this._util
   }
