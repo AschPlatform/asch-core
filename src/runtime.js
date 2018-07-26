@@ -5,7 +5,7 @@ const { EventEmitter } = require('events')
 const changeCase = require('change-case')
 const validate = require('validate.js')
 const extend = require('extend')
-const gatewayLib = require('asch-gateway')
+const gatewayLib = require('./gateway')
 const { AschCore } = require('asch-smartdb')
 const slots = require('./utils/slots')
 const amountHelper = require('./utils/amount')
@@ -266,25 +266,11 @@ module.exports = async function runtime(options) {
     if (sigCount < m) throw new Error('Signatures not enough')
   }
 
-  const bitcoinUtils = new gatewayLib.bitcoin.Utils('testnet')
   app.gateway = {
-    createMultisigAddress: (gateway, m, accounts, isRaw) => {
-      if (gateway === 'bitcoin') {
-        const ma = bitcoinUtils.createMultisigAddress(m, accounts)
-        if (!isRaw) {
-          ma.accountExtrsInfo.redeemScript = ma.accountExtrsInfo.redeemScript.toString('hex')
-          ma.accountExtrsInfo = JSON.stringify(ma.accountExtrsInfo)
-        }
-        return ma
-      }
-      throw new Error(`Unsupported gateway: ${gateway}`)
-    },
-    isValidAddress: (gateway, address) => {
-      if (gateway === 'bitcoin') {
-        return bitcoinUtils.isValidAddress(address)
-      }
-      throw new Error(`Unsupported gateway: ${gateway}`)
-    },
+    createMultisigAddress: (gateway, m, accounts) =>
+      gatewayLib.getGatewayUtil(gateway).createMultisigAccount(m, accounts),
+    isValidAddress: (gateway, address) =>
+      gatewayLib.getGatewayUtil(gateway).isValidAddress(address),
   }
 
   app.isCurrentBookkeeper = addr => modules.delegates.getBookkeeperAddresses().has(addr)

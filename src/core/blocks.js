@@ -772,6 +772,12 @@ Blocks.prototype.getCirculatingSupply = () => {
 
 Blocks.prototype.isCollectingVotes = () => priv.isCollectingVotes
 
+Blocks.prototype.isHealthy = () => {
+  const lastBlock = priv.lastBlock
+  const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
+  return slots.getNextSlot() - lastSlot < 3 && !modules.loader.syncing()
+}
+
 Blocks.prototype.onBind = (scope) => {
   modules = scope
 
