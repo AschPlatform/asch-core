@@ -126,13 +126,13 @@ class BitcoinGateway {
       },
     )
     if (!validators || !validators.length) {
-      library.logger.error('Validators not found')
+      library.logger.warn('Validators not found')
       return
     }
 
     const exists = await this._sdb.exists('GatewayAccount', { gateway: GATEWAY })
     if (!exists) {
-      library.logger.error('No gateway accounts')
+      library.logger.debug('No gateway accounts')
       return
     }
 
@@ -349,12 +349,12 @@ class BitcoinGateway {
       library.logger.error('Validators not found')
       return
     }
-    library.logger.debug('find gateway validators', validators)
+    library.logger.trace('find gateway validators', validators)
 
     const outPublicKeys = validators.map(v => v.outPublicKey).sort((l, r) => l - r)
     const unlockNumber = Math.floor(outPublicKeys.length / 2) + 1
     const multiAccount = this._getUtil().createMultisigAddress(unlockNumber, outPublicKeys)
-    library.logger.debug('gateway validators cold account', multiAccount)
+    library.logger.trace('gateway validators cold account', multiAccount)
 
     const onError = (err) => {
       library.logger.error('Send withdrawal error, will retry...', err)
