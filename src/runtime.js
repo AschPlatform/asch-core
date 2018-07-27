@@ -147,7 +147,7 @@ function adaptSmartDBLogger(config) {
     createLog: () => app.logger,
     format: false,
     getLevel: () => {
-      const appLogLevel = String(config.LogLevel).toLocaleLowerCase()
+      const appLogLevel = String(config.logLevel).toLocaleLowerCase()
       return levelMap[appLogLevel] || LogLevel.Info
     },
   }
