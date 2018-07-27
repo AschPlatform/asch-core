@@ -253,7 +253,8 @@ class BitcoinGateway {
     for (const w of withdrawals) {
       if (w.ready) continue
       try {
-        await utils.retryAsync(this._processWithdrawal.bind(this, w.tid), 3, 10 * 1000, onError)
+        const fn = this._processWithdrawal.bind(this, w.tid, multiAccount)
+        await utils.retryAsync(fn, 3, 10 * 1000, onError)
         library.logger.info('Gateway withdrawal processed', w.tid)
       } catch (e) {
         library.logger.warn('Failed to process gateway withdrawal', { error: e, transaction: w })
@@ -262,9 +263,12 @@ class BitcoinGateway {
     app.sdb.update('GatewayLog', { seq: withdrawals[withdrawals.length - 1].seq }, withdrawalLogKey)
     this._sdb.saveLocalChanges()
   }
-  async _processWithdrawal(wid) {
+  async _processWithdrawal(wid, multiAccount) {
     let contractParams = null
     const w = await this._sdb.load('GatewayWithdrawal', wid)
+    const account = {
+      privateKey: this._outSecret,
+    }
     if (!w.outTransaction) {
       const output = [{ address: w.recipientId, value: Number(w.amount) }]
       library.logger.debug('gateway spent tids', this._spentTids)
@@ -281,10 +285,7 @@ class BitcoinGateway {
       const inputAccountInfo = await this._getGatewayAccountByOutAddress(ot.input, multiAccount)
       library.logger.debug('input account info', inputAccountInfo)
 
-      const account = {
-        privateKey: this._outSecret,
-      }
-      const ots = this._signTransaction(ot, account, inputAccountInfo)
+      const ots = await this._signTransaction(ot, account, inputAccountInfo)
       library.logger.debug('sign withdrawl out transaction', ots)
 
       contractParams = {
@@ -296,7 +297,7 @@ class BitcoinGateway {
     } else {
       const ot = JSON.parse(w.outTransaction)
       const inputAccountInfo = await this._getGatewayAccountByOutAddress(ot.input, multiAccount)
-      const ots = this._signTransaction(ot, account, inputAccountInfo)
+      const ots = await this._signTransaction(ot, account, inputAccountInfo)
       contractParams = {
         type: 405,
         secret: global.Config.gateway.secret,
@@ -374,7 +375,7 @@ class BitcoinGateway {
         ots.push(JSON.parse(preps[i].signature))
       }
       try {
-        const fn = this.sendWithdrawal.bind(this, ot, ots)
+        const fn = this._sendWithdrawal.bind(this, ot, ots, multiAccount)
         const tid = await utils.retryAsync(fn, 3, 10 * 1000, onError)
         library.logger.info('Send withdrawal transaction to out chain success', tid)
         const submitOidParams = {
@@ -391,7 +392,7 @@ class BitcoinGateway {
       this._sdb.saveLocalChanges()
     }
   }
-  async _sendWithdrawal(outTransaction, outTransactionSignatures) {
+  async _sendWithdrawal(outTransaction, outTransactionSignatures, multiAccount) {
     const ot = outTransaction
     const ots = outTransactionSignatures
     const inputAccountInfo = await this._getGatewayAccountByOutAddress(ot.input, multiAccount)

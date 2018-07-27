@@ -28,21 +28,14 @@ class BitcoinCashGateway extends BitcoinGateway {
     return this._util
   }
   async _signTransaction(outTransaction, account, inputAccountInfo) {
-    const utxo = await this._getUTXOByTransaction(outTransaction)
+    console.log('signTransaction-----------', outTransaction, account, inputAccountInfo)
+    const utxos = await this._getClient().getUTXOsByTransaction(outTransaction.txhex)
     return this._getUtil().signTransactionWithUTXO(
       outTransaction,
       account,
       inputAccountInfo,
-      utxo,
+      utxos,
     )
-  }
-  _getUTXOByTransaction(tx) {
-    return new Promise((resolve, reject) => {
-      this._getClient().getUTXOByTransaction(tx, (err, utxo) => {
-        if (err) reject(err)
-        else resolve(utxo)
-      })
-    })
   }
 }
 
