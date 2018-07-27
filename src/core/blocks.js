@@ -146,7 +146,6 @@ Blocks.prototype.getBlock = (filter, cb) => {
 }
 
 Blocks.prototype.setLastBlock = (block) => {
-  app.round = self.getRound(block.height + 1)
   priv.lastBlock = block
   if (global.Config.netVersion === 'mainnet') {
     global.featureSwitch.enableLongId = priv.lastBlock.height >= 1700000
@@ -301,6 +300,7 @@ Blocks.prototype.processBlock = async (b, options) => {
 
   let block = b
   app.sdb.beginBlock(block)
+
   if (!block.transactions) block.transactions = []
   if (!options.local) {
     try {
@@ -391,9 +391,10 @@ Blocks.prototype.saveBlockTransactions = (block) => {
 //   }
 // }
 
-Blocks.prototype.getRound = (height) => {
-  const round = modules.round.calc(height)
-  return app.sdb.createOrLoad('Round', { fees: 0, rewards: 0, round }).entity
+Blocks.prototype.increaseRoundData = (modifier) => {
+  const roundNumber = modules.round.calc(priv.lastBlock.height)
+  app.sdb.createOrLoad('Round', { fees: 0, rewards: 0, round: roundNumber })
+  return app.sdb.increase('Round', modifier, { round: roundNumber })
 }
 
 Blocks.prototype.applyRound = async (block) => {
@@ -411,14 +412,11 @@ Blocks.prototype.applyRound = async (block) => {
       transFee += t.fee
     }
   }
-  const roundNumber = app.round.round
-  const { fees, rewards } = app.sdb.increase(
-    'Round',
-    { fees: transFee, rewards: block.reward },
-    { round: roundNumber },
-  )
+
+  const { fees, rewards } = self.increaseRoundData({ fees: transFee, rewards: block.reward })
 
   if (block.height % 101 !== 0) return
+  const roundNumber = modules.round.calc(priv.lastBlock.height)
   app.logger.debug(`----------------------on round ${roundNumber} end-----------------------`)
 
   const delegates = await PIFY(modules.delegates.generateDelegateList)(block.height)

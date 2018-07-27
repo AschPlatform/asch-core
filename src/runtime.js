@@ -223,13 +223,7 @@ module.exports = async function runtime(options) {
   }
 
   app.addRoundFee = (fee) => {
-    // app.round.fees += fee
-    const roundNumber = app.round.round
-    app.sdb.increase(
-      'Round',
-      { fees: fee },
-      { round: roundNumber },
-    )
+    modules.blocks.increaseRoundData({ fees: fee })
   }
 
   app.getRealTime = epochTime => slots.getRealTime(epochTime)
