@@ -69,7 +69,7 @@ function Transactions(cb, scope) {
   genesisblock = library.genesisblock
   self = this
   self.pool = new TransactionPool()
-  self.processedTrsCache = new LimitCache()
+  self.failedTrsCache = new LimitCache()
   priv.attachApi()
 
   setImmediate(cb, null, self)
@@ -143,8 +143,10 @@ Transactions.prototype.hasUnconfirmed = id => self.pool.has(id)
 
 Transactions.prototype.clearUnconfirmed = () => self.pool.clear()
 
-Transactions.prototype.getUnconfirmedTransactions = (_, cb) => setImmediate(cb, null,
-  { transactions: self.getUnconfirmedTransactionList() })
+Transactions.prototype.getUnconfirmedTransactions = (_, cb) => setImmediate(
+  cb, null,
+  { transactions: self.getUnconfirmedTransactionList() },
+)
 
 Transactions.prototype.getTransactions = (req, cb) => {
   const limit = Number(req.query.limit) || 100
@@ -203,6 +205,12 @@ Transactions.prototype.processUnconfirmedTransactions = (transactions, cb) => {
   })()
 }
 
+Transactions.prototype.processUnconfirmedTransactionsAsync = async (transactions) => {
+  for (const transaction of transactions) {
+    await self.processUnconfirmedTransactionAsync(transaction)
+  }
+}
+
 Transactions.prototype.processUnconfirmedTransaction = (transaction, cb) => {
   (async () => {
     try {
@@ -224,7 +232,7 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
       throw new Error('Block consensus in processing')
     }
 
-    if (self.processedTrsCache.has(transaction.id)) {
+    if (self.failedTrsCache.has(transaction.id)) {
       throw new Error('Transaction already processed')
     }
     if (self.pool.has(transaction.id)) {
@@ -238,9 +246,8 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
     self.pool.add(transaction)
     return transaction
   } catch (e) {
+    self.failedTrsCache.set(transaction.id, true)
     throw e
-  } finally {
-    self.processedTrsCache.set(transaction.id, true)
   }
 }
 

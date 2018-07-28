@@ -626,7 +626,8 @@ Blocks.prototype.onReceiveBlock = (block, votes) => {
             pendingTrsMap.delete(t.id)
           }
           try {
-            await modules.transactions.applyTransactionsAsync([...pendingTrsMap.values()])
+            const redoTransactions = [...pendingTrsMap.values()]
+            await modules.transactions.processUnconfirmedTransactionsAsync(redoTransactions)
           } catch (e) {
             library.logger.error('Failed to redo unconfirmed transactions', e)
           }
