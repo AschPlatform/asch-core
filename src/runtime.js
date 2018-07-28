@@ -66,9 +66,7 @@ async function loadModels(dir) {
     const schema = require(fullpath)
     schemas.push(new AschCore.ModelSchema(schema, modelName))
   })
-  app.sdb.lock = (name) => {
-    app.sdb.lockInCurrentBlock(name)
-  }
+
   await app.sdb.init(schemas)
 }
 
@@ -155,7 +153,6 @@ function adaptSmartDBLogger(config) {
 
 module.exports = async function runtime(options) {
   global.app = {
-    db: null,
     sdb: null,
     balances: null,
     model: {},
