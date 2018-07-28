@@ -138,9 +138,9 @@ Transaction.prototype.verifyNormalSignature = (trs, requestor, bytes) => {
 }
 
 Transaction.prototype.verifyGroupSignature = async (trs, sender, bytes) => {
-  const group = await app.sdb.findOne('Group', { name: sender.name })
+  const group = await app.sdb.findOne('Group', { condition: { name: sender.name } })
   if (!group) return 'Group not found'
-  const groupMembers = await app.sdb.findAll('GroupMember', { name: sender.name })
+  const groupMembers = await app.sdb.findAll('GroupMember', { condition: { name: sender.name } })
   if (!groupMembers) return 'Group members not found'
   const memberMap = new Map()
   for (const item of groupMembers) {
