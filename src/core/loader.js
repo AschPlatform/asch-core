@@ -93,6 +93,7 @@ priv.findUpdate = (lastBlock, peer, cb) => {
 
     return (async () => {
       try {
+        modules.transactions.clearUnconfirmed()
         if (toRemove > 0) {
           await app.sdb.rollbackBlock(commonBlock.height)
           modules.blocks.setLastBlock(app.sdb.lastBlock)
