@@ -748,7 +748,7 @@ Blocks.prototype.onReceiveVotes = (votes) => {
           modules.transactions.clearUnconfirmed()
           await self.processBlock(block, { votes: totalVotes, local: true, broadcast: true })
           library.logger.info(`Forged new block id: ${id}, height: ${height}, round: ${modules.round.calc(height)}, slot: ${slots.getSlotNumber(block.timestamp)}, reward: ${block.reward}`)
-        } catch (e) {
+        } catch (err) {
           library.logger.error(`Failed to process confirmed block height: ${height} id: ${id} error: ${err}`)
         }
         cb()
