@@ -1,5 +1,5 @@
 var Validator = require('./validator/validator.js');
-var extend = require('extend');
+var _ = require('lodash');
 var inherits = require('util').inherits;
 
 module.exports = RequestSanitizer;
@@ -11,9 +11,9 @@ function RequestSanitizer(options) {
 inherits(RequestSanitizer, Validator);
 
 RequestSanitizer.prototype.rules = {};
-extend(RequestSanitizer, Validator);
+_.assign(RequestSanitizer, Validator);
 
-RequestSanitizer.options = extend({
+RequestSanitizer.options = _.assign({
     reporter : SanitizeReporter
 }, Validator.options);
 
@@ -264,7 +264,7 @@ RequestSanitizer.addRule("minByteLength", {
  * @returns {Function} Express middleware
  */
 RequestSanitizer.express = function(options) {
-    options = extend({}, RequestSanitizer.options, options);
+    options = _.assign({}, RequestSanitizer.options, options);
 
 
     return function(req, res, next) {
@@ -310,7 +310,7 @@ var rules = RequestSanitizer.prototype.rules;
     RequestSanitizer[name] = function filter(value, extra) {
         var rules = {};
         if (typeof extra === "object") {
-            extend(rules, extra);
+            _.assign(rules, extra);
         } else if (typeof extra !== 'undefined') {
             rules.empty = extra;
         }

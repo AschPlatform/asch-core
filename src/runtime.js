@@ -2,9 +2,8 @@ const fs = require('fs')
 const path = require('path')
 const util = require('util')
 const { EventEmitter } = require('events')
-const changeCase = require('change-case')
+const _ = require('lodash')
 const validate = require('validate.js')
-const extend = require('extend')
 const gatewayLib = require('./gateway')
 const { AschCore } = require('asch-smartdb')
 const slots = require('./utils/slots')
@@ -61,7 +60,7 @@ async function loadModels(dir) {
   modelFiles.forEach((modelFile) => {
     app.logger.info('loading model', modelFile)
     const basename = path.basename(modelFile, '.js')
-    const modelName = changeCase.pascalCase(basename)
+    const modelName = _.chain(basename).camelCase().upperFirst().value()
     const fullpath = path.resolve(dir, modelFile)
     const schema = require(fullpath)
     schemas.push(new AschCore.ModelSchema(schema, modelName))
@@ -111,7 +110,7 @@ async function loadInterfaces(dir, routes) {
             const result = await h.handler(req)
             let response = { success: true }
             if (util.isObject(result) && !Array.isArray(result)) {
-              response = extend(response, result)
+              response = _.assign(response, result)
             } else if (!util.isNullOrUndefined(result)) {
               response.data = result
             }

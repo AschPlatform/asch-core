@@ -1,7 +1,7 @@
 const async = require('async')
 const fs = require('fs')
 const path = require('path')
-const extend = require('extend')
+const _ = require('lodash')
 const Sandbox = require('asch-sandbox')
 const rmdir = require('rimraf')
 const Router = require('../utils/router.js')
@@ -446,7 +446,7 @@ shared.getChain = (req, cb) => (async () => {
   try {
     let chain = await priv.getChainByName(req.chain)
     if (!chain) return cb('Not found')
-    chain = extend({}, chain)
+    chain = _.clone(chain) // shadow copy
     const delegates = await app.sdb.findAll('ChainDelegate', { condition: { chain: req.chain } })
     if (delegates && delegates.length) {
       chain.delegates = delegates.map(d => d.delegate)

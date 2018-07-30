@@ -2,7 +2,7 @@ const path = require('path')
 const ip = require('ip')
 const crypto = require('crypto')
 const kadence = require('@kadenceproject/kadence')
-const { knuthShuffle } = require('knuth-shuffle')
+const _ = require('lodash')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const utils = require('../utils')
@@ -148,7 +148,7 @@ Peer.prototype.request = (method, params, contact, cb) => {
 
 Peer.prototype.randomRequest = (method, params, cb) => {
   const node = priv.mainNode
-  const randomContact = knuthShuffle([...node.router.getClosestContactsToKey(
+  const randomContact = _.shuffle([...node.router.getClosestContactsToKey(
     node.identity.toString('hex'),
     node.router.size,
   ).entries()]).shift()

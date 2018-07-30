@@ -1,4 +1,4 @@
-const extend = require('extend')
+const _ = require('lodash')
 const express = require('express')
 
 function map(root, config) {
@@ -17,7 +17,7 @@ function map(root, config) {
         if (err) {
           return res.json({ success: false, error: err })
         }
-        return res.json(extend({}, { success: true }, response))
+        return res.json(_.assign({ success: true }, response))
       })
     })
   })

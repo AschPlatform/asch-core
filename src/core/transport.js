@@ -1,4 +1,4 @@
-const extend = require('extend')
+const _ = require('lodash')
 const Router = require('../utils/router.js')
 const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
@@ -235,7 +235,7 @@ Transport.prototype.onPeerReady = () => {
           library.logger.error('failed to process chain request', err)
           return res.send({ success: false, error: err })
         }
-        return res.send(extend({}, { success: true }, ret))
+        return res.send(_.assign({ success: true }, ret))
       },
     )
   })
