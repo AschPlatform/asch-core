@@ -89,7 +89,7 @@ priv.openAccount2 = (publicKey, cb) => {
 }
 
 Accounts.prototype.generateAddressByPublicKey = (publicKey) => {
-  addressHelper.generateNormalAddress(publicKey)
+  return addressHelper.generateNormalAddress(publicKey)
 }
 
 Accounts.prototype.generateAddressByPublicKey2 = (publicKey) => {
