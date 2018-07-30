@@ -605,6 +605,8 @@ shared.addTransactionUnsigned = (req, cb) => {
       type: { type: 'integer', min: 1 },
       args: { type: 'array' },
       message: { type: 'string', maxLength: 50 },
+      senderId: { type: 'string', maxLength: 50 },
+      mode: { type: 'integer', maxLength: 1 },
     },
     required: ['secret', 'fee', 'type'],
   })
@@ -631,6 +633,7 @@ shared.addTransactionUnsigned = (req, cb) => {
           message: query.message || null,
           secondKeyPair,
           keypair,
+          mode,
         })
         await self.processUnconfirmedTransactionAsync(trs)
         library.bus.message('unconfirmedTransaction', trs)
