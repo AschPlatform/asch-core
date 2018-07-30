@@ -9,6 +9,7 @@ const Router = require('../utils/router.js')
 const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const addressHelper = require('../utils/address.js')
+const transactionMode = require('../utils/transaction-mode.js')
 
 let genesisblock = null
 let modules
@@ -408,7 +409,7 @@ Blocks.prototype.applyRound = async (block) => {
 
   let transFee = 0
   for (const t of block.transactions) {
-    if (t.executed) {
+    if (transactionMode.isDirectMode(t.mode)) {
       transFee += t.fee
     }
   }

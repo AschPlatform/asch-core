@@ -5,6 +5,7 @@ const constants = require('../utils/constants.js')
 const slots = require('../utils/slots.js')
 const addressHelper = require('../utils/address.js')
 const feeCalculators = require('../utils/calculate-fee.js')
+const transactionMode = require('../utils/transaction-mode.js')
 
 let self
 // Constructor
@@ -31,13 +32,23 @@ Transaction.prototype.create = (data) => {
     message: data.message,
     args: data.args,
     fee: data.fee,
+    mode: data.mode,
   }
   const signerId = addressHelper.generateNormalAddress(trs.senderPublicKey)
-  if (trs.senderId) {
+  if (transactionMode.isDirectMode(trs.mode)) {
+    trs.senderId = signerId
+  } else if (transactionMode.isRequestMode(trs.mode)) {
+    if (!trs.senderId) throw new Error('No senderId was provided in request mode')
     trs.requestorId = signerId
   } else {
-    trs.senderId = signerId
+    throw new Error('Unexpected transaction mode')
   }
+
+  // if (trs.senderId) {
+  //   trs.requestorId = signerId
+  // } else {
+  //   trs.senderId = signerId
+  // }
   trs.signatures = [self.sign(data.keypair, trs)]
 
   if (data.secondKeypair) {
@@ -88,6 +99,9 @@ Transaction.prototype.getBytes = (trs, skipSignature, skipSecondSignature) => {
   bb.writeString(trs.senderId)
   if (trs.requestorId) {
     bb.writeString(trs.requestorId)
+  }
+  if (trs.mode) {
+    bb.writeInt(trs.mode)
   }
 
   if (trs.message) bb.writeString(trs.message)
@@ -290,29 +304,26 @@ Transaction.prototype.apply = async (context) => {
   }
 
   if (block.height !== 0) {
-    if (requestor && sender && requestor !== sender) {
+    if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
       const requestorFee = 20000000
       if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
       requestor.xas -= requestorFee
       app.addRoundFee(requestorFee)
-      trs.executed = 0
+      // trs.executed = 0
+      app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
       app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
-      return
+      return null
     }
-    if (sender) {
-      if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
-      sender.xas -= trs.fee
-      app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
-    } else {
-      throw new Error('Unexpected sender account')
-    }
+    if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
+    sender.xas -= trs.fee
+    app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
   }
 
   const error = await fn.apply(context, trs.args)
   if (error) {
     throw new Error(error)
   }
-  trs.executed = 1
+  // trs.executed = 1
 }
 
 Transaction.prototype.objectNormalize = (trs) => {

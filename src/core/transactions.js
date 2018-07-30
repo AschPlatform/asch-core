@@ -5,7 +5,7 @@ const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const LimitCache = require('../utils/limit-cache.js')
 const addressHelper = require('../utils/address.js')
-
+const transactionMode = require('../utils/transaction-mode.js')
 
 // let genesisblock = null
 // Private fields
@@ -265,6 +265,16 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     throw new Error('Missing sender address')
   }
 
+  const mode = transaction.mode
+  if (transactionMode.isRequestMode(mode)) {
+    if (!requestorId) throw new Error('No requestor provided')
+    if (requestorId === senderId) throw new Error('Sender should not be equal to requestor')
+  } else if (transactionMode.isDirectMode(mode)) {
+    if (requestorId) throw new Error('RequestId should not be provided')
+  } else {
+    throw new Error('Unexpected transaction mode')
+  }
+
   let requestor = null
   let sender = await app.sdb.load('Account', senderId)
   if (!sender) {
@@ -329,8 +339,8 @@ Transactions.prototype.toAPIV1Transactions = (transArray, block) => {
 function toV1TypeAndArgs(type, args) {
   let v1Type
 
-  const v1Args = { }
-  let result = { }
+  const v1Args = {}
+  let result = {}
   switch (type) {
     case 1: // transfer
       v1Type = 0
@@ -612,6 +622,8 @@ shared.addTransactionUnsigned = (req, cb) => {
       type: { type: 'integer', min: 1 },
       args: { type: 'array' },
       message: { type: 'string', maxLength: 50 },
+      senderId: { type: 'string', maxLength: 50 },
+      mode: { type: 'integer', min: 0, max: 1 },
     },
     required: ['secret', 'fee', 'type'],
   })
@@ -638,6 +650,7 @@ shared.addTransactionUnsigned = (req, cb) => {
           message: query.message || null,
           secondKeyPair,
           keypair,
+          mode: query.mode,
         })
         await self.processUnconfirmedTransactionAsync(trs)
         library.bus.message('unconfirmedTransaction', trs)
