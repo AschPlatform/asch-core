@@ -12,7 +12,7 @@ const ip = require('ip')
 const express = require('express')
 const compression = require('compression')
 const cors = require('cors')
-const changeCase = require('change-case')
+const _ = require('lodash')
 const bodyParser = require('body-parser')
 const methodOverride = require('method-override')
 const Sequence = require('./utils/sequence.js')
@@ -333,7 +333,7 @@ module.exports = function init(options, done) {
       class Bus extends EventEmitter {
         message(topic, ...restArgs) {
           modules.forEach((module) => {
-            const eventName = `on${changeCase.pascalCase(topic)}`
+            const eventName = `on${_.chain(topic).camelCase().upperFirst().value()}`
             if (typeof (module[eventName]) === 'function') {
               module[eventName].apply(module[eventName], [...restArgs])
             }

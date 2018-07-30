@@ -1,13 +1,13 @@
 const fs = require('fs')
 const protocolBuffers = require('protocol-buffers')
-const extend = require('extend')
+const _ = require('lodash')
 
 class Protobuf {
   constructor(schema) {
     this.schema = schema
   }
   encodeBlock(block) {
-    const obj = extend(true, {}, block)
+    const obj = _.cloneDeep(block)
     obj.payloadHash = Buffer.from(obj.payloadHash, 'hex')
     obj.generatorPublicKey = Buffer.from(obj.generatorPublicKey, 'hex')
     if (obj.blockSignature) {
@@ -33,7 +33,7 @@ class Protobuf {
   }
 
   encodeBlockPropose(propose) {
-    const obj = extend(true, {}, propose)
+    const obj = _.cloneDeep(propose)
     obj.generatorPublicKey = Buffer.from(obj.generatorPublicKey, 'hex')
     obj.hash = Buffer.from(obj.hash, 'hex')
     obj.signature = Buffer.from(obj.signature, 'hex')
@@ -68,7 +68,7 @@ class Protobuf {
   }
 
   encodeTransaction(trs) {
-    const obj = extend(true, {}, trs)
+    const obj = _.cloneDeep(trs)
     // this.transactionStringToBytes(obj)
     return this.schema.Transaction.encode(obj)
   }
