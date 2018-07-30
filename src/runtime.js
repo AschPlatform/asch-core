@@ -13,7 +13,7 @@ const Router = require('./utils/router.js')
 const BalanceManager = require('./smartdb/balance-manager')
 const AutoIncrement = require('./smartdb/auto-increment')
 const AccountRole = require('./utils/account-role')
-const TransacitonMode = require('../utils/transaction-mode.js')
+const transacitonMode = require('./utils/transaction-mode.js')
 
 const PIFY = util.promisify
 
@@ -271,12 +271,13 @@ module.exports = async function runtime(options) {
   app.isCurrentBookkeeper = addr => modules.delegates.getBookkeeperAddresses().has(addr)
 
   app.executeContract = async (context) => {
+    context.activating = 1
     const error = await library.base.transaction.apply(context)
     if (!error) {
       const trs = await app.sdb.get('Transaction', { id: context.trs.id })
-      if (TransacitonMode.isRequestMode(context.trs.mode)) {
-        app.sdb.update('TransactionState', { executed: 1 }, { tid: context.trs.id })
-      }
+      if (!transacitonMode.isRequestMode(context.trs.mode)) throw new Error('Transaction mode is not request mode')
+
+      app.sdb.update('TransactionStatu', { executed: 1 }, { tid: context.trs.id })
       app.addRoundFee(trs.fee)
     }
     return error

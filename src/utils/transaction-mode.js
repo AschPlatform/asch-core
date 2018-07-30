@@ -1,17 +1,9 @@
 function isDirectMode(mode) {
-  let result = false
-  if (mode === undefined || mode === null || mode === 0) {
-    result = true
-  }
-  return result
+  return (mode === undefined || mode === null || mode === 0)
 }
 
 function isRequestMode(mode) {
-  let result = false
-  if (mode === 1) {
-    result = true
-  }
-  return result
+  return mode === 1
 }
 
 module.exports = {

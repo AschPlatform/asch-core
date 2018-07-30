@@ -409,8 +409,7 @@ Blocks.prototype.applyRound = async (block) => {
 
   let transFee = 0
   for (const t of block.transactions) {
-    // if (t.mode === TransactionMode.DIRECT) {
-    if (transactionMode.isDirectMode(t.mode))
+    if (transactionMode.isDirectMode(t.mode)) {
       transFee += t.fee
     }
   }

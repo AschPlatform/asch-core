@@ -304,32 +304,19 @@ Transaction.prototype.apply = async (context) => {
   }
 
   if (block.height !== 0) {
-    // if (trs.mode === transactionMode.REQUEST) {
-    if (transactionMode.isRequestMode(trs.mode)) {
-      if (!(trs.requestorId && trs.senderId)) throw new Error('Sender and requestor should not be empty')
-      if (!trs.requestorId) throw new Error('No requestor provided')
-      if (trs.requestorId === trs.senderId) throw new Error('Sender should not be equal to requestor')
-      if (trs.requestorId !== addressHelper.generateNormalAddress(trs.senderPublicKey)) throw new Error('Requestor is not consistent with sender publicKey in request mode')
-      if (!addressHelper.isGroupAddress(trs.requestorId)) throw new Error('Requestor address is not valid')
-
+    if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
       const requestorFee = 20000000
       if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
       requestor.xas -= requestorFee
       app.addRoundFee(requestorFee)
       // trs.executed = 0
-      app.sdb.create('TransactionState', { tid: trs.id, executed: 0 })
+      app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
       app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
-    // } else if (trs.mode === transactionMode.DIRECT) {
-    } else if (transactionMode.isDirectMode(trs.mode)) {
-      if (trs.requestorId) throw new Error('RequestId should not be provided')
-      if (!trs.senderId) throw new Error('Sender should not be empty')
-      if (trs.senderId !== addressHelper.generateNormalAddress(trs.senderPublicKey)) throw new Error('Sender is not consistent with sender publicKey')
-      if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
-      sender.xas -= trs.fee
-      app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
-    } else {
-      throw new Error('Unexpected transaction mode')
+      return null
     }
+    if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
+    sender.xas -= trs.fee
+    app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
   }
 
   const error = await fn.apply(context, trs.args)
