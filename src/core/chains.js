@@ -225,6 +225,8 @@ priv.chainRoutes = (chain, cb) => {
   }
   library.network.app.use(`/api/chains/${chain.name}/`, priv.routes[chain.name])
   library.network.app.use(`/api/chains/${chain.tid}/`, priv.routes[chain.name])
+  library.network.app.use(`/api/dapps/${chain.name}/`, priv.routes[chain.name])
+  library.network.app.use(`/api/dapps/${chain.tid}/`, priv.routes[chain.name])
   library.network.app.use((err, req, res, next) => {
     if (!err) return next()
     library.logger.error(req.url, err.toString())
