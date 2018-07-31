@@ -81,7 +81,8 @@ async function loadContracts(dir) {
   contractFiles.forEach((contractFile) => {
     app.logger.info('loading contract', contractFile)
     const basename = path.basename(contractFile, '.js')
-    const contractName = changeCase.snakeCase(basename)
+    // const contractName = changeCase.snakeCase(basename)
+    const contractName = _.chain(basename).camelCase().upperFirst().value()
     const fullpath = path.resolve(dir, contractFile)
     const contract = require(fullpath)
     if (contractFile !== 'index.js') {
