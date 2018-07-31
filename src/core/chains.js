@@ -197,10 +197,11 @@ priv.chainRoutes = (chain, cb) => {
   const routes = Sandbox.routes
 
   priv.routes[chain.name] = new Router()
+  priv.routes[chain.tid] = new Router()
 
   routes.forEach((router) => {
     if (router.method === 'get' || router.method === 'post' || router.method === 'put') {
-      priv.routes[chain.name][router.method](router.path, (req, res) => {
+      const handler = (req, res) => {
         const reqParams = {
           query: (router.method === 'get') ? req.query : req.body,
           params: req.params,
@@ -216,7 +217,9 @@ priv.chainRoutes = (chain, cb) => {
           body.success = true
           return res.json(body)
         })
-      })
+      }
+      priv.routes[chain.name][router.method](router.path, handler)
+      priv.routes[chain.tid][router.method](router.path, handler)
     }
   })
   if (!priv.defaultRouteId) {
@@ -440,8 +443,8 @@ Chains.prototype.onNewBlock = (block) => {
 }
 
 priv.getChainByName = async (name) => {
-  const chains = app.sdb.get('Chain', { name })
-  return chains !== undefined ? chains[0] : undefined
+  const chain = app.sdb.get('Chain', { name })
+  return chain
 }
 
 shared.getChain = (req, cb) => (async () => {
@@ -504,7 +507,7 @@ shared.registerInterface = (options, cb) => {
   const chain = options.chain
   const method = options.body.method
   const uriPath = options.body.path
-  priv.routes[chain][method](uriPath, (req, res) => {
+  const handler = (req, res) => {
     const reqParams = {
       query: (method === 'get') ? req.query : req.body,
       params: req.params,
@@ -521,8 +524,14 @@ shared.registerInterface = (options, cb) => {
       body.success = true
       return res.json(body)
     })
+  }
+  priv.routes[chain][method](uriPath, handler)
+  priv.get(chain, (err, chainObj) => {
+    if (err) return cb(err)
+    priv.routes[chainObj.tid][method](uriPath, handler)
+    console.log('------registerInterface', chainObj, method, uriPath)
+    cb(null)
   })
-  cb(null)
 }
 
 module.exports = Chains
