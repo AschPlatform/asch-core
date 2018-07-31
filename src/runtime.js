@@ -3,6 +3,7 @@ const path = require('path')
 const util = require('util')
 const { EventEmitter } = require('events')
 const _ = require('lodash')
+const changeCase = require('change-case')
 const validate = require('validate.js')
 const gatewayLib = require('./gateway')
 const { AschCore } = require('asch-smartdb')
@@ -81,8 +82,7 @@ async function loadContracts(dir) {
   contractFiles.forEach((contractFile) => {
     app.logger.info('loading contract', contractFile)
     const basename = path.basename(contractFile, '.js')
-    // const contractName = changeCase.snakeCase(basename)
-    const contractName = _.chain(basename).camelCase().upperFirst().value()
+    const contractName = changeCase.snakeCase(basename)
     const fullpath = path.resolve(dir, contractFile)
     const contract = require(fullpath)
     if (contractFile !== 'index.js') {
