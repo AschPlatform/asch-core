@@ -392,8 +392,7 @@ Blocks.prototype.saveBlockTransactions = (block) => {
 //   }
 // }
 
-Blocks.prototype.increaseRoundData = (modifier) => {
-  const roundNumber = modules.round.calc(priv.lastBlock.height)
+Blocks.prototype.increaseRoundData = (modifier, roundNumber) => {
   app.sdb.createOrLoad('Round', { fees: 0, rewards: 0, round: roundNumber })
   return app.sdb.increase('Round', modifier, { round: roundNumber })
 }
@@ -414,10 +413,11 @@ Blocks.prototype.applyRound = async (block) => {
     }
   }
 
+  const roundNumber = modules.round.calc(block.height)
   const { fees, rewards } = self.increaseRoundData({ fees: transFee, rewards: block.reward })
 
   if (block.height % 101 !== 0) return
-  const roundNumber = modules.round.calc(priv.lastBlock.height)
+
   app.logger.debug(`----------------------on round ${roundNumber} end-----------------------`)
 
   const delegates = await PIFY(modules.delegates.generateDelegateList)(block.height)
