@@ -416,13 +416,10 @@ Transactions.prototype.toAPIV1Transaction = (trans, block) => {
     signSignature: trans.signSignature,
     message: trans.message,
     fee: trans.fee,
-
-
-    blockId: block.id,
     recipientId: '',
     amount: 0,
     asset: {},
-    confirmations: block.confirmations,
+    confirmations: modules.blocks.getLastBlock().height - trans.height,
 
     type: -1,
     signature: signArray.length === 1 ? signArray[0] : undefined,
