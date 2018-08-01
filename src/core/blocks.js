@@ -414,7 +414,7 @@ Blocks.prototype.applyRound = async (block) => {
   }
 
   const roundNumber = modules.round.calc(block.height)
-  const { fees, rewards } = self.increaseRoundData({ fees: transFee, rewards: block.reward })
+  const { fees, rewards } = self.increaseRoundData({ fees: transFee, rewards: block.reward }, roundNumber)
 
   if (block.height % 101 !== 0) return
 
