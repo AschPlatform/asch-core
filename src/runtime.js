@@ -220,8 +220,8 @@ module.exports = async function runtime(options) {
     app.defaultFee.min = min
   }
 
-  app.addRoundFee = (fee) => {
-    modules.blocks.increaseRoundData({ fees: fee })
+  app.addRoundFee = (fee, roundNumber) => {
+    modules.blocks.increaseRoundData({ fees: fee }, roundNumber)
   }
 
   app.getRealTime = epochTime => slots.getRealTime(epochTime)

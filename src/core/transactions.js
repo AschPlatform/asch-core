@@ -310,7 +310,7 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
 
   if (transaction.senderPublicKey) {
     const signerId = transaction.requestorId || transaction.senderId
-    if (addressHelper.generateNormalAddress(senderPublicKey) !== signerId) {
+    if (addressHelper.generateNormalAddress(transaction.senderPublicKey) !== signerId) {
       throw new Error('Invalid senderPublicKey')
     }
   }

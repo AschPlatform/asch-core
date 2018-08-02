@@ -144,6 +144,7 @@ Transaction.prototype.verifyNormalSignature = (trs, requestor, bytes) => {
     return 'Invalid signature'
   }
   if (requestor.secondPublicKey) {
+    if (!trs.secondSignature) return 'Second signature not provided'
     if (!self.verifyBytes(bytes, requestor.secondPublicKey, trs.secondSignature)) {
       return 'Invalid second signature'
     }
@@ -227,16 +228,18 @@ Transaction.prototype.verify = async (context) => {
 
   try {
     const bytes = self.getBytes(trs, true, true)
-    let error = self.verifyNormalSignature(trs, requestor, bytes)
-    if (error) return error
+    if (trs.senderPublicKey) {
+      const error = self.verifyNormalSignature(trs, requestor, bytes)
+      if (error) return error
+    }
     if (!trs.senderPublicKey && trs.signatures && trs.signatures.length > 1) {
       const ADDRESS_TYPE = app.util.address.TYPE
       const addrType = app.util.address.getType(trs.senderId)
       if (addrType === ADDRESS_TYPE.CHAIN) {
-        error = await self.verifyChainSignature(trs, sender, bytes)
+        const error = await self.verifyChainSignature(trs, sender, bytes)
         if (error) return error
       } else if (addrType === ADDRESS_TYPE.GROUP) {
-        error = await self.verifyGroupSignature(trs, sender, bytes)
+        const error = await self.verifyGroupSignature(trs, sender, bytes)
         if (error) return error
       } else {
         return 'Invalid account type'
@@ -299,7 +302,7 @@ Transaction.prototype.apply = async (context) => {
       const requestorFee = 20000000
       if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
       requestor.xas -= requestorFee
-      app.addRoundFee(requestorFee)
+      app.addRoundFee(requestorFee, modules.round.calc(block.height))
       // trs.executed = 0
       app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
       app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
