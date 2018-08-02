@@ -277,7 +277,10 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     if (!transaction.senderPublicKey) throw new Error('Requestor public key not provided')
   } else if (transactionMode.isDirectMode(mode)) {
     if (requestorId) throw new Error('RequestId should not be provided')
-    if (app.util.address.isNormalAddress(senderId) && !transaction.senderPublicKey) {
+    // HARDCODE_HOT_FIX_BLOCK_6119128
+    if (height > 6119128 &&
+        app.util.address.isNormalAddress(senderId) &&
+        !transaction.senderPublicKey) {
       throw new Error('Sender public key not provided')
     }
   } else {

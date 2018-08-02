@@ -243,8 +243,8 @@ Blocks.prototype.verifyBlock = async (block, options) => {
     throw new Error('Invalid block reward')
   }
 
-  // HARDCODE_HOTFIX
-  if (block.height < 6119128) {
+  // HARDCODE_HOT_FIX_BLOCK_6119128
+  if (block.height > 6119128) {
     if (payloadHash.digest().toString('hex') !== block.payloadHash) {
       throw new Error(`Invalid payload hash: ${block.id}`)
     }
