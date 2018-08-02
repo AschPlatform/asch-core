@@ -127,10 +127,10 @@ Transaction.prototype.getBytes = (trs, skipSignature, skipSecondSignature) => {
     }
   }
 
-  if (!skipSecondSignature && trs.signSignature) {
-    const signSignatureBuffer = Buffer.from(trs.signSignature, 'hex')
-    for (let i = 0; i < signSignatureBuffer.length; i++) {
-      bb.writeByte(signSignatureBuffer[i])
+  if (!skipSecondSignature && trs.secondSignature) {
+    const secondSignatureBuffer = Buffer.from(trs.secondSignature, 'hex')
+    for (let i = 0; i < secondSignatureBuffer.length; i++) {
+      bb.writeByte(secondSignatureBuffer[i])
     }
   }
 
@@ -224,11 +224,6 @@ Transaction.prototype.verify = async (context) => {
   if (!feeCalculator) return 'Fee calculator not found'
   const minFee = 100000000 * feeCalculator(trs)
   if (trs.fee < minFee) return 'Fee not enough'
-
-  const id = self.getId(trs)
-  if (trs.id !== id) {
-    return 'Invalid transaction id'
-  }
 
   try {
     const bytes = self.getBytes(trs, true, true)

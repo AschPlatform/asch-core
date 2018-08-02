@@ -226,6 +226,11 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
   try {
     if (!transaction.id) {
       transaction.id = library.base.transaction.getId(transaction)
+    } else {
+      const id = library.base.transaction.getId(transaction)
+      if (transaction.id !== id) {
+        return 'Invalid transaction id'
+      }
     }
 
     if (modules.blocks.isCollectingVotes()) {
@@ -269,8 +274,12 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
   if (transactionMode.isRequestMode(mode)) {
     if (!requestorId) throw new Error('No requestor provided')
     if (requestorId === senderId) throw new Error('Sender should not be equal to requestor')
+    if (!transaction.senderPublicKey) throw new Error('Requestor public key not provided')
   } else if (transactionMode.isDirectMode(mode)) {
     if (requestorId) throw new Error('RequestId should not be provided')
+    if (app.util.address.isNormalAddress(senderId) && !transaction.senderPublicKey) {
+      throw new Error('Sender public key not provided')
+    }
   } else {
     throw new Error('Unexpected transaction mode')
   }
@@ -299,19 +308,11 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     requestor = sender
   }
 
-  if (!transaction.senderPublicKey) {
-    if (transactionMode.isRequestMode(mode)) {
-      transaction.senderPublicKey = sender.publicKey
-    } else {
-      transaction.senderPublicKey = requestor.publicKey
+  if (transaction.senderPublicKey) {
+    const signerId = transaction.requestorId || transaction.senderId
+    if (addressHelper.generateNormalAddress(senderPublicKey) !== signerId) {
+      throw new Error('Invalid senderPublicKey')
     }
-  }
-
-  const senderPublicKey = transaction.senderPublicKey
-  if (!senderPublicKey) throw new Error('Senderpublickey should be provided')
-  const signerId = transaction.requestorId || transaction.senderId
-  if (addressHelper.generateNormalAddress(senderPublicKey) !== signerId) {
-    throw new Error('Invalid senderPublicKey')
   }
 
   const context = {
