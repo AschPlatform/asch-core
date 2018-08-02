@@ -299,10 +299,14 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     requestor = sender
   }
 
-
   if (!transaction.senderPublicKey) {
-    transaction.senderPublicKey = sender.publicKey
+    if (transactionMode.isRequestMode(mode)) {
+      transaction.senderPublicKey = sender.publicKey
+    } else {
+      transaction.senderPublicKey = requestor.publicKey
+    }
   }
+
   const senderPublicKey = transaction.senderPublicKey
   if (!senderPublicKey) throw new Error('Senderpublickey should be provided')
   const signerId = transaction.requestorId || transaction.senderId

@@ -220,12 +220,10 @@ Transaction.prototype.verify = async (context) => {
     return 'Invalid function'
   }
 
-  if (sender === requestor || !requestor) {
-    const feeCalculator = feeCalculators[trs.type]
-    if (!feeCalculator) return 'Fee calculator not found'
-    const minFee = 100000000 * feeCalculator(trs)
-    if (trs.fee < minFee) return 'Fee not enough'
-  }
+  const feeCalculator = feeCalculators[trs.type]
+  if (!feeCalculator) return 'Fee calculator not found'
+  const minFee = 100000000 * feeCalculator(trs)
+  if (trs.fee < minFee) return 'Fee not enough'
 
   const id = self.getId(trs)
   if (trs.id !== id) {
@@ -310,7 +308,7 @@ Transaction.prototype.apply = async (context) => {
       // trs.executed = 0
       app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
       app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
-      return null
+      return
     }
     if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
     sender.xas -= trs.fee
