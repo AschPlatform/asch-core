@@ -44,51 +44,6 @@ priv.attachApi = () => {
     'get /new': 'newAccount',
   })
 
-  // if (process.env.DEBUG && process.env.DEBUG.toUpperCase() === 'TRUE') {
-  //   router.get('/getAllAccounts', (req, res) => res.json({ success: true, accounts: priv.accounts }))
-  // }
-
-  // router.get('/top', (req, res, next) => {
-  //   req.sanitize(req.query, {
-  //     type: 'object',
-  //     properties: {
-  //       limit: {
-  //         type: 'integer',
-  //         minimum: 0,
-  //         maximum: 100,
-  //       },
-  //       offset: {
-  //         type: 'integer',
-  //         minimum: 0,
-  //       },
-  //     },
-  //   }, (err, report, query) => {
-  //     if (err) return next(err)
-  //     if (!report.isValid) return res.json({ success: false, error: report.issues })
-  //     if (!query.limit) {
-  //       query.limit = 100
-  //     }
-  //     return self.getAccounts({
-  //       sort: {
-  //         balance: -1,
-  //       },
-  //       offset: query.offset,
-  //       limit: query.limit,
-  //     }, (err2, raw) => {
-  //       if (err2) {
-  //         return res.json({ success: false, error: err2.toString() })
-  //       }
-  //       const accounts = raw.map(fullAccount => ({
-  //         address: fullAccount.address,
-  //         balance: fullAccount.balance,
-  //         publicKey: fullAccount.publicKey,
-  //       }))
-
-  //       return res.json({ success: true, accounts })
-  //     })
-  //   })
-  // })
-
   router.get('/count', (req, res) => (async () => {
     try {
       const count = await app.sdb.count('Account')
