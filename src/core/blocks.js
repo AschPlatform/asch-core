@@ -243,8 +243,10 @@ Blocks.prototype.verifyBlock = async (block, options) => {
     throw new Error('Invalid block reward')
   }
 
-  if (payloadHash.digest().toString('hex') !== block.payloadHash) {
-    throw new Error(`Invalid payload hash: ${block.id}`)
+  if (block.height !== 6116752) {
+    if (payloadHash.digest().toString('hex') !== block.payloadHash) {
+      throw new Error(`Invalid payload hash: ${block.id}`)
+    }
   }
 
   if (options.votes) {

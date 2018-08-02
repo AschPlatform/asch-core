@@ -234,18 +234,16 @@ Transaction.prototype.verify = async (context) => {
 
   try {
     const bytes = self.getBytes(trs, true, true)
-    if (trs.senderPublicKey) {
-      const error = self.verifyNormalSignature(trs, requestor, bytes)
-      if (error) return error
-    }
+    let error = self.verifyNormalSignature(trs, requestor, bytes)
+    if (error) return error
     if (!trs.senderPublicKey && trs.signatures && trs.signatures.length > 1) {
       const ADDRESS_TYPE = app.util.address.TYPE
       const addrType = app.util.address.getType(trs.senderId)
       if (addrType === ADDRESS_TYPE.CHAIN) {
-        const error = await self.verifyChainSignature(trs, sender, bytes)
+        error = await self.verifyChainSignature(trs, sender, bytes)
         if (error) return error
       } else if (addrType === ADDRESS_TYPE.GROUP) {
-        const error = await self.verifyGroupSignature(trs, sender, bytes)
+        error = await self.verifyGroupSignature(trs, sender, bytes)
         if (error) return error
       } else {
         return 'Invalid account type'

@@ -292,7 +292,7 @@ shared.generatePublickey = (req, cb) => {
       return cb(err[0].message)
     }
 
-    const kp = ed.MakeKeypair(crypto.createHash('sha256').update(secret, 'utf8').digest())
+    const kp = ed.MakeKeypair(crypto.createHash('sha256').update(body.secret, 'utf8').digest())
     const publicKey = kp.publicKey.toString('hex')
     return cb(null, { publicKey })
   })
