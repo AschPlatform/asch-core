@@ -26,11 +26,6 @@ priv.attachApi = () => {
   const router = new Router()
 
   router.use((req, res, next) => {
-    if (modules) return next()
-    return res.status(500).send({ success: false, error: 'Blockchain is loading' })
-  })
-
-  router.post('/transactions', (req, res) => {
     if (modules.loader.syncing()) {
       return res.status(500).send({
         success: false,
@@ -40,7 +35,11 @@ priv.attachApi = () => {
     const lastBlock = modules.blocks.getLastBlock()
     const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
     if (slots.getNextSlot() - lastSlot >= 12) {
-      library.logger.error('Blockchain is not ready', { getNextSlot: slots.getNextSlot(), lastSlot, lastBlockHeight: lastBlock.height })
+      library.logger.error('Blockchain is not ready', {
+        getNextSlot: slots.getNextSlot(),
+        lastSlot,
+        lastBlockHeight: lastBlock.height,
+      })
       return res.status(200).json({ success: false, error: 'Blockchain is not ready' })
     }
 
@@ -54,7 +53,33 @@ priv.attachApi = () => {
         received: req.headers.magic,
       })
     }
+    return next()
+  })
 
+  router.get('/blocks', (req, res) => {
+    const { query } = req
+    let blocksLimit = 200
+    if (query.limit) {
+      blocksLimit = Math.min(blocksLimit, Number(query.limit))
+    }
+    return (async () => {
+      const lastBlockId = query.lastBlockId
+      try {
+        const lastBlock = await app.sdb.getBlockById(lastBlockId)
+        if (!lastBlock) throw new Error(`Last block not found: ${lastBlockId}`)
+
+        const minHeight = lastBlock.height + 1
+        const maxHeight = (minHeight + blocksLimit) - 1
+        const blocks = await modules.blocks.getBlocks(minHeight, maxHeight, true)
+        return res.send({ blocks })
+      } catch (e) {
+        app.logger.error('Failed to get blocks or transactions', e)
+        return res.send({ blocks: [] })
+      }
+    })()
+  })
+
+  router.post('/transactions', (req, res) => {
     let transaction
     try {
       transaction = library.base.transaction.objectNormalize(req.body.transaction)
@@ -408,7 +433,7 @@ Transport.prototype.sendVotes = (votes, address) => {
   const contact = {
     hostname: parts[0],
     port: parts[1],
-    protocol: 'http:',
+    protocol: 'udp:',
   }
   const identity = modules.peer.getIdentity(contact)
   const target = [identity, contact]

@@ -13,7 +13,7 @@ let self
 const priv = {}
 const shared = {}
 
-priv.protocol = 'http:'
+priv.protocol = 'udp:'
 priv.mainNode = null
 
 // Constructor
@@ -59,7 +59,7 @@ priv.initNode = () => {
   const port = global.Config.peerPort
   const contact = { hostname, port, protocol }
   const identity = self.getIdentity(contact)
-  const transport = new kadence.HTTPTransport()
+  const transport = new kadence.UDPTransport()
   const storageDir = path.resolve(global.Config.dataDir, 'dht')
   const storage = new kadence.LevelKademliaStorage(storageDir)
   priv.mainNode = new kadence.KademliaNode({

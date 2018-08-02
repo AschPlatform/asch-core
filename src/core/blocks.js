@@ -1,6 +1,7 @@
 const assert = require('assert')
 const crypto = require('crypto')
 const async = require('async')
+const request = require('request')
 const PIFY = require('util').promisify
 const isArray = require('util').isArray
 const constants = require('../utils/constants.js')
@@ -471,6 +472,36 @@ Blocks.prototype.applyRound = async (block) => {
   }
 }
 
+Blocks.prototype.getBlocks = async (minHeight, maxHeight, withTransaction) => {
+  const blocks = await app.sdb.getBlocksByHeightRange(minHeight, maxHeight)
+
+  if (!blocks || !blocks.length) {
+    return []
+  }
+
+  maxHeight = blocks[blocks.length - 1].height
+  if (withTransaction) {
+    const transactions = await app.sdb.findAll('Transaction', {
+      condition: {
+        height: { $gte: minHeight, $lte: maxHeight },
+      },
+    })
+    const firstHeight = blocks[0].height
+    for (const t of transactions) {
+      const h = t.height
+      const b = blocks[h - firstHeight]
+      if (b) {
+        if (!b.transactions) {
+          b.transactions = []
+        }
+        b.transactions.push(t)
+      }
+    }
+  }
+
+  return blocks
+}
+
 Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
   let loaded = false
   let count = 0
@@ -480,20 +511,30 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
     () => !loaded && count < 30,
     (next) => {
       count++
-      const params = {
-        body: {
-          lastBlockId: lastCommonBlockId,
-          limit: 200,
+      const limit = 200
+      const contact = peer[1]
+      const address = `${contact.hostname}:${contact.port - 1}`
+      const url = `http://${address}/peer/blocks?lastBlockId=${lastCommonBlockId}&limit=${limit}`
+      const reqOptions = {
+        url,
+        headers: {
+          magic: global.Config.magic,
+          version: global.Config.version,
         },
       }
-      modules.peer.request('blocks', params, peer, (err, ret) => {
-        if (err || ret.error) {
-          return next(err || ret.error.toString())
+      request(reqOptions, (err, response, body) => {
+        if (err) {
+          return next(`Failed to request remote peer: ${err}`)
+        } else if (response.statusCode !== 200) {
+          return next(`Invalid status code: ${response.statusCode} ${body}`)
         }
-        const contact = peer[1]
-        const peerStr = `${contact.hostname}:${contact.port}`
-        const blocks = ret.blocks
-        library.logger.info(`Loading ${blocks.length} blocks from`, peerStr)
+        try {
+          body = JSON.parse(body)
+        } catch (e) {
+          return next(`Invalid response body format: ${e.toString()}`)
+        }
+        const blocks = body.blocks
+        library.logger.info(`Loading ${blocks.length} blocks from`, address)
         if (blocks.length === 0) {
           loaded = true
           return next()
@@ -504,7 +545,7 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
               await self.processBlock(block, { syncing: true })
               lastCommonBlockId = block.id
               lastValidBlock = block
-              library.logger.info(`Block ${block.id} loaded from ${peerStr} at`, block.height)
+              library.logger.info(`Block ${block.id} loaded from ${address} at`, block.height)
             }
             return next()
           } catch (e) {
@@ -515,6 +556,9 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
       })
     },
     (err) => {
+      if (err) {
+        library.logger.error('load blocks from remote peer error:', err)
+      }
       setImmediate(cb, err, lastValidBlock)
     },
   )
