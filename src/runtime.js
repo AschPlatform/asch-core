@@ -275,7 +275,7 @@ module.exports = async function runtime(options) {
       if (!transactionMode.isRequestMode(context.trs.mode)) throw new Error('Transaction mode is not request mode')
 
       app.sdb.update('TransactionStatu', { executed: 1 }, { tid: context.trs.id })
-      app.addRoundFee(trs.fee)
+      app.addRoundFee(trs.fee, modules.round.calc(context.block.height))
     }
     return error
   }
