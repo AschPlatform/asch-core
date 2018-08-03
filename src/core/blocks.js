@@ -536,8 +536,8 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
           return next(`Invalid response body format: ${e.toString()}`)
         }
         const blocks = body.blocks
-        library.logger.info(`Loading ${blocks.length} blocks from`, address)
-        if (blocks.length === 0) {
+        library.logger.info(`Loading ${isArray(blocks) ? blocks.length : 0} blocks from`, address)
+        if (!isArray(blocks) || blocks.length === 0) {
           loaded = true
           return next()
         }
