@@ -364,6 +364,8 @@ Blocks.prototype.processBlock = async (b, options) => {
     if (options.broadcast) {
       options.votes.signatures = options.votes.signatures.slice(0, 6)
       library.bus.message('newBlock', block, options.votes)
+    } else {
+      modules.chains.onNewBlock(block)
     }
   } catch (e) {
     app.logger.error(block)

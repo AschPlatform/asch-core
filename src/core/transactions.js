@@ -229,7 +229,7 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
     } else {
       const id = library.base.transaction.getId(transaction)
       if (transaction.id !== id) {
-        return 'Invalid transaction id'
+        throw new Error('Invalid transaction id')
       }
     }
 
