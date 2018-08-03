@@ -149,14 +149,15 @@ Transactions.prototype.getUnconfirmedTransactions = (_, cb) => setImmediate(
 )
 
 Transactions.prototype.getTransactions = (req, cb) => {
-  const limit = Number(req.query.limit) || 100
-  const offset = Number(req.query.offset) || 0
+  const query = req.body
+  const limit = query.limit ? Number(query.limit) : 100
+  const offset = query.offset ? Number(query.offset) : 0
   const condition = {}
-  if (req.query.senderId) {
-    condition.senderId = req.query.senderId
+  if (query.senderId) {
+    condition.senderId = query.senderId
   }
-  if (req.query.type) {
-    condition.type = Number(req.query.type)
+  if (query.type) {
+    condition.type = Number(query.type)
   }
 
   (async () => {
@@ -347,6 +348,33 @@ Transactions.prototype.toAPIV1Transactions = (transArray, block) => {
   return []
 }
 
+Transactions.prototype.tranfersToAPIV1Transactions = async ( transferArray, block ) => {
+  if (transferArray && isArray(transferArray) && transferArray.length > 0) {
+
+    let transMap = new Map()
+    let transIds = transferArray.map( t => t.tid )
+    let transArray = await app.sdb.find('Transaction', { id: { $in: transIds } })
+    transArray.forEach( t=> transMap.set(t.id, t))
+
+    transferArray.forEach( transfer => {
+      const trans = transMap.get(transfer.tid)
+      if ( trans !== undefined ) {
+        transfer.senderPublicKey =  trans.senderPublicKey
+        transfer.signSignature = trans.signSignature
+        transfer.message = trans.message
+        transfer.fee = trans.fee
+        transfer.type = trans.type
+        transfer.args = trans.args
+        transfer.signatures = trans.signatures
+      }
+    })
+
+    return transferArray.map(t => self.toAPIV1Transaction(t, block))
+  }
+  return []
+}
+
+
 function toV1TypeAndArgs(type, args) {
   let v1Type
 
@@ -418,8 +446,8 @@ Transactions.prototype.toAPIV1Transaction = (trans, block) => {
   if (!trans) return trans
 
   const signArray = trans.signatures
-  const result = {
-    id: trans.id,
+  const resultTrans = {
+    id: trans.tid,
     height: trans.height,
     timestamp: trans.timestamp,
     senderPublicKey: trans.senderPublicKey,
@@ -427,6 +455,7 @@ Transactions.prototype.toAPIV1Transaction = (trans, block) => {
     signSignature: trans.signSignature,
     message: trans.message,
     fee: trans.fee,
+    blockId: block ? block.id : undefined,
     recipientId: '',
     amount: 0,
     asset: {},
@@ -437,7 +466,7 @@ Transactions.prototype.toAPIV1Transaction = (trans, block) => {
     signatures: signArray.length === 1 ? undefined : signArray,
     args: {},
   }
-  return Object.assign(result, toV1TypeAndArgs(trans.type, trans.args))
+  return Object.assign(resultTrans, toV1TypeAndArgs(trans.type, trans.args))
 }
 
 
@@ -458,7 +487,16 @@ Transactions.prototype.onBind = (scope) => {
   modules = scope
 }
 
+Transactions.prototype.getTransactionsForV1 = ( req, cb ) => {
+  return shared.getTransactions(req, cb)
+}
+
 // Shared
+/**
+ * for exchanges only
+ * get transfers by given conditions
+ *
+ */
 shared.getTransactions = (req, cb) => {
   const query = req.body
   library.scheme.validate(query, {
@@ -496,11 +534,14 @@ shared.getTransactions = (req, cb) => {
     if (query.senderId) {
       condition.senderId = query.senderId
     }
-    if (query.type) {
-      condition.type = Number(query.type)
+    if (query.type !== undefined) {
+      const type = Number(query.type)
+      if (type !== 0 && type !== 14 ) return cb('invalid transaction type')
+
+      condition.currency = type === 0 ? 'XAS' : { $ne: 'XAS' }
     }
     if (query.id) {
-      condition.id = query.id
+      condition.tid = query.id
     }
 
     (async () => {
@@ -513,11 +554,12 @@ shared.getTransactions = (req, cb) => {
           }
           condition.height = block.height
         }
-        const count = await app.sdb.count('Transaction', condition)
-        let transactions = await app.sdb.find('Transaction', condition, { limit, offset })
-        if (!transactions) transactions = []
+        const count = await app.sdb.count('Transfer', condition)
+        let transfer = await app.sdb.find('Transfer', condition, query.unlimited ? {} : { limit, offset })
+        if (!transfer) transfer = []
         block = modules.blocks.toAPIV1Block(block)
-        return cb(null, { transactions: self.toAPIV1Transactions(transactions, block), count })
+        const transactions = await self.tranfersToAPIV1Transactions(transfer, block)
+        return cb(null, { transactions , count })
       } catch (e) {
         app.logger.error('Failed to get transactions', e)
         return cb(`System error: ${e}`)
@@ -544,15 +586,15 @@ shared.getTransaction = (req, cb) => {
       return cb(err[0].message)
     }
     const callback = (err2, ret) => (async () => {
-      if (!ret || !ret.transaction) {
-        cb(err2, ret)
+      if (err2) return cb(err2)
+
+      if (!ret || !ret.transactions || ret.transactions.length < 1) {
+        cb('transaction not found', ret)
       } else {
-        let block = await app.sdb.getBlockByHeight(ret.transaction.height)
-        block = modules.blocks.toAPIV1Block(block)
-        cb(err2, { transaction: self.toAPIV1Transaction(ret.transaction, block) })
+        cb( null, ret.transactions[0] )
       }
     })()
-    return self.getTransaction({ params: query }, callback)
+    return shared.getTransactions( req, callback )
   })
 }
 
@@ -617,10 +659,21 @@ shared.getUnconfirmedTransactions = (req, cb) => {
   })
 }
 
+function convertV1Transfer( trans ) {
+  if ( trans.type === 0 && trans.amount !== undefined && trans.recipientId !== undefined ) {
+    trans.type = 1
+    trans.args = [trans.amount, trans.recipientId]
+    Reflect.deleteProperty(trans, 'amount')
+    Reflect.deleteProperty(trans, 'recipientId')
+  }
+}
+
+
 shared.addTransactionUnsigned = (req, cb) => {
   const query = req.body
-  if (query.type) {
+  if (query.type !== undefined) {
     query.type = Number(query.type)
+    convertV1Transfer(query)
   }
   const valid = library.scheme.validate(query, {
     type: 'object',

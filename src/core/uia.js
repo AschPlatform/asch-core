@@ -179,7 +179,7 @@ shared.getIssuer = (req, cb) => {
       try {
         const issuers = await app.sdb.find('Issuer', { name: req.params.name })
         if (!issuers || issuers.length === 0) return cb('Issuer not found')
-        return cb(null, { issuer: issues[0] })
+        return cb(null, { issuer: issuers[0] })
       } catch (dbErr) {
         return cb(`Failed to get issuers: ${dbErr}`)
       }
@@ -338,8 +338,8 @@ shared.getBalance = (req, cb) => {
 }
 
 shared.transferAsset = (req, cb) => {
-  const body = req.body
-  return library.scheme.validate(body, {
+  const query = req.body
+  const valid =  library.scheme.validate(query, {
     type: 'object',
     properties: {
       secret: {
@@ -376,121 +376,48 @@ shared.transferAsset = (req, cb) => {
         type: 'string',
         maxLength: 256,
       },
+      fee: {
+        type: 'integer',
+        minimum: 10000000,
+      },
     },
     required: ['secret', 'amount', 'recipientId', 'currency'],
-  }, (err) => {
-    if (err) return cb(`${err[0].message}: ${err[0].path}`)
-
-    const hash = crypto.createHash('sha256').update(body.secret, 'utf8').digest()
-    const keypair = ed.MakeKeypair(hash)
-
-    if (body.publicKey) {
-      if (keypair.publicKey.toString('hex') !== body.publicKey) {
-        return cb('Invalid passphrase')
-      }
-    }
-
-    return library.sequence.add((callback) => {
-      if (body.multisigAccountPublicKey && body.multisigAccountPublicKey !== keypair.publicKey.toString('hex')) {
-        const condition = { publicKey: body.multisigAccountPublicKey }
-        modules.accounts.getAccount(condition, (multisigErr, account) => {
-          if (multisigErr) return callback(multisigErr.toString())
-
-          if (!account) return callback('Multisignature account not found')
-
-          if (!account.multisignatures || !account.multisignatures) {
-            return callback('Account does not have multisignatures enabled')
-          }
-
-          if (account.multisignatures.indexOf(keypair.publicKey.toString('hex')) < 0) {
-            return callback('Account does not belong to multisignature group')
-          }
-
-          const pkCondition = { publicKey: keypair.publicKey }
-          return modules.accounts.getAccount(pkCondition, (getErr, requester) => {
-            if (getErr) {
-              return callback(err.toString())
-            }
-
-            if (!requester || !requester.publicKey) {
-              return callback('Invalid requester')
-            }
-
-            if (requester.secondSignature && !body.secondSecret) {
-              return callback('Invalid second passphrase')
-            }
-
-            if (requester.publicKey === account.publicKey) {
-              return callback('Invalid requester')
-            }
-
-            let secondKeypair = null
-
-            if (requester.secondSignature) {
-              const secondHash = crypto.createHash('sha256').update(body.secondSecret, 'utf8').digest()
-              secondKeypair = ed.MakeKeypair(secondHash)
-            }
-
-            try {
-              const transaction = library.base.transaction.create({
-                amount: body.amount,
-                currency: body.currency,
-                sender: account,
-                recipientId: body.recipientId,
-                keypair,
-                requester: keypair,
-                secondKeypair,
-                message: body.message,
-              })
-              return modules.transactions.processUnconfirmedTransaction(transaction, cb)
-            } catch (e) {
-              return callback(e.toString())
-            }
-          })
-        })
-        return null
-      }
-      const condition = { publicKey: keypair.publicKey.toString('hex') }
-      return modules.accounts.getAccount(condition, (getErr, account) => {
-        if (getErr) {
-          return callback(getErr.toString())
-        }
-        if (!account) {
-          return callback('Account not found')
-        }
-
-        if (account.secondSignature && !body.secondSecret) {
-          return callback('Invalid second passphrase')
-        }
-
-        let secondKeypair = null
-
-        if (account.secondSignature) {
-          const secondHash = crypto.createHash('sha256').update(body.secondSecret, 'utf8').digest()
-          secondKeypair = ed.MakeKeypair(secondHash)
-        }
-
-        try {
-          const transaction = library.base.transaction.create({
-            currency: body.currency,
-            amount: body.amount,
-            sender: account,
-            recipientId: body.recipientId,
-            keypair,
-            secondKeypair,
-            message: body.message,
-          })
-          return modules.transactions.processUnconfirmedTransaction(transaction, cb)
-        } catch (e) {
-          return callback(e.toString())
-        }
-      })
-    }, (seqErr, transaction) => {
-      if (seqErr) return cb(err.toString())
-
-      return cb(null, { transactionId: transaction[0].id })
-    })
   })
+
+  if (!valid) {
+    library.logger.warn('Failed to validate query params', library.scheme.getLastError())
+    return setImmediate(cb, library.scheme.getLastError().details[0].message)
+  }
+
+  return library.sequence.add((callback) => {
+    (async () => {
+      try {
+        const hash = crypto.createHash('sha256').update(query.secret, 'utf8').digest()
+        const keypair = ed.MakeKeypair(hash)
+        let secondKeyPair = null
+        if (query.secondSecret) {
+          secondKeyPair = ed.MakeKeypair(crypto.createHash('sha256').update(query.secondSecret, 'utf8').digest())
+        }
+        const trs = library.base.transaction.create({
+          secret: query.secret,
+          fee: query.fee || 10000000,
+          type: 103,
+          senderId: query.senderId || null,
+          args: [query.currency, query.amount, query.recipientId],
+          message: query.message || null,
+          secondKeyPair,
+          keypair,
+        })
+        await modules.transactions.processUnconfirmedTransactionAsync(trs)
+        library.bus.message('unconfirmedTransaction', trs)
+        callback(null, { transactionId: trs.id })
+      } catch (e) {
+        library.logger.warn('Failed to process unsigned transaction', e)
+        callback(e.toString())
+      }
+    })()
+  }, cb)
+
 }
 
 module.exports = UIA
