@@ -935,7 +935,7 @@ shared.getFullBlock = (req, cb) => {
           block = self.toAPIV1Block(block)
           block.transactions = ret.transactions
           block.numberOfTransactions = isArray(block.transactions) ? block.transactions.length : 0
-          return cb( null, block )
+          return cb( null, { block } )
         }
 
         req.body.blockId = block.id

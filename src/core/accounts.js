@@ -83,6 +83,9 @@ priv.openAccount2 = (publicKey, cb) => {
   shared.getAccount({ body: { address } }, (err, ret) => {
     if (ret && ret.account && !ret.account.publicKey) {
       ret.account.publicKey = publicKey
+      ret.account.secondSignature = ret.account.secondPublicKey && 
+        isString(ret.account.secondPublicKey) && 
+        ret.account.secondPublicKey.trim() !== ""
     }
     cb(err, ret)
   })

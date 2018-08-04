@@ -383,7 +383,7 @@ function toV1TypeAndArgs(type, args) {
   switch (type) {
     case 1: // transfer
       v1Type = 0
-      result = { amount: args[0], recipientId: args[1] }
+      result = { amount: Number(args[0]), recipientId: args[1] }
       break
     case 3: // setPassword
       v1Type = 1
