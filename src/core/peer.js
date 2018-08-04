@@ -159,7 +159,7 @@ Peer.prototype.randomRequest = (method, params, cb) => {
     if (isCallbacked) return
     isCallbacked = true
     cb('Timeout', undefined, randomContact)
-  }, 2000)
+  }, 4000)
   return node.send(method, params, randomContact, (err, result) => {
     if (isCallbacked) return
     isCallbacked = true
