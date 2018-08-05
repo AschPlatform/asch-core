@@ -97,7 +97,7 @@ Blocks.prototype.toAPIV1Block = (block) => {
     id: block.id,
     version: block.version,
     timestamp: block.timestamp,
-    height: block.height,
+    height: Number(block.height),
     payloadHash: block.payloadHash,
     previousBlock: block.prevBlockId,
     numberOfTransactions: block.count,

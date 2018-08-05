@@ -360,7 +360,7 @@ Transactions.prototype.tranfersToAPIV1Transactions = async ( transferArray, bloc
       const trans = transMap.get(transfer.tid)
       if ( trans !== undefined ) {
         transfer.senderPublicKey =  trans.senderPublicKey
-        transfer.signSignature = trans.signSignature
+        transfer.signSignature = trans.secondSignature || trans.signSignature 
         transfer.message = trans.message
         transfer.fee = trans.fee
         transfer.type = trans.type
@@ -428,7 +428,7 @@ function toV1TypeAndArgs(type, args) {
     case 103: // UIA transfer
       v1Type = 14
       result = {
-        asset: { uiaTransfer: { currency: args[0], amount: args[1] } },
+        asset: { uiaTransfer: { currency: args[0], amount: String(args[1]) } },
         recipientId: args[2],
       }
       break
@@ -462,8 +462,8 @@ Transactions.prototype.toAPIV1Transaction = (trans, block) => {
     confirmations: modules.blocks.getLastBlock().height - trans.height,
 
     type: -1,
-    signature: signArray.length === 1 ? signArray[0] : undefined,
-    signatures: signArray.length === 1 ? undefined : signArray,
+    signature: signArray.length === 1 ? signArray[0] : null,
+    signatures: signArray.length === 1 ? null : signArray,
     args: {},
   }
   return Object.assign(resultTrans, toV1TypeAndArgs(trans.type, trans.args))
@@ -591,7 +591,12 @@ shared.getTransaction = (req, cb) => {
       if (!ret || !ret.transactions || ret.transactions.length < 1) {
         cb('transaction not found', ret)
       } else {
-        cb( null, ret.transactions[0] )
+        // for exchanges ....
+        let transaction = ret.transactions[0]
+        transaction.height = String(transaction.height)
+        transaction.confirmations = String(transaction.confirmations)
+
+        cb( null, { transaction } )
       }
     })()
     return shared.getTransactions( req, callback )
