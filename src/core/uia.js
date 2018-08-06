@@ -396,9 +396,9 @@ shared.transferAsset = (req, cb) => {
       try {
         const hash = crypto.createHash('sha256').update(query.secret, 'utf8').digest()
         const keypair = ed.MakeKeypair(hash)
-        let secondKeyPair = null
+        let secondKeypair = null
         if (query.secondSecret) {
-          secondKeyPair = ed.MakeKeypair(crypto.createHash('sha256').update(query.secondSecret, 'utf8').digest())
+          secondKeypair = ed.MakeKeypair(crypto.createHash('sha256').update(query.secondSecret, 'utf8').digest())
         }
         const trs = library.base.transaction.create({
           secret: query.secret,
@@ -407,7 +407,7 @@ shared.transferAsset = (req, cb) => {
           senderId: query.senderId || null,
           args: [query.currency, query.amount, query.recipientId],
           message: query.message || null,
-          secondKeyPair,
+          secondKeypair,
           keypair,
         })
         await modules.transactions.processUnconfirmedTransactionAsync(trs)

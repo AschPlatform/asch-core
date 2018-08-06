@@ -49,6 +49,7 @@ Transaction.prototype.create = (data) => {
   // } else {
   //   trs.senderId = signerId
   // }
+
   trs.signatures = [self.sign(data.keypair, trs)]
 
   if (data.secondKeypair) {
@@ -75,7 +76,7 @@ Transaction.prototype.attachAssetType = (typeId, instance) => {
 }
 
 Transaction.prototype.sign = (keypair, trs) => {
-  const hash = self.getHash(trs)
+  const hash = crypto.createHash('sha256').update(self.getBytes(trs, true, true)).digest()
   return ed.Sign(hash, keypair).toString('hex')
 }
 
@@ -324,6 +325,9 @@ Transaction.prototype.objectNormalize = (trs) => {
   for (const i in trs) {
     if (trs[i] === null || typeof trs[i] === 'undefined') {
       delete trs[i]
+    }
+    if (Buffer.isBuffer(trs[i])) {
+      trs[i] = trs[i].toString()
     }
   }
 
