@@ -251,7 +251,7 @@ Transport.prototype.onPeerReady = () => {
     const height = body.height
     const id = body.id.toString('hex')
     const prevBlockId = body.prevBlockId.toString('hex')
-    if (height !== lastBlock.height + +1 || prevBlockId !== lastBlock.id) {
+    if (height !== lastBlock.height + 1 || prevBlockId !== lastBlock.id) {
       library.logger.error('New block donnot match with last block', body)
       return
     }
