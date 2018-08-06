@@ -60,8 +60,7 @@ priv.syncTrigger = (turnOn) => {
 }
 
 priv.loadFullDb = (peer, cb) => {
-  const contact = peer[1]
-  const peerStr = `${contact.hostname}:${contact.port}`
+  const peerStr = `${peer.host}:${peer.port - 1}`
 
   const commonBlockId = priv.genesisBlock.block.id
 
@@ -71,8 +70,7 @@ priv.loadFullDb = (peer, cb) => {
 }
 
 priv.findUpdate = (lastBlock, peer, cb) => {
-  const contact = peer[1]
-  const peerStr = `${contact.hostname}:${contact.port}`
+  const peerStr = `${peer.host}:${peer.port - 1}`
 
   library.logger.info(`Looking for common block with ${peerStr}`)
 
@@ -117,14 +115,13 @@ priv.findUpdate = (lastBlock, peer, cb) => {
 }
 
 priv.loadBlocks = (lastBlock, cb) => {
-  modules.peer.randomRequest('height', {}, (err, ret, peer) => {
+  modules.peer.randomRequest('getHeight', {}, (err, ret, peer) => {
     if (err) {
       library.logger.error('Failed to request form random peer', { err, peer })
       return cb()
     }
 
-    const contact = peer[1]
-    const peerStr = `${contact.hostname}:${contact.port}`
+    const peerStr = `${peer.host}:${peer.port - 1}`
     library.logger.info(`Check blockchain on ${peerStr}`)
 
     ret.height = Number.parseInt(ret.height, 10)
@@ -158,7 +155,7 @@ priv.loadBlocks = (lastBlock, cb) => {
 }
 
 priv.loadUnconfirmedTransactions = (cb) => {
-  modules.peer.randomRequest('transactions', {}, (err, data, peer) => {
+  modules.peer.randomRequest('getUnconfirmedTransactions', {}, (err, data, peer) => {
     if (err) {
       return cb()
     }
@@ -179,8 +176,7 @@ priv.loadUnconfirmedTransactions = (cb) => {
     }
 
     const transactions = data.body.transactions
-    const contact = peer[1]
-    const peerStr = `${contact.hostname}:${contact.port}`
+    const peerStr = `${peer.host}:${peer.port - 1}`
 
     for (let i = 0; i < transactions.length; i++) {
       try {

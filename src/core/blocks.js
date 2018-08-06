@@ -1,7 +1,6 @@
 const assert = require('assert')
 const crypto = require('crypto')
 const async = require('async')
-const request = require('request')
 const PIFY = require('util').promisify
 const isArray = require('util').isArray
 const constants = require('../utils/constants.js')
@@ -105,7 +104,7 @@ Blocks.prototype.toAPIV1Block = (block) => {
     generatorPublicKey: block.delegate,
     blockSignature: block.signature,
     confirmations: self.getLastBlock().height - block.height,
-    transactions: !block.transactions ? undefined : modules.transactions.toAPIV1Transactions(block.transactions.filter( t => t.executed ), block),
+    transactions: !block.transactions ? undefined : modules.transactions.toAPIV1Transactions(block.transactions.filter(t => t.executed), block),
 
     // "generatorId":  => missing
     // "totalAmount" => missing
@@ -124,11 +123,9 @@ Blocks.prototype.getCommonBlock = (peer, height, cb) => {
     }
     library.logger.trace('getIdSequence=========', data)
     const params = {
-      body: {
-        max: lastBlockHeight,
-        min: data.firstHeight,
-        ids: data.ids,
-      },
+      max: lastBlockHeight,
+      min: data.firstHeight,
+      ids: data.ids,
     }
     return modules.peer.request('commonBlock', params, peer, (err2, ret) => {
       if (err2 || ret.error) {
@@ -270,7 +267,7 @@ Blocks.prototype.verifyBlockVotes = async (block, votes) => {
   const delegateList = await PIFY(modules.delegates.generateDelegateList)(block.height)
   const publicKeySet = new Set(delegateList)
   for (const item of votes.signatures) {
-    if (!publicKeySet.has(item.key)) {
+    if (!publicKeySet.has(item.key.toString('hex'))) {
       throw new Error(`Votes key is not in the top list: ${item.key}`)
     }
     if (!library.base.consensus.verifyVote(votes.height, votes.id, item)) {
@@ -514,33 +511,25 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
     (next) => {
       count++
       const limit = 200
-      const contact = peer[1]
-      const address = `${contact.hostname}:${contact.port - 1}`
-      const url = `http://${address}/peer/blocks?lastBlockId=${lastCommonBlockId}&limit=${limit}`
-      const reqOptions = {
-        url,
-        headers: {
-          magic: global.Config.magic,
-          version: global.Config.version,
-        },
+      const params = {
+        limit,
+        lastBlockId: lastCommonBlockId,
       }
-      request(reqOptions, (err, response, body) => {
+      modules.peer.request('blocks', params, peer, (err, body) => {
         if (err) {
           return next(`Failed to request remote peer: ${err}`)
-        } else if (response.statusCode !== 200) {
-          return next(`Invalid status code: ${response.statusCode} ${body}`)
         }
-        try {
-          body = JSON.parse(body)
-        } catch (e) {
-          return next(`Invalid response body format: ${e.toString()}`)
+        if (!body) {
+          return next('Invalid response for blocks request')
         }
         const blocks = body.blocks
-        library.logger.info(`Loading ${isArray(blocks) ? blocks.length : 0} blocks from`, address)
         if (!isArray(blocks) || blocks.length === 0) {
           loaded = true
           return next()
         }
+        const num = isArray(blocks) ? blocks.length : 0
+        const address = `${peer.host}:${peer.port - 1}`
+        library.logger.info(`Loading ${num} blocks from ${address}`)
         return (async () => {
           try {
             for (const block of blocks) {
@@ -655,10 +644,10 @@ Blocks.prototype.onReceiveBlock = (block, votes) => {
 
   library.sequence.add((cb) => {
     if (block.prevBlockId === priv.lastBlock.id && priv.lastBlock.height + 1 === block.height) {
-      library.logger.info(`Received new block id: ${block.id}
-        height: ${block.height}
-        round: ${modules.round.calc(modules.blocks.getLastBlock().height)}
-        slot: ${slots.getSlotNumber(block.timestamp)}`)
+      library.logger.info(`Received new block id: ${block.id}` +
+        ` height: ${block.height}` +
+        ` round: ${modules.round.calc(modules.blocks.getLastBlock().height)}` +
+        ` slot: ${slots.getSlotNumber(block.timestamp)}`)
       return (async () => {
         const pendingTrsMap = new Map()
         try {
@@ -930,12 +919,12 @@ shared.getFullBlock = (req, cb) => {
         }
         if (!block) return cb('Block not found')
 
-        const callback = ( err, ret ) => {
-          if ( err ) return cb( err )
+        const callback = (err, ret) => {
+          if (err) return cb(err)
           block = self.toAPIV1Block(block)
           block.transactions = ret.transactions
           block.numberOfTransactions = isArray(block.transactions) ? block.transactions.length : 0
-          return cb( null, { block } )
+          return cb(null, { block })
         }
 
         req.body.blockId = block.id

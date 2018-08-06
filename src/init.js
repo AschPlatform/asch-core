@@ -262,7 +262,7 @@ module.exports = function init(options, done) {
         const host = req.headers['x-forwarded-for'] || req.connection.remoteAddress
         const { port } = req.headers
 
-        scope.logger.debug(`receive request: ${req.method} ${req.url} from ${host}:${port}`)
+        scope.logger.debug(`receive request: ${req.method} ${req.url} from ${host}`)
 
         res.setHeader('X-Frame-Options', 'DENY')
         res.setHeader('Content-Security-Policy', 'frame-ancestors \'none\'')

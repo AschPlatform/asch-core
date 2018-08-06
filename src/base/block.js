@@ -116,8 +116,9 @@ Block.prototype.getBytes = (block, skipSignature) => {
   bb.writeLong(block.reward)
   bb.writeString(block.delegate)
 
-  if (block.previousBlock) {
-    bb.writeString(block.previousBlock)
+  // FIXME HARDCODE HOTFIX
+  if (block.height > 0 && block.prevBlockId) {
+    bb.writeString(block.prevBlockId)
   } else {
     bb.writeString('0')
   }
@@ -166,6 +167,9 @@ Block.prototype.objectNormalize = (block) => {
     if (block[i] == null || typeof block[i] === 'undefined') {
       delete block[i]
     }
+    if (Buffer.isBuffer(block[i])) {
+      block[i] = block[i].toString()
+    }
   }
 
   const report = self.scope.scheme.validate(block, {
@@ -192,7 +196,7 @@ Block.prototype.objectNormalize = (block) => {
       payloadLength: {
         type: 'integer',
       },
-      previousBlock: {
+      prevBlockId: {
         type: 'string',
       },
       timestamp: {

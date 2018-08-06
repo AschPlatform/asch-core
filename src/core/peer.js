@@ -1,8 +1,9 @@
 const path = require('path')
 const ip = require('ip')
 const crypto = require('crypto')
-const kadence = require('@kadenceproject/kadence')
 const _ = require('lodash')
+const DHT = require('bittorrent-dht')
+const request = require('request')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const utils = require('../utils')
@@ -10,19 +11,18 @@ const utils = require('../utils')
 let modules
 let library
 let self
-const priv = {}
+const priv = {
+  handlers: {},
+  dht: null,
+}
 const shared = {}
-
-priv.protocol = 'udp:'
-priv.mainNode = null
 
 // Constructor
 function Peer(cb, scope) {
   library = scope
   self = this
-  priv.attachApi()
-  priv.initNode()
 
+  priv.attachApi()
   setImmediate(cb, null, self)
 }
 
@@ -51,29 +51,6 @@ priv.attachApi = () => {
     library.logger.error(req.url, err.toString())
     return res.status(500).send({ success: false, error: err.toString() })
   })
-}
-
-priv.initNode = () => {
-  const protocol = priv.protocol
-  const hostname = global.Config.publicIp || global.Config.address
-  const port = global.Config.peerPort
-  const contact = { hostname, port, protocol }
-  const identity = self.getIdentity(contact)
-  const transport = new kadence.UDPTransport()
-  const storageDir = path.resolve(global.Config.dataDir, 'dht')
-  const storage = new kadence.LevelKademliaStorage(storageDir)
-  priv.mainNode = new kadence.KademliaNode({
-    logger: library.logger,
-    transport,
-    storage,
-    identity,
-    contact,
-  })
-  const node = priv.mainNode
-  const peerCacheDir = path.join(global.Config.dataDir, 'peer')
-  node.rolodex = node.plugin(kadence.rolodex(peerCacheDir))
-  node.plugin(kadence.quasar())
-  node.listen(port, global.Config.address)
 }
 
 Peer.prototype.list = (options, cb) => {
@@ -124,46 +101,69 @@ Peer.prototype.isCompatible = (version) => {
 }
 
 Peer.prototype.getIdentity = (contact) => {
-  const address = `${contact.hostname}:${contact.port}`
-  return crypto.createHash('ripemd160').update(address).digest()
-}
-
-Peer.prototype.handle = (method, handler) => {
-  priv.mainNode.use(method, handler)
+  const address = `${contact.host}:${contact.port}`
+  return crypto.createHash('ripemd160').update(address).digest().toString('hex')
 }
 
 Peer.prototype.subscribe = (topic, handler) => {
-  priv.mainNode.quasarSubscribe(topic, (content) => {
-    handler(content)
-  })
+  priv.handlers[topic] = handler
+}
+
+Peer.prototype.onpublish = (msg) => {
+  if (!msg || !msg.topic || !priv.handlers[msg.topic.toString()]) {
+    library.logger.debug('Receive invalid publish message topic', msg)
+    return
+  }
+  priv.handlers[msg.topic](msg)
 }
 
 Peer.prototype.publish = (topic, message) => {
-  priv.mainNode.quasarPublish(topic, message)
+  if (!priv.dht) {
+    library.logger.warning('dht network is not ready')
+    return
+  }
+  priv.dht.broadcast({ topic: topic, body: message.body })
 }
 
 Peer.prototype.request = (method, params, contact, cb) => {
-  priv.mainNode.send(method, params, contact, cb)
+  const address = `${contact.host}:${contact.port - 1}`
+  const uri = `http://${address}/peer/${method}`
+  library.logger.debug(`start to request ${uri}`)
+  const reqOptions = {
+    uri,
+    method: 'POST',
+    body: params,
+    headers: {
+      magic: global.Config.magic,
+      version: global.Config.version,
+    },
+    json: true,
+  }
+  request(reqOptions, (err, response, result) => {
+    if (err) {
+      return cb(`Failed to request remote peer: ${err}`)
+    } else if (response.statusCode !== 200) {
+      library.logger.debug('remote service error', result)
+      return cb(`Invalid status code: ${response.statusCode}`)
+    }
+    return cb(null, result)
+  })
 }
 
 Peer.prototype.randomRequest = (method, params, cb) => {
-  const node = priv.mainNode
-  const randomContact = _.shuffle([...node.router.getClosestContactsToKey(
-    node.identity.toString('hex'),
-    node.router.size,
-  ).entries()]).shift()
-  if (!randomContact) return cb('No contact')
-  library.logger.debug('select random contract', randomContact)
+  const randomNode = priv.dht.getRandomNode()
+  if (!randomNode) return cb('No contact')
+  library.logger.debug('select random contract', randomNode)
   let isCallbacked = false
   setTimeout(() => {
     if (isCallbacked) return
     isCallbacked = true
-    cb('Timeout', undefined, randomContact)
+    cb('Timeout', undefined, randomNode)
   }, 4000)
-  return node.send(method, params, randomContact, (err, result) => {
+  return self.request(method, params, randomNode, (err, result) => {
     if (isCallbacked) return
     isCallbacked = true
-    cb(err, result, randomContact)
+    cb(err, result, randomNode)
   })
 }
 
@@ -177,40 +177,26 @@ Peer.prototype.onBind = (scope) => {
 }
 
 Peer.prototype.onBlockchainReady = () => {
-  const node = priv.mainNode
+  priv.dht = new DHT()
+  const port = global.Config.peerPort
+  priv.dht.listen(port, () => {
+    library.logger.info(`p2p server listen on ${port}`)
+  })
+  priv.dht.on('node', (node) => {
+    library.logger.info(`find new node ${node.host}:${node.port}`)
+  })
+  priv.dht.on('broadcast', (msg, node) => {
+    self.onpublish(msg, node)
+  })
   for (const seed of global.Config.peers.list) {
-    const contact = {
-      hostname: seed.ip,
+    const node = {
+      host: seed.ip,
       port: seed.port,
-      protocol: priv.protocol,
     }
-    const identity = self.getIdentity(contact)
-    node.join([identity, contact])
+    node.id = self.getIdentity(node)
+    priv.dht.addNode(node)
   }
-  node.once('join', () => {
-    library.logger.info(`connected to ${node.router.size} peers`)
-    library.logger.debug('connected nodes', node.router.getClosestContactsToKey(node.identity).entries())
-  })
-  node.once('error', (err) => {
-    library.logger.error('failed to join network', err)
-  })
   library.bus.message('peerReady')
-}
-
-Peer.prototype.joinNetwork = async () => {
-  const node = priv.mainNode
-  let peers = await node.rolodex.getBootstrapCandidates()
-  if (peers && peers.length > 0) {
-    peers = peers.map(url => kadence.utils.parseContactURL(url))
-  }
-  library.logger.debug('join network bootstrap candidates', peers)
-  for (const p of peers) {
-    node.join(p)
-  }
-}
-
-Peer.prototype.onPeerReady = () => {
-  utils.loopAsyncFunction(self.joinNetwork.bind(this), 60 * 1000)
 }
 
 shared.getPeers = (req, cb) => {
