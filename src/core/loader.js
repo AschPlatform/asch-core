@@ -117,7 +117,7 @@ priv.findUpdate = (lastBlock, peer, cb) => {
 priv.loadBlocks = (lastBlock, cb) => {
   modules.peer.randomRequest('getHeight', {}, (err, ret, peer) => {
     if (err) {
-      library.logger.error('Failed to request form random peer', { err, peer })
+      library.logger.error('Failed to request form random peer', err)
       return cb()
     }
 

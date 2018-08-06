@@ -109,12 +109,12 @@ Peer.prototype.subscribe = (topic, handler) => {
   priv.handlers[topic] = handler
 }
 
-Peer.prototype.onpublish = (msg) => {
+Peer.prototype.onpublish = (msg, peer) => {
   if (!msg || !msg.topic || !priv.handlers[msg.topic.toString()]) {
     library.logger.debug('Receive invalid publish message topic', msg)
     return
   }
-  priv.handlers[msg.topic](msg)
+  priv.handlers[msg.topic](msg, peer)
 }
 
 Peer.prototype.publish = (topic, message) => {

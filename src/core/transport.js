@@ -1,4 +1,5 @@
 const _ = require('lodash')
+const LRU = require('lru-cache')
 const Router = require('../utils/router.js')
 const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
@@ -11,13 +12,13 @@ const shared = {}
 
 priv.headers = {}
 priv.loaded = false
-priv.chainMessageCache = {}
 
 // Constructor
 function Transport(cb, scope) {
   library = scope
   self = this
   priv.attachApi()
+  priv.latestBlocksCache = new LRU(200)
 
   setImmediate(cb, null, self)
 }
@@ -44,6 +45,18 @@ priv.attachApi = () => {
       })
     }
     return next()
+  })
+
+  router.post('/newBlock', (req, res) => {
+    const { body } = req
+    if (!body.id) {
+      return res.status(500).send({ error: 'Invalid params' })
+    }
+    const newBlock = priv.latestBlocksCache.get(body.id)
+    if (!newBlock) {
+      return res.status(500).send({ error: 'New block not found' })
+    }
+    return res.send({ success: true, block: newBlock.block, votes: newBlock.votes })
   })
 
   router.post('/commonBlock', (req, res) => {
@@ -220,19 +233,48 @@ Transport.prototype.onBlockchainReady = () => {
 }
 
 Transport.prototype.onPeerReady = () => {
-  modules.peer.subscribe('block', (message) => {
+  modules.peer.subscribe('newBlockHeader', (message, peer) => {
     if (modules.loader.syncing()) {
       return
     }
-    try {
-      let block = message.body.block
-      let votes = library.protobuf.decodeBlockVotes(message.body.votes)
-      block = library.base.block.objectNormalize(block)
-      votes = library.base.consensus.normalizeVotes(votes)
-      library.bus.message('receiveBlock', block, votes)
-    } catch (e) {
-      library.logger.info(`normalize block or votes object error: ${e.toString()}`)
+    const lastBlock = modules.blocks.getLastBlock()
+    if (!lastBlock) {
+      library.logger.error('Last block not exists')
+      return
     }
+
+    const body = message.body
+    if (!body || !body.id || !body.height || !body.prevBlockId) {
+      library.logger.error('Invalid message body')
+      return
+    }
+    const height = body.height
+    const id = body.id.toString('hex')
+    const prevBlockId = body.prevBlockId.toString('hex')
+    if (height !== lastBlock.height + +1 || prevBlockId !== lastBlock.id) {
+      library.logger.error('New block donnot match with last block', body)
+      return
+    }
+    library.logger.info('Receive new block header', { height, id })
+    modules.peer.request('newBlock', { id }, peer, (err, result) => {
+      if (err) {
+        library.logger.error('Failed to get latest block data', err)
+        return
+      }
+      if (!result || !result.block || !result.votes) {
+        library.logger.error('Invalid block data', result)
+        return
+      }
+      try {
+        let block = result.block
+        let votes = library.protobuf.decodeBlockVotes(Buffer.from(result.votes, 'base64'))
+        block = library.base.block.objectNormalize(block)
+        votes = library.base.consensus.normalizeVotes(votes)
+        library.bus.message('receiveBlock', block, votes)
+      } catch (e) {
+        library.logger.error(`normalize block or votes object error: ${e.toString()}`, result)
+      }
+    })
   })
 
   modules.peer.subscribe('propose', (message) => {
@@ -295,21 +337,20 @@ Transport.prototype.onUnconfirmedTransaction = (transaction) => {
 }
 
 Transport.prototype.onNewBlock = (block, votes) => {
-  for (const trs of block.transactions) {
-    if (Array.isArray(trs.args)) {
-      trs.args = JSON.stringify(trs.args)
+  priv.latestBlocksCache.set(block.id,
+    {
+      block,
+      votes: library.protobuf.encodeBlockVotes(votes).toString('base64'),
     }
-    if (Array.isArray(trs.signatures)) {
-      trs.signatures = JSON.stringify(trs.signatures)
-    }
-  }
+  )
   const message = {
     body: {
-      block,
-      votes: library.protobuf.encodeBlockVotes(votes),
+      id: Buffer.from(block.id, 'hex'),
+      height: block.height,
+      prevBlockId: Buffer.from(block.prevBlockId, 'hex'),
     },
   }
-  self.broadcast('block', message)
+  self.broadcast('newBlockHeader', message)
 }
 
 Transport.prototype.onNewPropose = (propose) => {
