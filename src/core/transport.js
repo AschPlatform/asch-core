@@ -270,6 +270,7 @@ Transport.prototype.onPeerReady = () => {
         let votes = library.protobuf.decodeBlockVotes(Buffer.from(result.votes, 'base64'))
         block = library.base.block.objectNormalize(block)
         votes = library.base.consensus.normalizeVotes(votes)
+        priv.latestBlocksCache.set(block.id, result)
         library.bus.message('receiveBlock', block, votes)
       } catch (e) {
         library.logger.error(`normalize block or votes object error: ${e.toString()}`, result)
@@ -350,7 +351,7 @@ Transport.prototype.onNewBlock = (block, votes) => {
       prevBlockId: Buffer.from(block.prevBlockId, 'hex'),
     },
   }
-  self.broadcast('newBlockHeader', message)
+  self.broadcast('newBlockHeader', message, false)
 }
 
 Transport.prototype.onNewPropose = (propose) => {

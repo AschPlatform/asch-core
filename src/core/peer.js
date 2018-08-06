@@ -117,12 +117,12 @@ Peer.prototype.onpublish = (msg, peer) => {
   priv.handlers[msg.topic](msg, peer)
 }
 
-Peer.prototype.publish = (topic, message) => {
+Peer.prototype.publish = (topic, message, recursive = 1) => {
   if (!priv.dht) {
     library.logger.warning('dht network is not ready')
     return
   }
-  priv.dht.broadcast({ topic: topic, body: message.body })
+  priv.dht.broadcast({ topic: topic, body: message.body, recursive: recursive })
 }
 
 Peer.prototype.request = (method, params, contact, cb) => {
