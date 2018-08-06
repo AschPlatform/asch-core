@@ -70,7 +70,7 @@ priv.openAccount = (secret, cb) => {
   const keypair = ed.MakeKeypair(hash)
   const publicKey = keypair.publicKey.toString('hex')
   const address = self.generateAddressByPublicKey(publicKey)
-  shared.getAccount({ body: { address } }, (err, ret) => {
+  shared.getAccount({ body: { address: address } }, (err, ret) => {
     if (ret && ret.account && !ret.account.publicKey) {
       ret.account.publicKey = publicKey
     }
@@ -80,7 +80,7 @@ priv.openAccount = (secret, cb) => {
 
 priv.openAccount2 = (publicKey, cb) => {
   const address = self.generateAddressByPublicKey(publicKey)
-  shared.getAccount({ body: { address } }, (err, ret) => {
+  shared.getAccount({ body: { address: address } }, (err, ret) => {
     if (ret && ret.account && !ret.account.publicKey) {
       ret.account.publicKey = publicKey
     }
