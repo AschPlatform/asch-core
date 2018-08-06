@@ -656,7 +656,7 @@ Blocks.prototype.onReceiveBlock = (block, votes) => {
           }
           modules.transactions.clearUnconfirmed()
           await app.sdb.rollbackBlock()
-          await self.processBlock(block, { votes })
+          await self.processBlock(block, { votes, broadcast: true })
         } catch (e) {
           library.logger.error('Failed to process received block', e)
         } finally {
