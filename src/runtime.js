@@ -69,6 +69,12 @@ async function loadModels(dir) {
   })
 
   await app.sdb.init(schemas)
+
+  // HARDCODE HOTFIX upgrade group_members schema
+  const count = await app.sdb.count('GroupMembers', {})
+  if (count === 0) {
+    await app.sdb.updateSchema('GroupMembers')
+  }
 }
 
 async function loadContracts(dir) {
