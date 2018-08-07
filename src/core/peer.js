@@ -122,7 +122,9 @@ Peer.prototype.publish = (topic, message, recursive = 1) => {
     library.logger.warning('dht network is not ready')
     return
   }
-  priv.dht.broadcast({ topic: topic, body: message.body, recursive: recursive })
+  message.topic = topic
+  message.recursive = recursive
+  priv.dht.broadcast(message)
 }
 
 Peer.prototype.request = (method, params, contact, cb) => {

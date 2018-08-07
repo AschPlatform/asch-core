@@ -19,6 +19,7 @@ function Transport(cb, scope) {
   self = this
   priv.attachApi()
   priv.latestBlocksCache = new LRU(200)
+  priv.blockHeaderMidCache = new LRU(1000)
 
   setImmediate(cb, null, self)
 }
@@ -209,8 +210,8 @@ priv.attachApi = () => {
   library.network.app.use('/peer', router)
 }
 
-Transport.prototype.broadcast = (topic, message) => {
-  modules.peer.publish(topic, message)
+Transport.prototype.broadcast = (topic, message, recursive) => {
+  modules.peer.publish(topic, message, recursive)
 }
 
 Transport.prototype.sandboxApi = (call, args, cb) => {
@@ -252,7 +253,7 @@ Transport.prototype.onPeerReady = () => {
     const id = body.id.toString('hex')
     const prevBlockId = body.prevBlockId.toString('hex')
     if (height !== lastBlock.height + 1 || prevBlockId !== lastBlock.id) {
-      library.logger.error('New block donnot match with last block', body)
+      library.logger.error('New block donnot match with last block', message)
       return
     }
     library.logger.info('Receive new block header', { height, id })
@@ -271,6 +272,7 @@ Transport.prototype.onPeerReady = () => {
         block = library.base.block.objectNormalize(block)
         votes = library.base.consensus.normalizeVotes(votes)
         priv.latestBlocksCache.set(block.id, result)
+        priv.blockHeaderMidCache.set(block.id, message)
         library.bus.message('receiveBlock', block, votes)
       } catch (e) {
         library.logger.error(`normalize block or votes object error: ${e.toString()}`, result)
@@ -297,13 +299,14 @@ Transport.prototype.onPeerReady = () => {
       library.logger.error('Blockchain is not ready', { getNextSlot: slots.getNextSlot(), lastSlot, lastBlockHeight: lastBlock.height })
       return
     }
-    let transaction
     try {
-      transaction = library.base.transaction.objectNormalize(message.body.transaction)
+      let transaction = message.body.transaction
+      if (Buffer.isBuffer(transaction)) transaction = transaction.toString()
+      transaction = JSON.parse(transaction)
+      transaction = library.base.transaction.objectNormalize(transaction)
     } catch (e) {
       library.logger.error('Received transaction parse error', {
         message,
-        trs: transaction,
         error: e.toString(),
       })
       return
@@ -323,15 +326,9 @@ Transport.prototype.onPeerReady = () => {
 }
 
 Transport.prototype.onUnconfirmedTransaction = (transaction) => {
-  if (Array.isArray(transaction.args)) {
-    transaction.args = JSON.stringify(transaction.args)
-  }
-  if (Array.isArray(transaction.signatures)) {
-    transaction.signatures = JSON.stringify(transaction.signatures)
-  }
   const message = {
     body: {
-      transaction,
+      transaction: JSON.stringify(transaction),
     },
   }
   self.broadcast('transaction', message)
@@ -344,14 +341,14 @@ Transport.prototype.onNewBlock = (block, votes) => {
       votes: library.protobuf.encodeBlockVotes(votes).toString('base64'),
     }
   )
-  const message = {
+  const message = priv.blockHeaderMidCache.get(block.id) || {
     body: {
       id: Buffer.from(block.id, 'hex'),
       height: block.height,
       prevBlockId: Buffer.from(block.prevBlockId, 'hex'),
     },
   }
-  self.broadcast('newBlockHeader', message, false)
+  self.broadcast('newBlockHeader', message, 0)
 }
 
 Transport.prototype.onNewPropose = (propose) => {
