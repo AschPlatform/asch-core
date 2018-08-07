@@ -299,8 +299,9 @@ Transport.prototype.onPeerReady = () => {
       library.logger.error('Blockchain is not ready', { getNextSlot: slots.getNextSlot(), lastSlot, lastBlockHeight: lastBlock.height })
       return
     }
+    let transaction
     try {
-      let transaction = message.body.transaction
+      transaction = message.body.transaction
       if (Buffer.isBuffer(transaction)) transaction = transaction.toString()
       transaction = JSON.parse(transaction)
       transaction = library.base.transaction.objectNormalize(transaction)
