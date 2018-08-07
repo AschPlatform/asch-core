@@ -179,7 +179,6 @@ Peer.prototype.onBind = (scope) => {
 }
 
 Peer.prototype.refresh = () => {
-  console.log('-----refresh')
   for (const seed of global.Config.peers.list) {
     const node = {
       host: seed.ip,
