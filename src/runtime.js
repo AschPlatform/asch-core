@@ -73,7 +73,8 @@ async function loadModels(dir) {
   // HARDCODE HOTFIX upgrade group_members schema
   const count = await app.sdb.count('GroupMember', {})
   if (count === 0) {
-    await app.sdb.updateSchema('GroupMember')
+    const gms = schemas.find((schema) => schema.modelName === 'GroupMember')
+    await app.sdb.updateSchema(gms)
   }
 }
 
