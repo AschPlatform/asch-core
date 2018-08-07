@@ -6,15 +6,135 @@ const DHT = require('bittorrent-dht')
 const request = require('request')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
-const utils = require('../utils')
+const { isArray } = require('util')
+const Database = require('nedb')
 
 let modules
 let library
 let self
+
+const SAVE_PEERS_INTERVAL  = 5 * 60 * 1000 // 5 min
+const CHECK_PEERS_INTERVAL = 1 * 60 * 1000 // 1 min
+const CHECK_BUCKET_OUTDATE = 5 * 60 * 1000 // 5 min
+const MAX_BOOTSTRAP_PEERS  = 25 
+
 const priv = {
   handlers: {},
   dht: null,
+
+  lastNodes: [],
+
+  getNodeIdentity: (node) => {
+    const address = `${node.host}:${node.port}`
+    return crypto.createHash('ripemd160').update(address).digest().toString('hex')
+  },
+
+  getSeedPeerNodes: (seedPeers) => {
+    return seedPeers.map(peer => {
+      const node = { host: peer.ip, port: Number(peer.port) }
+      node.id = priv.getNodeIdentity(node)
+      return node
+    })
+  },
+
+  getBootstrapNodes: (seedPeers, maxCount) => {
+    let nodeMap = new Map()
+    priv.getSeedPeerNodes(seedPeers).forEach(node => nodeMap.set( node.id, node ))  
+    priv.lastNodes.forEach( node => {
+      if (!nodeMap.has(node.id)) {
+        nodeMap.set( node.id, node )
+      }
+    })
+      
+    return [...nodeMap.values()].slice(0, maxCount)
+  },
+
+  autoAddSeedPeersIfNodesEmpty(seedPeers, dht) {
+    setInterval(() => {
+      if ( dht.nodes.toArray().length === 0 ) {
+        app.logger.info(`dht nodes is empty, add seed peers`)
+        priv.getSeedPeerNodes(seedPeers).forEach(node => dht.addNode(node))
+      } 
+    }, CHECK_PEERS_INTERVAL)
+  },
+
+  initDHT: ( p2pOptions ) => {
+    p2pOptions = p2pOptions || {}
+
+    const dht = new DHT({timeBucketOutdated: CHECK_BUCKET_OUTDATE})
+    priv.dht = dht
+
+    dht.on('node', (node) => {
+      const nodeId = node.id.toString('hex')
+      library.logger.info(`add node (${nodeId}) ${node.host}:${node.port}`)
+      priv.updateNode(nodeId, node)
+    })
+
+    dht.on('remove', (nodeId) => {
+      library.logger.info(`remove node (${nodeId})`)
+      priv.removeNode(nodeId)
+    })
+
+    if ( p2pOptions.eventHandlers ) Object.keys( p2pOptions.eventHandlers ).forEach( eventName =>
+      dht.on(eventName, p2pOptions.eventHandlers[eventName])
+    )
+
+    if (p2pOptions.persistentPeers) {
+      const peerNodesDbPath = path.join(p2pOptions.peersDbDir, 'peers.db')
+      priv.initNodesDb(peerNodesDbPath)
+      priv.getBootstrapNodes(p2pOptions.seedPeers, MAX_BOOTSTRAP_PEERS).forEach(node => dht.addNode(node))
+    }
+
+    priv.autoAddSeedPeersIfNodesEmpty(p2pOptions.seedPeers, dht)
+
+    const port = p2pOptions.peerPort 
+    dht.listen(port, () =>library.logger.info(`p2p server listen on ${port}`))
+  },
+
+  findSeenNodesInDb : (callback) => {
+    priv.nodesDb.find({ seen : { $exists: true } }).sort({ seen: -1 }).exec(callback)
+  },
+ 
+  initNodesDb: (peerNodesDbPath) => {
+    if (!priv.nodesDb) {
+      const db = new Database({ filename: peerNodesDbPath, autoload: true })
+      priv.nodesDb = db
+      db.persistence.setAutocompactionInterval(SAVE_PEERS_INTERVAL)
+
+      const errorHandler = (err) => err && app.logger.info('peer node index error', err)
+      db.ensureIndex({ fieldName: 'id' }, errorHandler)
+      db.ensureIndex({ fieldName: 'seen'}, errorHandler)
+    }
+
+    priv.findSeenNodesInDb((err, nodes) => {
+      if (!err && isArray(nodes)) {
+        priv.lastNodes = nodes
+        app.logger.trace(`load last node peers success, ${JSON.stringify(nodes)}`)
+      }
+    })
+  },
+
+  updateNode: (nodeId, node, callback) => {
+    if (!nodeId || !node) return
+
+    let upsertNode = Object.assign({}, node)
+    upsertNode.id = nodeId
+    priv.nodesDb.update({ id: nodeId }, upsertNode, { upsert: true }, (err, data) =>{
+      if (err) app.logger.warn(`faild to update node (${nodeId}) ${node.host}:${node.port}`)
+      callback && callback(err, data)
+    })
+  },
+
+  removeNode: (nodeId , callback) => {
+    if (!nodeId) return 
+
+    priv.nodesDb.remove({ id : nodeId }, (err, numRemoved) => {
+      if (err) app.logger.warn(`faild to remove node id (${nodeId})`)
+      callback && callback(err, numRemoved)
+    })
+  }
 }
+
 const shared = {}
 
 // Constructor
@@ -100,11 +220,6 @@ Peer.prototype.isCompatible = (version) => {
   return true
 }
 
-Peer.prototype.getIdentity = (contact) => {
-  const address = `${contact.host}:${contact.port}`
-  return crypto.createHash('ripemd160').update(address).digest().toString('hex')
-}
-
 Peer.prototype.subscribe = (topic, handler) => {
   priv.handlers[topic] = handler
 }
@@ -178,39 +293,18 @@ Peer.prototype.onBind = (scope) => {
   modules = scope
 }
 
-Peer.prototype.refresh = () => {
-  for (const seed of global.Config.peers.list) {
-    const node = {
-      host: seed.ip,
-      port: seed.port,
+Peer.prototype.onBlockchainReady = () => { 
+  priv.initDHT({
+    peerPort: library.config.peerPort,
+    seedPeers: library.config.peers.list,
+    persistentPeers: library.config.peers.persistent === false ? false : true, 
+    peersDbDir: global.Config.dataDir,
+    eventHandlers: {
+      'broadcast': (msg, node) => self.onpublish(msg, node)
     }
-    node.id = self.getIdentity(node)
-    if (priv.dht) priv.dht.addNode(node)
-  }
-}
-
-Peer.prototype.onBlockchainReady = () => {
-  priv.dht = new DHT()
-  const port = global.Config.peerPort
-  priv.dht.listen(port, () => {
-    library.logger.info(`p2p server listen on ${port}`)
   })
-  priv.dht.on('node', (node) => {
-    library.logger.info(`find new node ${node.host}:${node.port}`)
-  })
-  priv.dht.on('broadcast', (msg, node) => {
-    self.onpublish(msg, node)
-  })
-  for (const seed of global.Config.peers.list) {
-    const node = {
-      host: seed.ip,
-      port: seed.port,
-    }
-    node.id = self.getIdentity(node)
-    priv.dht.addNode(node)
-  }
+  
   library.bus.message('peerReady')
-  utils.loopAsyncFunction(self.refresh.bind(self), 60 * 1000)
 }
 
 shared.getPeers = (req, cb) => {
