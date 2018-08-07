@@ -178,6 +178,18 @@ Peer.prototype.onBind = (scope) => {
   modules = scope
 }
 
+Peer.prototype.refresh = () => {
+  console.log('-----refresh')
+  for (const seed of global.Config.peers.list) {
+    const node = {
+      host: seed.ip,
+      port: seed.port,
+    }
+    node.id = self.getIdentity(node)
+    if (priv.dht) priv.dht.addNode(node)
+  }
+}
+
 Peer.prototype.onBlockchainReady = () => {
   priv.dht = new DHT()
   const port = global.Config.peerPort
@@ -199,6 +211,7 @@ Peer.prototype.onBlockchainReady = () => {
     priv.dht.addNode(node)
   }
   library.bus.message('peerReady')
+  utils.loopAsyncFunction(self.refresh.bind(self), 60 * 1000)
 }
 
 shared.getPeers = (req, cb) => {
