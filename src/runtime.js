@@ -344,5 +344,4 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[501] = 'group.activate'
   app.contractTypeMapping[502] = 'group.addMember'
   app.contractTypeMapping[503] = 'group.removeMember'
-  app.contractTypeMapping[504] = 'group.replaceMember'
 }
