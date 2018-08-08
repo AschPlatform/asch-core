@@ -426,7 +426,7 @@ Chains.prototype.onDeleteBlocksBefore = (block) => {
   })
 }
 
-Chains.prototype.onNewBlock = (block) => {
+Chains.prototype.onProcessBlock = (block) => {
   const req = {
     query: {
       topic: 'point',

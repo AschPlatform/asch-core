@@ -362,7 +362,7 @@ Blocks.prototype.processBlock = async (b, options) => {
       options.votes.signatures = options.votes.signatures.slice(0, 6)
       library.bus.message('newBlock', block, options.votes)
     }
-    modules.chains.onNewBlock(block)
+    library.bus.message('processBlock', block)
   } catch (e) {
     app.logger.error(block)
     app.logger.error('save block error: ', e)
