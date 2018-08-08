@@ -318,11 +318,13 @@ Peer.prototype.onBlockchainReady = () => {
 
 shared.getPeers = (req, cb) => {
   priv.findSeenNodesInDb((err, nodes) => {
+    let peers = []
     if (err) {
       library.logger.error('Failed to find nodes in db', err)
-      return cb(null, [])
+    } else {
+      peers = nodes
     }
-    cb(null, nodes || [])
+    cb(null, { count: peers.length, peers })
   })
 }
 
