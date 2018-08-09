@@ -73,8 +73,6 @@ const priv = {
     })
     priv.dht = dht
 
-    bootstrapNodes.forEach(n => dht.addNode(n))
-
     const port = p2pOptions.peerPort
     dht.listen(port, () => library.logger.info(`p2p server listen on ${port}`))
 
@@ -85,7 +83,7 @@ const priv = {
     })
 
     dht.on('remove', (nodeId, reason) => {
-      library.logger.info(`remove node (${nodeId}), reason: ${reason.toString()}`)
+      library.logger.info(`remove node (${nodeId}), reason: ${reason}`)
       priv.removeNode(nodeId)
     })
 
@@ -100,6 +98,8 @@ const priv = {
     if (p2pOptions.eventHandlers) Object.keys(p2pOptions.eventHandlers).forEach(eventName =>
       dht.on(eventName, p2pOptions.eventHandlers[eventName])
     )
+
+    bootstrapNodes.forEach(n => dht.addNode(n))
   },
 
   findSeenNodesInDb: (callback) => {

@@ -360,7 +360,7 @@ Transactions.prototype.tranfersToAPIV1Transactions = async ( transferArray, bloc
       const trans = transMap.get(transfer.tid)
       if ( trans !== undefined ) {
         transfer.senderPublicKey =  trans.senderPublicKey
-        transfer.signSignature = trans.secondSignature || trans.signSignature 
+        transfer.signSignature = trans.secondSignature || trans.signSignature
         transfer.message = trans.message
         transfer.fee = trans.fee
         transfer.type = trans.type
@@ -703,9 +703,9 @@ shared.addTransactionUnsigned = (req, cb) => {
       try {
         const hash = crypto.createHash('sha256').update(query.secret, 'utf8').digest()
         const keypair = ed.MakeKeypair(hash)
-        let secondKeyPair = null
+        let secondKeypair = null
         if (query.secondSecret) {
-          secondKeyPair = ed.MakeKeypair(crypto.createHash('sha256').update(query.secondSecret, 'utf8').digest())
+          secondKeypair = ed.MakeKeypair(crypto.createHash('sha256').update(query.secondSecret, 'utf8').digest())
         }
         const trs = library.base.transaction.create({
           secret: query.secret,
@@ -714,7 +714,7 @@ shared.addTransactionUnsigned = (req, cb) => {
           senderId: query.senderId || null,
           args: query.args || null,
           message: query.message || null,
-          secondKeyPair,
+          secondKeypair,
           keypair,
           mode: query.mode,
         })

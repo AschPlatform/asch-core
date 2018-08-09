@@ -117,7 +117,7 @@ Block.prototype.getBytes = (block, skipSignature) => {
   bb.writeString(block.delegate)
 
   // HARDCODE HOTFIX
-  if (block.height > 6166000 && block.prevBlockId) {
+  if (block.height > 6167000 && block.prevBlockId) {
     bb.writeString(block.prevBlockId)
   } else {
     bb.writeString('0')
