@@ -396,7 +396,7 @@ Delegates.prototype.getDelegates = (query, cb) => {
     // fixme? d === delegates[i] ???
     const d = delegates[i]
     d.rate = i + 1
-    delegates[i].approval = ((d.votes / totalSupply) * 100).toFixed(2)
+    delegates[i].approval = ((d.votes / totalSupply) * 100)
 
     let percent = 100 - (d.missedBlocks / (d.producedBlocks + d.missedBlocks) / 100)
     percent = percent || 0
