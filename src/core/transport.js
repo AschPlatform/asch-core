@@ -254,14 +254,12 @@ Transport.prototype.onPeerReady = () => {
     const prevBlockId = body.prevBlockId.toString('hex')
     if (height !== lastBlock.height + 1 || prevBlockId !== lastBlock.id) {
       library.logger.warn('New block donnot match with last block', message)
-      return library.sequence.add((cb) => {
-        modules.blocks.loadBlocksFromPeer(peer, lastBlock.id, function (err) {
-          if (err) {
-            library.logger.error('Failed to load blocks while receive unmatched block header:', err)
-          }
-          cb()
-        })
-      })
+      if (height > lastBlock.height + 5) {
+        library.logger.warn('Receive new block header from long fork')
+      } else {
+        modules.loader.syncBlocksFromPeer(peer)
+      }
+      return
     }
     library.logger.info('Receive new block header', { height, id })
     modules.peer.request('newBlock', { id }, peer, (err, result) => {

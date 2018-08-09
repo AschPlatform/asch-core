@@ -229,6 +229,30 @@ Loader.prototype.startSyncBlocks = () => {
   })
 }
 
+Loader.prototype.syncBlocksFromPeer = (peer) => {
+  library.logger.debug('syncBlocksFromPeer enter')
+  if (!priv.loaded || self.syncing()) {
+    library.logger.debug('blockchain is already syncing')
+    return
+  }
+  library.sequence.add((cb) => {
+    library.logger.debug('syncBlocksFromPeer enter sequence')
+    priv.syncing = true
+    const lastBlock = modules.blocks.getLastBlock()
+    modules.transactions.clearUnconfirmed()
+    app.sdb.rollbackBlock().then(() => {
+      modules.blocks.loadBlocksFromPeer(peer, lastBlock.id, (err) => {
+        if (err) {
+          library.logger.error('syncBlocksFromPeer error:', err)
+        }
+        priv.syncing = false
+        library.logger.debug('syncBlocksFromPeer end')
+        cb()
+      })
+    })
+  })
+}
+
 // Events
 Loader.prototype.onPeerReady = () => {
   setImmediate(function nextSync() {
