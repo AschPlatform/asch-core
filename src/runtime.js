@@ -71,14 +71,15 @@ async function loadModels(dir) {
   await app.sdb.init(schemas)
 
   // HARDCODE HOTFIX upgrade group_members schema
-  const count = await app.sdb.count('GroupMember', {})
-  if (count === 0) {
-    const gms = schemas.find((schema) => schema.modelName === 'GroupMember')
-    await app.sdb.updateSchema(gms)
-
-    const gas = schemas.find((schema) => schema.modelName === 'GroupAccount')
-    await app.sdb.updateSchema(gas)
+  async function updateSchemaIfNoRecords(name) {
+    const count = await app.sdb.count(name, {})
+    if (count === 0) {
+      const schema = schemas.find((schema) => schema.modelName === name)
+      await app.sdb.updateSchema(schema)
+    }
   }
+  await updateSchemaIfNoRecords('GroupMember')
+  await updateSchemaIfNoRecords('GatewayAccount')
 }
 
 async function loadContracts(dir) {
