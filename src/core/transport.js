@@ -253,8 +253,15 @@ Transport.prototype.onPeerReady = () => {
     const id = body.id.toString('hex')
     const prevBlockId = body.prevBlockId.toString('hex')
     if (height !== lastBlock.height + 1 || prevBlockId !== lastBlock.id) {
-      library.logger.error('New block donnot match with last block', message)
-      return
+      library.logger.warn('New block donnot match with last block', message)
+      return library.sequence.add((cb) => {
+        modules.blocks.loadBlocksFromPeer(peer, lastBlock.id, function (err) {
+          if (err) {
+            library.logger.error('Failed to load blocks while receive unmatched block header:', err)
+          }
+          cb()
+        })
+      })
     }
     library.logger.info('Receive new block header', { height, id })
     modules.peer.request('newBlock', { id }, peer, (err, result) => {
