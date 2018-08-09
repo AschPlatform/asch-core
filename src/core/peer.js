@@ -90,7 +90,7 @@ const priv = {
     })
 
     dht.on('error', (err) => {
-      library.logger.warn('dht error message', error)
+      library.logger.warn('dht error message', err)
     })
 
     dht.on('warning', (msg) => {
