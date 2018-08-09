@@ -75,6 +75,9 @@ async function loadModels(dir) {
   if (count === 0) {
     const gms = schemas.find((schema) => schema.modelName === 'GroupMember')
     await app.sdb.updateSchema(gms)
+
+    const gas = schemas.find((schema) => schema.modelName === 'GroupAccount')
+    await app.sdb.updateSchema(gas)
   }
 }
 
