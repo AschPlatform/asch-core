@@ -116,8 +116,8 @@ Block.prototype.getBytes = (block, skipSignature) => {
   bb.writeLong(block.reward)
   bb.writeString(block.delegate)
 
-  // FIXME HARDCODE HOTFIX
-  if (block.height > 0 && block.prevBlockId) {
+  // HARDCODE HOTFIX
+  if (block.height > 6166000 && block.prevBlockId) {
     bb.writeString(block.prevBlockId)
   } else {
     bb.writeString('0')
