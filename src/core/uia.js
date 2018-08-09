@@ -329,7 +329,7 @@ shared.getBalance = (req, cb) => {
   return (async () => {
     try {
       const condition = { address: req.params.address, currency: req.params.currency }
-      const balances = await app.sdb.find('Balance', condition)
+      let balances = await app.sdb.find('Balance', condition)
       if (!balances || balances.length === 0) return cb('Balance info not found')
       balances = self.toAPIV1UIABalances(balances)
       return cb(null, { balance: balances[0] })
