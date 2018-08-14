@@ -291,7 +291,7 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
   let requestor = null
   let sender = await app.sdb.load('Account', senderId)
   if (!sender) {
-    if (height > 0) throw new Error('Sender account not found')
+    if (height > 0) throw new Error('Sender account not found, or activated by receiving some XAS')
     sender = app.sdb.create('Account', {
       address: senderId,
       name: null,
