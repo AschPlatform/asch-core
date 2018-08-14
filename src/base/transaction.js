@@ -183,9 +183,9 @@ Transaction.prototype.verifyGroupSignature = async (trs, sender, bytes) => {
 }
 
 Transaction.prototype.verifyChainSignature = async (trs, sender, bytes) => {
-  const chain = await app.sdb.findOne('Chain', { condition: { address: sender.senderId } })
+  const chain = await app.sdb.findOne('Chain', { condition: { address: sender.address } })
   if (!chain) return 'Chain not found'
-  const validators = await app.sdb.findAll('ChainDelegate', { condition: { address: sender.senderId } })
+  const validators = await app.sdb.findAll('ChainDelegate', { condition: { chain: chain.name } })
   if (!validators || !validators.length) return 'Chain delegates not found'
 
   const validatorPublicKeySet = new Set()
