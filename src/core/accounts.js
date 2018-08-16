@@ -340,6 +340,8 @@ shared.getAccount = (req, cb) => {
           const unconfirmedAccount = await app.sdb.load('Account', { address: account.address })
           accountData = {
             address: account.address,
+            name: account.name,
+            role: account.role,
             unconfirmedBalance: unconfirmedAccount.xas,
             balance: account.xas,
             secondPublicKey: account.secondPublicKey,
