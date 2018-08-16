@@ -148,9 +148,9 @@ shared.getIssuerByAddress = (req, cb) => {
   }
   return (async () => {
     try {
-      const issues = await app.sdb.find('Issuer', { address: req.params.address })
+      const issuers = await app.sdb.find('Issuer', { address: req.params.address })
       if (!issuers || issuers.length === 0) return cb('Issuer not found')
-      return cb(null, { issuer: issues[0] })
+      return cb(null, { issuer: issuers[0] })
     } catch (dbErr) {
       return cb(`Failed to get issuer: ${dbErr}`)
     }
