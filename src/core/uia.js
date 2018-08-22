@@ -44,6 +44,7 @@ priv.attachApi = () => {
     'get /balances/:address': 'getBalances',
     'get /balances/:address/:currency': 'getBalance',
     'put /transfers': 'transferAsset',
+    'get /transfers/:address/:currency': 'getTransfers'
   })
 
   router.use((req, res) => {
@@ -64,8 +65,15 @@ UIA.prototype.sandboxApi = (call, args, cb) => {
 }
 
 function trimPrecision(amount, precision) {
+  if (Number(amount) === 0) return '0'
+  
   const s = amount.toString()
-  return String(Number.parseInt(s.substr(0, s.length - precision), 10))
+  const value = app.util.bignumber(s)
+  if (precision <= 10) {
+    return value.div(10** precision).toString()
+  } else {
+    return value.div(10**10).div(10 ** (precision-10)).toString()
+  }
 }
 
 UIA.prototype.toAPIV1UIABalances = (balances) => {
@@ -335,6 +343,47 @@ shared.getBalance = (req, cb) => {
       return cb(null, { balance: balances[0] })
     } catch (dbErr) {
       return cb(`Failed to get issuers: ${dbErr}`)
+    }
+  })()
+}
+
+function formatUiaTransfers( transactions ) {
+  if ( !transactions || transactions.length === 0 ) return []
+  const assetMap = new Map()
+  app.sdb.getAll('Asset').forEach(asset => assetMap.set(asset.name, self.toAPIV1Asset(asset)))
+
+  transactions.forEach( t => {
+    t.height = String(t.height)
+    t.amount = Number(t.amount)
+    t.confirmations = String(t.confirmations)
+    const uiaTransfer = t.asset.uiaTransfer
+    const asset = assetMap.get(uiaTransfer.currency)
+    t.asset.uiaTransfer = {
+      transactionId : t.id,
+      currency : uiaTransfer.currency,
+      amount: String(uiaTransfer.amount),
+      amountShow: trimPrecision(uiaTransfer.amount, asset.precision),
+      precision: asset.precision
+    }
+  })
+  return transactions
+}
+
+shared.getTransfers = (req, cb) => {
+  if (!req.params || !req.params.address || !req.params.currency) {
+    return cb(' Invalid parameters')
+  }
+
+  const condition = { recipientId: req.params.address, currency: req.params.currency }
+  return (async () => {
+    try {
+      let transfers = await app.sdb.find('Transfer', condition)
+      
+      let transactions = formatUiaTransfers(await modules.transactions.tranfersToAPIV1Transactions(transfers))
+      return cb(null, { transactions, count : transactions.length })
+    }
+    catch(err){
+      return cb(err.message)
     }
   })()
 }
