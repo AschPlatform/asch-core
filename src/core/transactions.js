@@ -540,14 +540,25 @@ shared.getTransactions = (req, cb) => {
     if (query.recipientId) {
       condition.recipientId = query.recipientId
     }
-    if (query.type !== undefined) {
-      const type = Number(query.type)
-      if (type !== 0 && type !== 14 ) return cb('invalid transaction type')
-
-      condition.currency = type === 0 ? 'XAS' : { $ne: 'XAS' }
-    }
     if (query.id) {
       condition.tid = query.id
+    }
+
+    query.type = query.type || 0
+    const type = Number(query.type)
+    if (type !== 0 && type !== 14 ) return cb('invalid transaction type')
+    condition.currency = type === 0 ? 'XAS' : { $ne: 'XAS' }
+    
+    if (query.orderBy){
+      let [orderField, sortOrder] = query.orderBy.split(':')
+      if ( orderField && sortOrder!== undefined ){
+        orderField = orderField ==='t_timestamp' ? 'timestamp': orderField
+        sortOrder = sortOrder.toUpperCase()
+        query.orderBy = {}
+        query.orderBy[orderField] = sortOrder
+      } else {
+        query.orderBy = undefined
+      }
     }
 
     (async () => {
@@ -561,7 +572,7 @@ shared.getTransactions = (req, cb) => {
           condition.height = block.height
         }
         const count = await app.sdb.count('Transfer', condition)
-        let transfer = await app.sdb.find('Transfer', condition, query.unlimited ? {} : { limit, offset })
+        let transfer = await app.sdb.find('Transfer', condition, query.unlimited ? {} : { limit, offset }, query.orderBy )
         if (!transfer) transfer = []
         block = modules.blocks.toAPIV1Block(block)
         const transactions = await self.tranfersToAPIV1Transactions(transfer, block)
