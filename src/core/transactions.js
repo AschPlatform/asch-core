@@ -159,6 +159,9 @@ Transactions.prototype.getTransactions = (req, cb) => {
   if (query.type) {
     condition.type = Number(query.type)
   }
+  if (query.recipientId) {
+    condition.recipientId = query.recipientId
+  }
 
   (async () => {
     try {
@@ -534,6 +537,9 @@ shared.getTransactions = (req, cb) => {
     if (query.senderId) {
       condition.senderId = query.senderId
     }
+    if (query.recipientId) {
+      condition.recipientId = query.recipientId
+    }
     if (query.type !== undefined) {
       const type = Number(query.type)
       if (type !== 0 && type !== 14 ) return cb('invalid transaction type')
@@ -667,6 +673,7 @@ shared.getUnconfirmedTransactions = (req, cb) => {
 function convertV1Transfer( trans ) {
   if ( trans.type === 0 && trans.amount !== undefined && trans.recipientId !== undefined ) {
     trans.type = 1
+    trans.fee = trans.fee || 10000000
     trans.args = [trans.amount, trans.recipientId]
     Reflect.deleteProperty(trans, 'amount')
     Reflect.deleteProperty(trans, 'recipientId')
@@ -676,10 +683,10 @@ function convertV1Transfer( trans ) {
 
 shared.addTransactionUnsigned = (req, cb) => {
   const query = req.body
-  if (query.type !== undefined) {
-    query.type = Number(query.type)
-    convertV1Transfer(query)
-  }
+  
+  query.type = Number(query.type || 0)
+  convertV1Transfer(query)
+
   const valid = library.scheme.validate(query, {
     type: 'object',
     properties: {
