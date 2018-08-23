@@ -159,6 +159,9 @@ Transactions.prototype.getTransactions = (req, cb) => {
   if (query.type) {
     condition.type = Number(query.type)
   }
+  if (query.recipientId) {
+    condition.recipientId = query.recipientId
+  }
 
   (async () => {
     try {
@@ -534,14 +537,28 @@ shared.getTransactions = (req, cb) => {
     if (query.senderId) {
       condition.senderId = query.senderId
     }
-    if (query.type !== undefined) {
-      const type = Number(query.type)
-      if (type !== 0 && type !== 14 ) return cb('invalid transaction type')
-
-      condition.currency = type === 0 ? 'XAS' : { $ne: 'XAS' }
+    if (query.recipientId) {
+      condition.recipientId = query.recipientId
     }
     if (query.id) {
       condition.tid = query.id
+    }
+
+    query.type = query.type || 0
+    const type = Number(query.type)
+    if (type !== 0 && type !== 14 ) return cb('invalid transaction type')
+    condition.currency = type === 0 ? 'XAS' : { $ne: 'XAS' }
+    
+    if (query.orderBy){
+      let [orderField, sortOrder] = query.orderBy.split(':')
+      if ( orderField && sortOrder!== undefined ){
+        orderField = orderField ==='t_timestamp' ? 'timestamp': orderField
+        sortOrder = sortOrder.toUpperCase()
+        query.orderBy = {}
+        query.orderBy[orderField] = sortOrder
+      } else {
+        query.orderBy = undefined
+      }
     }
 
     (async () => {
@@ -555,7 +572,7 @@ shared.getTransactions = (req, cb) => {
           condition.height = block.height
         }
         const count = await app.sdb.count('Transfer', condition)
-        let transfer = await app.sdb.find('Transfer', condition, query.unlimited ? {} : { limit, offset })
+        let transfer = await app.sdb.find('Transfer', condition, query.unlimited ? {} : { limit, offset }, query.orderBy )
         if (!transfer) transfer = []
         block = modules.blocks.toAPIV1Block(block)
         const transactions = await self.tranfersToAPIV1Transactions(transfer, block)
@@ -667,6 +684,7 @@ shared.getUnconfirmedTransactions = (req, cb) => {
 function convertV1Transfer( trans ) {
   if ( trans.type === 0 && trans.amount !== undefined && trans.recipientId !== undefined ) {
     trans.type = 1
+    trans.fee = trans.fee || 10000000
     trans.args = [trans.amount, trans.recipientId]
     Reflect.deleteProperty(trans, 'amount')
     Reflect.deleteProperty(trans, 'recipientId')
@@ -676,10 +694,10 @@ function convertV1Transfer( trans ) {
 
 shared.addTransactionUnsigned = (req, cb) => {
   const query = req.body
-  if (query.type !== undefined) {
-    query.type = Number(query.type)
-    convertV1Transfer(query)
-  }
+  
+  query.type = Number(query.type || 0)
+  convertV1Transfer(query)
+
   const valid = library.scheme.validate(query, {
     type: 'object',
     properties: {
