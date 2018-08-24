@@ -16,6 +16,7 @@ let self
 const SAVE_PEERS_INTERVAL = 1 * 60 * 1000
 const CHECK_BUCKET_OUTDATE = 1 * 60 * 1000
 const MAX_BOOTSTRAP_PEERS = 25
+const RECONNECT_SEED_INTERVAL = 10 * 1000
 
 const priv = {
   handlers: {},
@@ -100,6 +101,19 @@ const priv = {
     )
 
     bootstrapNodes.forEach(n => dht.addNode(n))
+
+    setInterval(() => {
+      priv.findSeenNodesInDb((err, peers) => {
+        if (err) {
+          library.logger.error('check peers error', err)
+          return
+        }
+        if (!peers || !peers.length) {
+          library.logger.info('no peers found, reconnect seed nodes')
+          priv.getSeedPeerNodes(p2pOptions.seedPeers).forEach(n => dht.addNode(n))
+        }
+      })
+    }, RECONNECT_SEED_INTERVAL)
   },
 
   findSeenNodesInDb: (callback) => {
