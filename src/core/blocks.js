@@ -909,7 +909,7 @@ shared.getFullBlock = (req, cb) => {
 
     return (async () => {
       try {
-        let block = undefined
+        let block
         if (query.id) {
           block = await app.sdb.getBlockById(query.id)
         } else if (query.height !== undefined) {
@@ -917,21 +917,16 @@ shared.getFullBlock = (req, cb) => {
         }
         if (!block) return cb('Block not found')
 
-        const callback = (err, ret) => {
-          if (err) return cb(err)
-          block = self.toAPIV1Block(block)
-          block.transactions = ret.transactions
-          block.numberOfTransactions = isArray(block.transactions) ? block.transactions.length : 0
-          return cb(null, { block })
-        }
-
-        req.body.blockId = block.id
-        req.body.unlimited = true
-        delete req.body.id // delete blockId
-        return modules.transactions.getTransactionsForV1(req, callback)
+        const v1Block = self.toAPIV1Block(block)
+        return modules.transactions.getBlockTransactionsForV1(v1Block, (error, transactions) => {
+          if (error) return cb(error)
+          v1Block.transactions = transactions
+          v1Block.numberOfTransactions = isArray(transactions) ? transactions.length : 0
+          return cb(null, { block: v1Block })
+        })
       } catch (e) {
         library.logger.error('Failed to find block', e)
-        return cb('Server error')
+        return cb(`Server error : ${e.message}`)
       }
     })()
   })
