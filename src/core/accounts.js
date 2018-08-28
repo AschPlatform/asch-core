@@ -1,3 +1,4 @@
+const bip39 = require('bip39')
 const crypto = require('crypto')
 const util = require('util')
 const Mnemonic = require('bitcore-mnemonic')
@@ -131,6 +132,7 @@ shared.newAccount = (req, cb) => {
 }
 
 shared.open = (req, cb) => {
+  if( !bip39.validateMnemonic( req.body.secret )) return cb("The secret format does not comply with BIP39 safety regulations")
   const { body } = req
   library.scheme.validate(body, {
     type: 'object',
