@@ -308,6 +308,7 @@ module.exports = async function runtime(options) {
     address: require('./utils/address.js'),
     bignumber: require('./utils/bignumber'),
     transactionMode: require('./utils/transaction-mode.js'),
+    lodash: require('lodash')
   }
 
   await loadModels(path.join(appDir, 'model'))
