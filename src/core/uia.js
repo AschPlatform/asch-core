@@ -44,7 +44,7 @@ priv.attachApi = () => {
     'get /balances/:address': 'getBalances',
     'get /balances/:address/:currency': 'getBalance',
     'put /transfers': 'transferAsset',
-    'get /transfers/:address/:currency': 'getTransfers'
+    'get /transfers/:address/:currency': 'getTransfers',
   })
 
   router.use((req, res) => {
@@ -66,14 +66,14 @@ UIA.prototype.sandboxApi = (call, args, cb) => {
 
 function trimPrecision(amount, precision) {
   if (Number(amount) === 0) return '0'
-  
+
   const s = amount.toString()
   const value = app.util.bignumber(s)
   if (precision <= 10) {
-    return value.div(10** precision).toString()
-  } else {
-    return value.div(10**10).div(10 ** (precision-10)).toString()
+    return value.div(10 ** precision).toString()
   }
+
+  return value.div(10 ** 10).div(10 ** (precision - 10)).toString()
 }
 
 UIA.prototype.toAPIV1UIABalances = (balances) => {
@@ -81,9 +81,14 @@ UIA.prototype.toAPIV1UIABalances = (balances) => {
   const assetMap = new Map()
   app.sdb.getAll('Asset').forEach(asset => assetMap.set(asset.name, self.toAPIV1Asset(asset)))
 
-  return balances.map(b => {
+  return balances.map((b) => {
     b.balance = String(b.balance)
-    return assetMap.has(b.currency) ? Object.assign(b, assetMap.get(b.currency)) : b})
+    const asset = assetMap.get(b.currency)
+    if (asset) {
+      b.balanceShow = trimPrecision(b.balance, asset.precision)
+    }
+    return assetMap.has(b.currency) ? Object.assign(b, asset) : b
+  })
 }
 
 UIA.prototype.toAPIV1Assets = assets => ((assets && isArray(assets) && assets.length > 0)
@@ -347,23 +352,23 @@ shared.getBalance = (req, cb) => {
   })()
 }
 
-function formatUiaTransfers( transactions ) {
-  if ( !transactions || transactions.length === 0 ) return []
+function formatUiaTransfers(transactions) {
+  if (!transactions || transactions.length === 0) return []
   const assetMap = new Map()
   app.sdb.getAll('Asset').forEach(asset => assetMap.set(asset.name, self.toAPIV1Asset(asset)))
 
-  transactions.forEach( t => {
+  transactions.forEach((t) => {
     t.height = String(t.height)
     t.amount = Number(t.amount)
     t.confirmations = String(t.confirmations)
     const uiaTransfer = t.asset.uiaTransfer
     const asset = assetMap.get(uiaTransfer.currency)
     t.asset.uiaTransfer = {
-      transactionId : t.id,
-      currency : uiaTransfer.currency,
+      transactionId: t.id,
+      currency: uiaTransfer.currency,
       amount: String(uiaTransfer.amount),
       amountShow: trimPrecision(uiaTransfer.amount, asset.precision),
-      precision: asset.precision
+      precision: asset.precision,
     }
   })
   return transactions
@@ -377,12 +382,11 @@ shared.getTransfers = (req, cb) => {
   const condition = { recipientId: req.params.address, currency: req.params.currency }
   return (async () => {
     try {
-      let transfers = await app.sdb.find('Transfer', condition)
-      
-      let transactions = formatUiaTransfers(await modules.transactions.tranfersToAPIV1Transactions(transfers))
-      return cb(null, { transactions, count : transactions.length })
-    }
-    catch(err){
+      const transfers = await app.sdb.find('Transfer', condition)
+
+      const transactions = formatUiaTransfers(await modules.transactions.tranfersToAPIV1Transactions(transfers))
+      return cb(null, { transactions, count: transactions.length })
+    } catch (err) {
       return cb(err.message)
     }
   })()
@@ -390,7 +394,7 @@ shared.getTransfers = (req, cb) => {
 
 shared.transferAsset = (req, cb) => {
   const query = req.body
-  const valid =  library.scheme.validate(query, {
+  const valid = library.scheme.validate(query, {
     type: 'object',
     properties: {
       secret: {
@@ -468,7 +472,6 @@ shared.transferAsset = (req, cb) => {
       }
     })()
   }, cb)
-
 }
 
 module.exports = UIA

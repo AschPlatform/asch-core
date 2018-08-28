@@ -351,7 +351,7 @@ Transactions.prototype.toAPIV1Transactions = (transArray, block) => {
   return []
 }
 
-Transactions.prototype.tranfersToAPIV1Transactions = async (transferArray, block) => {
+Transactions.prototype.tranfersToAPIV1Transactions = async (transferArray, block, heightAsString) => {
   if (transferArray && isArray(transferArray) && transferArray.length > 0) {
     const transMap = new Map()
     const transIds = transferArray.map(t => t.tid)
@@ -371,7 +371,7 @@ Transactions.prototype.tranfersToAPIV1Transactions = async (transferArray, block
       }
     })
 
-    return transferArray.map(t => self.toAPIV1Transaction(t, block))
+    return transferArray.map(t => self.toAPIV1Transaction(t, block, heightAsString))
   }
   return []
 }
@@ -444,13 +444,14 @@ function toV1TypeAndArgs(type, args, transactionId) {
   return Object.assign(result, { type: v1Type, args: v1Args, argsNew: args })
 }
 
-Transactions.prototype.toAPIV1Transaction = (trans, block) => {
+Transactions.prototype.toAPIV1Transaction = (trans, block, heightAsString) => {
   if (!trans) return trans
 
   const signArray = trans.signatures
+  const confirmations = modules.blocks.getLastBlock().height - trans.height
   const resultTrans = {
     id: trans.tid,
-    height: trans.height,
+    height: heightAsString ? String(trans.height) : trans.height,
     timestamp: trans.timestamp,
     senderPublicKey: trans.senderPublicKey,
     senderId: trans.senderId,
@@ -461,7 +462,7 @@ Transactions.prototype.toAPIV1Transaction = (trans, block) => {
     recipientId: '',
     amount: 0,
     asset: {},
-    confirmations: modules.blocks.getLastBlock().height - trans.height,
+    confirmations: heightAsString ? String(confirmations) : confirmations,
 
     type: -1,
     signature: signArray.length === 1 ? signArray[0] : null,
@@ -555,10 +556,11 @@ shared.getTransactions = (req, cb) => {
       condition.tid = query.id
     }
 
-    query.type = query.type || 0
-    const type = Number(query.type)
-    if (type !== 0 && type !== 14) return cb('invalid transaction type')
-    condition.currency = type === 0 ? 'XAS' : { $ne: 'XAS' }
+    if (query.type !== undefined) {
+      const type = Number(query.type)
+      if (type !== 0 && type !== 14) return cb('invalid transaction type')
+      condition.currency = type === 0 ? 'XAS' : { $ne: 'XAS' }
+    }
 
     if (query.orderBy) {
       let [orderField, sortOrder] = query.orderBy.split(':')
@@ -586,7 +588,7 @@ shared.getTransactions = (req, cb) => {
         let transfer = await app.sdb.find('Transfer', condition, query.unlimited ? {} : { limit, offset }, query.orderBy)
         if (!transfer) transfer = []
         block = modules.blocks.toAPIV1Block(block)
-        const transactions = await self.tranfersToAPIV1Transactions(transfer, block)
+        const transactions = await self.tranfersToAPIV1Transactions(transfer, block, true)
         return cb(null, { transactions, count })
       } catch (e) {
         app.logger.error('Failed to get transactions', e)
