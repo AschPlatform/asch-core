@@ -582,7 +582,7 @@ shared.getVoters = (req, cb) => {
 shared.getDelegates = (req, cb) => {
   const query = req.body
   const offset = Number(query.offset || 0)
-  const limit = Number(query.limit || 0)
+  const limit = Number(query.limit || 10)
   if (Number.isNaN(limit) || Number.isNaN(offset)) {
     return cb('Invalid params')
   }
