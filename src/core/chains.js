@@ -493,14 +493,19 @@ shared.getDeposits = (req, cb) => (async () => {
 })()
 
 shared.submitOutTransfer = (req, cb) => {
-  const trs = req.body
+  const transaction = req.body
+
   library.sequence.add((done) => {
-    if (modules.transactions.hasUnconfirmed(trs)) {
-      return done('Already exists')
+    library.logger.info(`Received transaction ${transaction.id} from http client`)
+    return modules.transactions.processUnconfirmedTransaction(transaction, done)
+  }, (err) => {
+    if (err) {
+      library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
+      const errMsg = err.message ? err.message : err.toString()
+    } else {
+      library.bus.message('unconfirmedTransaction', transaction)
     }
-    library.logger.info(`Submit outtransfer transaction ${trs.id} from chain ${req.chain}`)
-    return modules.transactions.processUnconfirmedTransaction(trs, done)
-  }, cb)
+  })
 }
 
 shared.registerInterface = (options, cb) => {
