@@ -4,13 +4,17 @@ module.exports = {
     const len = trs.args[0].length
     if (len === 2) {
       return 200
-    } else if (len === 3) {
+    }
+    if (len === 3) {
       return 100
-    } else if (len === 4) {
+    }
+    if (len === 4) {
       return 80
-    } else if (len === 5) {
+    }
+    if (len === 5) {
       return 40
-    } else if (len <= 10) {
+    }
+    if (len <= 10) {
       return 10
     }
     return 1
@@ -25,6 +29,9 @@ module.exports = {
   10: () => 100,
   11: () => 0.1,
   12: () => 0.1,
+  20: () => 0.1,
+  21: () => 0.1,
+  22: () => 0.1,
   100: () => 100,
   101: () => 500,
   102: () => 0.1,

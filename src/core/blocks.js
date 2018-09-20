@@ -10,6 +10,7 @@ const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const addressHelper = require('../utils/address.js')
 const transactionMode = require('../utils/transaction-mode.js')
+const featureSwitch = require('../utils/feature-switch.js')
 
 let genesisblock = null
 let modules
@@ -147,23 +148,57 @@ Blocks.prototype.getBlock = (filter, cb) => {
 Blocks.prototype.setLastBlock = (block) => {
   priv.lastBlock = block
   if (global.Config.netVersion === 'mainnet') {
-    global.featureSwitch.enableLongId = priv.lastBlock.height >= 1700000
-    global.featureSwitch.enable1_3_0 = priv.lastBlock.height >= 2920000
-    global.featureSwitch.enableClubBonus = priv.lastBlock.height >= 3320000
-    global.featureSwitch.enableMoreLockTypes = global.featureSwitch.enableClubBonus
-    global.featureSwitch.enableLockReset = priv.lastBlock.height >= 4290000
+    // global.featureSwitch.enableLongId = priv.lastBlock.height >= 1700000
+    // global.featureSwitch.enable1_3_0 = priv.lastBlock.height >= 2920000
+    // global.featureSwitch.enableClubBonus = priv.lastBlock.height >= 3320000
+    // global.featureSwitch.enableMoreLockTypes = global.featureSwitch.enableClubBonus
+    // global.featureSwitch.enableLockReset = priv.lastBlock.height >= 4290000
+    if (priv.lastBlock.height >= 1700000) {
+      featureSwitch.enable('enableLongId')
+    }
+    if (priv.lastBlock.height >= 2920000) {
+      featureSwitch.enable('enable1_3_0')
+    }
+    if (priv.lastBlock.height >= 3320000) {
+      featureSwitch.enable('enableClubBonus')
+    }
+    if (featureSwitch.isEnabled('enableClubBonus')) {
+      featureSwitch.enable('enableMoreLockTypes')
+    }
+    if (priv.lastBlock.height >= 4290000) {
+      featureSwitch.enable('enableLockReset')
+    }
+    // FIXME: this height nees adjustment
+    if (priv.lastBlock.height >= 6666666) {
+      featureSwitch.enable('enableBCH')
+    }
   } else {
-    global.featureSwitch.enableLongId = true
-    global.featureSwitch.enable1_3_0 = true
-    global.featureSwitch.enableClubBonus = (!!global.state.clubInfo)
-    global.featureSwitch.enableMoreLockTypes = true
-    global.featureSwitch.enableLockReset = true
+    // global.featureSwitch.enableLongId = true
+    // global.featureSwitch.enable1_3_0 = true
+    // global.featureSwitch.enableClubBonus = (!!global.state.clubInfo)
+    // global.featureSwitch.enableMoreLockTypes = true
+    // global.featureSwitch.enableLockReset = true
+    featureSwitch.enable('enableLongId')
+    featureSwitch.enable('enable1_3_0')
+    if (global.state.clubInfo) {
+      featureSwitch.enable('enableClubBonus')
+    } else {
+      featureSwitch.disable('enableClubBonus')
+    }
+
+    featureSwitch.enable('enableMoreLockTypes')
+    featureSwitch.enable('enableLockReset')
+    featureSwitch.enable('enableBCH')
   }
-  global.featureSwitch.fixVoteNewAddressIssue = true
+  // global.featureSwitch.fixVoteNewAddressIssue = true
+  featureSwitch.enable('fixVoteNewAddressIssue')
   if (global.Config.netVersion === 'mainnet' && priv.lastBlock.height < 1854000) {
-    global.featureSwitch.fixVoteNewAddressIssue = false
+    // global.featureSwitch.fixVoteNewAddressIssue = false
+    featureSwitch.disable('fixVoteNewAddressIssue')
   }
-  global.featureSwitch.enableUIA = global.featureSwitch.enableLongId
+  // global.featureSwitch.enableUIA = global.featureSwitch.enableLongId
+  // copyFeature: (srcFeature, targetFeature): srcFeature ---> targetFeature
+  featureSwitch.copyFeature('enableLongId', 'enableUIA')
 }
 
 Blocks.prototype.getLastBlock = () => priv.lastBlock
@@ -410,7 +445,7 @@ Blocks.prototype.applyRound = async (block) => {
 
   let transFee = 0
   for (const t of block.transactions) {
-    if (transactionMode.isDirectMode(t.mode)) {
+    if (transactionMode.isDirectMode(t.mode) && t.fee >= 0) {
       transFee += t.fee
     }
   }
@@ -643,10 +678,10 @@ Blocks.prototype.onReceiveBlock = (block, votes) => {
 
   library.sequence.add((cb) => {
     if (block.prevBlockId === priv.lastBlock.id && priv.lastBlock.height + 1 === block.height) {
-      library.logger.info(`Received new block id: ${block.id}` +
-        ` height: ${block.height}` +
-        ` round: ${modules.round.calc(modules.blocks.getLastBlock().height)}` +
-        ` slot: ${slots.getSlotNumber(block.timestamp)}`)
+      library.logger.info(`Received new block id: ${block.id}`
+        + ` height: ${block.height}`
+        + ` round: ${modules.round.calc(modules.blocks.getLastBlock().height)}`
+        + ` slot: ${slots.getSlotNumber(block.timestamp)}`)
       return (async () => {
         const pendingTrsMap = new Map()
         try {

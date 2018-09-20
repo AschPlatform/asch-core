@@ -3,6 +3,7 @@ const ByteBuffer = require('bytebuffer')
 const ed = require('../utils/ed.js')
 const BlockStatus = require('../utils/block-status.js')
 const constants = require('../utils/constants.js')
+const featureSwitch = require('../utils/feature-switch.js')
 
 // Private methods
 const prv = {}
@@ -236,7 +237,8 @@ Block.prototype.objectNormalize = (block) => {
 Block.prototype.getId = block => self.getId2(block)
 
 Block.prototype.getId_old = (block) => {
-  if (global.featureSwitch.enableLongId) {
+  // if (global.featureSwitch.enableLongId) {
+  if (featureSwitch.isEnabled('enableLongId')) {
     return self.getId2(block)
   }
   const hash = crypto.createHash('sha256').update(self.getBytes(block)).digest()
