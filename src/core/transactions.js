@@ -274,7 +274,7 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     throw new Error('Missing sender address')
   }
 
-  if (!transaction.signatures || trs.signatures.length === 0) {
+  if (!transaction.signatures || transaction.signatures.length === 0) {
     throw new Error('Signatures are not provided')
   }
 
