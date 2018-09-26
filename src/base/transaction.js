@@ -225,8 +225,8 @@ Transaction.prototype.verify = async (context) => {
     return 'Fee not enough'
   }
   if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
-    const bancor = new Bancor('BCH', 'XAS')
-    const result = bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
+    const bancor = await Bancor.create('BCH', 'XAS')
+    const result = await bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
     if (result.sourceAmount > Math.abs(trs.fee)) {
       return 'Fee exceeds gas limit'
     }
@@ -304,11 +304,11 @@ Transaction.prototype.apply = async (context) => {
   }
 
   if (block.height !== 0) {
-    const bancor = new Bancor('BCH', 'XAS')
+    const bancor = await Bancor.create('BCH', 'XAS')
     if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
       const requestorFee = 20000000
       if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
-        const needsBCH = bancor.exchangeByTarget('BCH', 'XAS', requestorFee, false)
+        const needsBCH = await bancor.exchangeByTarget('BCH', 'XAS', requestorFee, false)
         if (needsBCH.sourceAmount > Math.abs(trs.fee)) throw new Error('Fee exceeds gas limit')
         const balance = app.balances.get(requestor.address, 'BCH')
         if (balance < needsBCH.sourceAmount) throw new Error('Insufficient requestor balance')
@@ -337,7 +337,7 @@ Transaction.prototype.apply = async (context) => {
       const feeCalculator = feeCalculators[trs.type]
       if (!feeCalculator) throw new Error('Fee calculator not found')
       const minFee = 100000000 * feeCalculator(trs)
-      const result = bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
+      const result = await bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
       if (result.sourceAmount > Math.abs(trs.fee)) throw new Error('Fee exceeds gas limit')
       const balance = app.balances.get(sender.address, 'BCH')
       if (balance < result.sourceAmount) throw new Error('Insufficient sender balance')
