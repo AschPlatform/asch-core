@@ -7,9 +7,7 @@ const addressHelper = require('../utils/address.js')
 const feeCalculators = require('../utils/calculate-fee.js')
 const transactionMode = require('../utils/transaction-mode.js')
 const featureSwitch = require('../utils/feature-switch.js')
-const Bancor = require('../utils/bancor.js').Bancor
-
-const bancor = new Bancor('BCH', 'XAS')
+const Bancor = require('../utils/bancor.js')
 
 let self
 // Constructor
@@ -227,6 +225,7 @@ Transaction.prototype.verify = async (context) => {
     return 'Fee not enough'
   }
   if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
+    const bancor = new Bancor('BCH', 'XAS')
     const result = bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
     if (result.sourceAmount > Math.abs(trs.fee)) {
       return 'Fee exceeds gas limit'
@@ -305,6 +304,7 @@ Transaction.prototype.apply = async (context) => {
   }
 
   if (block.height !== 0) {
+    const bancor = new Bancor('BCH', 'XAS')
     if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
       const requestorFee = 20000000
       if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {

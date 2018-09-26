@@ -7,9 +7,7 @@ module.exports = {
   disable: (feature) => {
     featureMap.set(feature, 0)
   },
-  isEnabled: (feature) => {
-    featureMap.get(feature)
-  },
+  isEnabled: feature => featureMap.get(feature),
   copyFeature: (srcFeature, targetFeature) => {
     featureMap.set(targetFeature, featureMap.get(srcFeature))
   },

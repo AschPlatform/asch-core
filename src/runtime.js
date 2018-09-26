@@ -270,12 +270,8 @@ module.exports = async function runtime(options) {
   }
 
   app.gateway = {
-    createMultisigAddress: (gateway, m, accounts) => {
-      gatewayLib.getGatewayUtil(gateway).createMultisigAccount(m, accounts)
-    },
-    isValidAddress: (gateway, address) => {
-      gatewayLib.getGatewayUtil(gateway).isValidAddress(address)
-    },
+    createMultisigAddress: (gateway, m, accounts) => gatewayLib.getGatewayUtil(gateway).createMultisigAccount(m, accounts),
+    isValidAddress: (gateway, address) => gatewayLib.getGatewayUtil(gateway).isValidAddress(address),
   }
 
   app.isCurrentBookkeeper = addr => modules.delegates.getBookkeeperAddresses().has(addr)
@@ -313,6 +309,8 @@ module.exports = async function runtime(options) {
     lodash: require('lodash'),
     bancor: require('./utils/bancor.js'),
     slots: require('./utils/slots.js'),
+    constants: require('./utils/constants.js'),
+    gateway: require('./utils/gateway.js'),
   }
 
   await loadModels(path.join(appDir, 'model'))
@@ -358,6 +356,9 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[404] = 'gateway.submitWithdrawalTransaction'
   app.contractTypeMapping[405] = 'gateway.submitWithdrawalSignature'
   app.contractTypeMapping[406] = 'gateway.submitOutTransactionId'
+  app.contractTypeMapping[407] = 'gateway.depositBail'
+  app.contractTypeMapping[408] = 'gateway.withdrawalBail'
+  app.contractTypeMapping[409] = 'gateway.claim'
 
   app.contractTypeMapping[500] = 'group.vote'
   app.contractTypeMapping[501] = 'group.activate'

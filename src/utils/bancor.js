@@ -120,3 +120,5 @@ class Bancor {
     }
   }
 }
+
+module.exports = Bancor
