@@ -8,7 +8,7 @@ class Bancor {
   static async create(money, stock, owner) {
     const bancor = new Bancor(money, stock, owner)
     const result = await bancor._init()
-    if (!result) {
+    if (result === -1) {
       return null
     }
     return bancor
@@ -43,7 +43,7 @@ class Bancor {
     }
 
     // if (!bancor) throw new Error('bancor is not found')
-    if (!bancor) return null
+    if (!bancor) return -1
     this._bancor = bancor
     this._owner = bancor.owner
     this._moneyCw = bancor.moneyCw
@@ -60,6 +60,7 @@ class Bancor {
     this._balanceMap.set(this._stock, this._stockBalance)
     this._cwMap.set(this._money, this._moneyCw)
     this._cwMap.set(this._stock, this._stockCw)
+    return 1
   }
 
   async buyRT(currency, amount) {
