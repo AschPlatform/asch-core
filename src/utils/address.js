@@ -78,7 +78,9 @@ module.exports = {
   },
 
   isNormalAddress(address) {
-    return this.isBase58CheckAddress(address) && address[0] === NORMAL_PREFIX
+    const result = (this.isBase58CheckAddress(address) && address[0] === NORMAL_PREFIX)
+                  || (this.isBase58CheckAddress(address) && address[0] === LOCK_PREFIX)
+    return result
   },
 
   isGroupAddress(address) {

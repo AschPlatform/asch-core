@@ -7,7 +7,10 @@ class Bancor {
 
   static async create(money, stock, owner) {
     const bancor = new Bancor(money, stock, owner)
-    await bancor._init()
+    const result = await bancor._init()
+    if (!result) {
+      return null
+    }
     return bancor
   }
 
@@ -39,7 +42,8 @@ class Bancor {
       )
     }
 
-    if (!bancor) throw new Error('bancor is not found')
+    // if (!bancor) throw new Error('bancor is not found')
+    if (!bancor) return null
     this._bancor = bancor
     this._owner = bancor.owner
     this._moneyCw = bancor.moneyCw
@@ -117,15 +121,15 @@ class Bancor {
     const needsRT = this.getPriceFromCurrencyToRT(targetCurrency) * targetAmount
     const needsSrcAmount = this.getPriceFromRTToCurrency(sourceCurrency) * needsRT
     if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, needsSrcAmount * 1.2)
-      const actualTargetAmount = await this.sellRT(targetCurrency, actualRT)
+      const actualRT = await this.buyRT(sourceCurrency, Math.ceil(needsSrcAmount * 1.2))
+      const actualTargetAmount = await this.sellRT(targetCurrency, Math.ceil(actualRT))
       return {
-        sourceAmount: needsSrcAmount * 1.2,
+        sourceAmount: Math.ceil(needsSrcAmount * 1.2),
         targetAmount: Math.floor(actualTargetAmount),
       }
     }
     return {
-      sourceAmount: needsSrcAmount,
+      sourceAmount: Math.ceil(needsSrcAmount),
       targetAmount,
     }
   }

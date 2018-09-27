@@ -226,6 +226,7 @@ Transaction.prototype.verify = async (context) => {
   }
   if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
     const bancor = await Bancor.create('BCH', 'XAS')
+    if (!bancor) return 'Bancor is not ready'
     const result = await bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
     if (result.sourceAmount > Math.abs(trs.fee)) {
       return 'Fee exceeds gas limit'
@@ -308,6 +309,7 @@ Transaction.prototype.apply = async (context) => {
     if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
       const requestorFee = 20000000
       if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
+        if (!bancor) return 'Bancor is not ready'
         const needsBCH = await bancor.exchangeByTarget('BCH', 'XAS', requestorFee, false)
         if (needsBCH.sourceAmount > Math.abs(trs.fee)) throw new Error('Fee exceeds gas limit')
         const balance = app.balances.get(requestor.address, 'BCH')
@@ -331,7 +333,7 @@ Transaction.prototype.apply = async (context) => {
         app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
         app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
       }
-      return
+      return null
     }
     if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
       const feeCalculator = feeCalculators[trs.type]
