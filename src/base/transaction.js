@@ -319,10 +319,10 @@ Transaction.prototype.apply = async (context) => {
         app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
         app.sdb.create('Gasconsumption',
           {
-            bancorOwner: bancor.owner,
-            stock: bancor.stock,
-            money: bancor.money,
-            trsId: trs.id,
+            bancorOwner: bancor._owner,
+            stock: bancor._stock,
+            money: bancor._money,
+            trsid: trs.id,
             height: block.height,
             gasUsed: needsBCH.sourceAmount,
           })
@@ -347,10 +347,10 @@ Transaction.prototype.apply = async (context) => {
       app.balances.increase('ARepurchaseAddr1234567890123456789', 'BCH', result.sourceAmount)
       app.sdb.create('Gasconsumption',
         {
-          bancorOwner: bancor.owner,
-          stock: bancor.stock,
-          money: bancor.money,
-          trsId: trs.id,
+          bancorOwner: bancor._owner,
+          stock: bancor._stock,
+          money: bancor._money,
+          trsid: trs.id,
           height: block.height,
           gasUsed: result.sourceAmount,
         })
@@ -365,7 +365,6 @@ Transaction.prototype.apply = async (context) => {
   if (error) {
     throw new Error(error)
   }
-  // trs.executed = 1
 }
 
 Transaction.prototype.objectNormalize = (trs) => {
