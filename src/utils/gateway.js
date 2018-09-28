@@ -19,6 +19,7 @@ module.exports = {
 
   async getGatewayMember(gatewayName, memberAddr) {
     const m = await app.sdb.findOne('GatewayMember', { condition: { gateway: gatewayName, address: memberAddr } })
+    if (!m) return null
     const addr = addressHelper.generateLockedAddress(memberAddr)
     const account = await app.sdb.findOne('Account', { condition: { address: addr } })
     if (account) {
@@ -31,11 +32,13 @@ module.exports = {
 
   async getElectedGatewayMember(gatewayName) {
     const members = await this.getAllGatewayMember(gatewayName)
+    if (!members) return null
     return members.filter(m => m.elected === 1)
   },
 
   async getMinimumBailMember(gatewayName) {
     const members = await this.getElectedGatewayMember(gatewayName)
+    if (!members) return null
     members.sort((m1, m2) => {
       if (m1.bail < m2.bail) {
         return -1
@@ -50,6 +53,7 @@ module.exports = {
 
   async getBailTotalAmount(gatewayName) {
     const member = await this.getMinimumBailMember(gatewayName)
+    if (!member) return null
     return member.bail * (Math.floor(members.length / 2) + 1)
   },
 
