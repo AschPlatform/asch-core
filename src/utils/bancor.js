@@ -42,7 +42,6 @@ class Bancor {
       )
     }
 
-    // if (!bancor) throw new Error('bancor is not found')
     if (!bancor) return -1
     this._bancor = bancor
     this._owner = bancor.owner
@@ -63,6 +62,7 @@ class Bancor {
     return 1
   }
 
+  // Use connected token to buy relay token
   async buyRT(currency, amount) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     if (this._balanceMap.get(currency) === undefined || this._cwMap.get(currency) === undefined) throw new Error('cw or balance is not found')
@@ -70,7 +70,6 @@ class Bancor {
     const T = amount
     const C = this._balanceMap.get(currency)
     const F = this._cwMap.get(currency)
-    // const E = R * ((Math.pow(1 + T / C, F) - 1))
     const E = R * (((1 + T / C) ** F) - 1)
     this._balanceMap.set(currency, this._balanceMap.get(currency) + T)
     this._supply += E
@@ -82,6 +81,7 @@ class Bancor {
     return E
   }
 
+  // Sell relay token to get assigned connected token
   async sellRT(currency, amount) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     if (this._balanceMap.get(currency) === undefined || this._cwMap.get(currency) === undefined) throw new Error('cw or balance is not found')
@@ -89,7 +89,6 @@ class Bancor {
     const C = this._balanceMap.get(currency)
     const F = 1 / this._cwMap.get(currency)
     const E = amount
-    // const T = C * (Math.pow(1 + E / R, F) - 1)
     const T = C * (((1 + E / R) ** F) - 1)
     this._balanceMap.set(currency, this._balanceMap.get(currency) - T)
     this._supply -= amount
@@ -101,22 +100,22 @@ class Bancor {
     return T
   }
 
+  // Get relay token price from one connected token
   getPriceFromCurrencyToRT(currency) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    // return this._supply
-    // * ((Math.pow(1 + 1 / this._balanceMap.get(currency), this._cwMap.get(currency)) - 1))
     return this._supply * ((((1 + 1 / this._balanceMap.get(currency))
                               ** this._cwMap.get(currency)) - 1))
   }
 
+  // Get connected token price from one relay token
   getPriceFromRTToCurrency(currency) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    // return this._balanceMap.get(currency)
-    //  * ((Math.pow(1 + 1 / this._supply, 1 / this._cwMap.get(currency)) - 1))
     return this._balanceMap.get(currency)
        * ((((1 + 1 / this._supply) ** (1 / this._cwMap.get(currency))) - 1))
   }
 
+  // Exchange based on the amount of target currency
+  // return values are how much source currency was used and target amount
   async exchangeByTarget(sourceCurrency, targetCurrency, targetAmount, isExchange) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     const needsRT = this.getPriceFromCurrencyToRT(targetCurrency) * targetAmount
@@ -135,6 +134,8 @@ class Bancor {
     }
   }
 
+  // Exchange based on the amount of source currency
+  // return values are source amount and how much target currency was get
   async exchangeBySource(sourceCurrency, targetCurrency, sourceAmount, isExchange) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     const getsRT = this.getPriceFromCurrencyToRT(sourceCurrency) * sourceAmount

@@ -58,8 +58,8 @@ module.exports = {
     return member.bail * (Math.floor(members.length / 2) + 1)
   },
 
-  async getAmountByCurrency(currency) {
-    const gwCurrency = await app.sdb.findOne('GatewayCurrency', { condition: { symbol: currency } })
+  async getAmountByCurrency(gateway, symbol) {
+    const gwCurrency = await app.sdb.findOne('GatewayCurrency', { condition: { gateway, symbol } })
     if (gwCurrency) {
       return gwCurrency.quantity
     }
@@ -68,9 +68,9 @@ module.exports = {
 
   async getThreshold(gatewayName, memberAddr) {
     // Calculate Ap / B
-    const gwCurrency = await app.sdb.findOne('GatewayCurrency', { condition: { gateway: gatewayName } })
+    const gwCurrency = await app.sdb.findAll('GatewayCurrency', { condition: { gateway: gatewayName }, limit: 1 })
     const bancor = await Bancor.create(gwCurrency.symbol, 'XAS')
-    const allBCH = await this.getAmountByCurrency(gwCurrency.symbol)
+    const allBCH = await this.getAmountByCurrency(gatewayName, gwCurrency.symbol)
     const totalBail = await this.getBailTotalAmount(gatewayName)
     let ratio = -1
     let needSupply = 0
