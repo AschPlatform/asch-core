@@ -75,6 +75,7 @@ module.exports = {
     let ratio = -1
     let needSupply = 0
     let minimumBail = 0
+    let currentBail = 0
     if (!bancor) {
       return { ratio, needSupply }
     }
@@ -90,9 +91,10 @@ module.exports = {
       if (member && minimumBail > member.bail) {
         needSupply = minimumBail - member.bail
       }
+      currentBail = member.bail
     }
 
-    return { ratio, needSupply }
+    return { ratio, currentBail, needSupply }
   },
 
   async getMaximumBailWithdrawl(gatewayName, memberAddr) {
