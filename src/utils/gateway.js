@@ -10,6 +10,7 @@ module.exports = {
       const account = await app.sdb.findOne('Account', { condition: { address: addr } })
       if (account) {
         member.bail = account.xas
+        member.name = account.name
       } else {
         member.bail = 0
       }
@@ -58,6 +59,15 @@ module.exports = {
       return 0
     })
     return members[0]
+  },
+
+  async getAllBailAmount(gatewayName) {
+    const members = await this.getElectedGatewayMember(gatewayName)
+    let amount = 0
+    members.forEach((member) => {
+      amount += member.bail
+    })
+    return amount
   },
 
   async getBailTotalAmount(gatewayName) {
