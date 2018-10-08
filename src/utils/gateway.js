@@ -5,15 +5,24 @@ const addressHelper = require('../utils/address.js')
 module.exports = {
   async getAllGatewayMember(gatewayName) {
     const members = await app.sdb.findAll('GatewayMember', { condition: { gateway: gatewayName } })
-    await members.forEach(async (element, index, array) => {
-      const addr = addressHelper.generateLockedAddress(element.address)
+    await Promise.all(members.map(async (member) => {
+      const addr = addressHelper.generateLockedAddress(member.address)
       const account = await app.sdb.findOne('Account', { condition: { address: addr } })
       if (account) {
-        array[index].bail = account.xas
+        member.bail = account.xas
       } else {
-        array[index].bail = 0
+        member.bail = 0
       }
-    })
+    }))
+    // await members.forEach(async (element, index, array) => {
+    //   const addr = addressHelper.generateLockedAddress(element.address)
+    //   const account = await app.sdb.findOne('Account', { condition: { address: addr } })
+    //   if (account) {
+    //     array[index].bail = account.xas
+    //   } else {
+    //     array[index].bail = 0
+    //   }
+    // })
     return members
   },
 
