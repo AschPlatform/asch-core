@@ -52,6 +52,7 @@ module.exports = {
   },
 
   async getBailTotalAmount(gatewayName) {
+    const members = await this.getElectedGatewayMember(gatewayName)
     const member = await this.getMinimumBailMember(gatewayName)
     if (!member) return null
     return member.bail * (Math.floor(members.length / 2) + 1)
@@ -68,7 +69,6 @@ module.exports = {
   async getThreshold(gatewayName, memberAddr) {
     // Calculate Ap / B
     const gwCurrency = await app.sdb.findOne('GatewayCurrency', { condition: { gateway: gatewayName } })
-    // const  = new Bancor(gwCurrency.symbol, 'XAS')
     const bancor = await Bancor.create(gwCurrency.symbol, 'XAS')
     const allBCH = await this.getAmountByCurrency(gwCurrency.symbol)
     const totalBail = await this.getBailTotalAmount(gatewayName)
