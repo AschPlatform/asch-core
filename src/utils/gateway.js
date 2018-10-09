@@ -7,23 +7,17 @@ module.exports = {
     const members = await app.sdb.findAll('GatewayMember', { condition: { gateway: gatewayName } })
     await Promise.all(members.map(async (member) => {
       const addr = addressHelper.generateLockedAddress(member.address)
-      const account = await app.sdb.findOne('Account', { condition: { address: addr } })
-      if (account) {
-        member.bail = account.xas
-        member.name = account.name
+      const newAccount = await app.sdb.findOne('Account', { condition: { address: addr } })
+      if (newAccount) {
+        member.bail = newAccount.xas
       } else {
         member.bail = 0
       }
+      const srcAccount = await app.sdb.findOne('Account', { condition: { address: member.address } })
+      if (srcAccount) {
+        member.name = srcAccount.name
+      }
     }))
-    // await members.forEach(async (element, index, array) => {
-    //   const addr = addressHelper.generateLockedAddress(element.address)
-    //   const account = await app.sdb.findOne('Account', { condition: { address: addr } })
-    //   if (account) {
-    //     array[index].bail = account.xas
-    //   } else {
-    //     array[index].bail = 0
-    //   }
-    // })
     return members
   },
 
@@ -119,6 +113,7 @@ module.exports = {
 
   async getMaximumBailWithdrawl(gatewayName, memberAddr) {
     const m = await this.getGatewayMember(gatewayName, memberAddr)
+    if (!m) return 0
     const addr = addressHelper.generateLockedAddress(memberAddr)
     const lockAccount = await app.sdb.load('Account', addr)
     if (m.elected === 0) {
