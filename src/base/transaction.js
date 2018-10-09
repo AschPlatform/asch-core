@@ -313,7 +313,7 @@ Transaction.prototype.apply = async (context) => {
         const needsBCH = await bancor.exchangeByTarget('BCH', 'XAS', requestorFee, false)
         if (needsBCH.sourceAmount > Math.abs(trs.fee)) throw new Error('Fee exceeds gas limit')
         const balance = app.balances.get(requestor.address, 'BCH')
-        if (balance < needsBCH.sourceAmount) throw new Error('Insufficient requestor balance')
+        if (balance.lt(needsBCH.sourceAmount)) throw new Error('Insufficient requestor balance')
         app.balances.decrease(requestor.address, 'BCH', needsBCH.sourceAmount)
         app.balances.increase('ARepurchaseAddr1234567890123456789', 'BCH', needsBCH.sourceAmount)
         app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
@@ -342,7 +342,7 @@ Transaction.prototype.apply = async (context) => {
       const result = await bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
       if (result.sourceAmount > Math.abs(trs.fee)) throw new Error('Fee exceeds gas limit')
       const balance = app.balances.get(sender.address, 'BCH')
-      if (balance < result.sourceAmount) throw new Error('Insufficient sender balance')
+      if (balance.lt(result.sourceAmount)) throw new Error('Insufficient sender balance')
       app.balances.decrease(sender.address, 'BCH', result.sourceAmount)
       app.balances.increase('ARepurchaseAddr1234567890123456789', 'BCH', result.sourceAmount)
       app.sdb.create('Gasconsumption',
