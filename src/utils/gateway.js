@@ -105,7 +105,9 @@ module.exports = {
       if (member && minimumBail > member.bail) {
         needSupply = minimumBail - member.bail
       }
-      currentBail = member.bail
+      if (member) {
+        currentBail = member.bail
+      }
     }
 
     return { ratio, currentBail, needSupply }
