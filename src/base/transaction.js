@@ -9,8 +9,6 @@ const transactionMode = require('../utils/transaction-mode.js')
 const featureSwitch = require('../utils/feature-switch.js')
 const Bancor = require('../utils/bancor.js')
 
-const repurchaseAddr = 'ARepurchaseAddr1234567890123456789'
-
 let self
 // Constructor
 function Transaction(scope) {
@@ -317,7 +315,7 @@ Transaction.prototype.apply = async (context) => {
         const balance = app.balances.get(requestor.address, 'BCH')
         if (balance.lt(needsBCH.sourceAmount)) throw new Error('Insufficient requestor balance')
         app.balances.decrease(requestor.address, 'BCH', needsBCH.sourceAmount)
-        app.balances.increase(repurchaseAddr, 'BCH', needsBCH.sourceAmount)
+        app.balances.increase(app.repurchaseAddr, 'BCH', needsBCH.sourceAmount)
         app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
         app.sdb.create('Gasconsumption',
           {
@@ -346,7 +344,7 @@ Transaction.prototype.apply = async (context) => {
       const balance = app.balances.get(sender.address, 'BCH')
       if (balance.lt(result.sourceAmount)) throw new Error('Insufficient sender balance')
       app.balances.decrease(sender.address, 'BCH', result.sourceAmount)
-      app.balances.increase(repurchaseAddr, 'BCH', result.sourceAmount)
+      app.balances.increase(app.repurchaseAddr, 'BCH', result.sourceAmount)
       app.sdb.create('Gasconsumption',
         {
           bancorOwner: bancor._owner,

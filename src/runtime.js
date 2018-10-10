@@ -178,6 +178,10 @@ module.exports = async function runtime(options) {
     hooks: {},
     custom: {},
     logger: options.logger,
+    repurchaseAddr: 'ARepurchaseAddr1234567890123456789',
+    buringPoolAddr: 'ABuringPoolAddr1234567890123456789',
+    storeClaimedAddr: 'AStoreClaimedAddr12345678901234567',
+    councilAddress: 'GADQ2bozmxjBfYHDQx3uwtpwXmdhafUdkN',
   }
   app.validators = {
     amount: value => amountHelper.validate(value),
