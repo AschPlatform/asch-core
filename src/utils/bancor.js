@@ -50,9 +50,15 @@ class Bancor {
     this._supply = bancor.supply
     this._money = bancor.money
     this._moneyBalance = bancor.moneyBalance
+    this._moneyPrecision = bancor.moneyPrecision
     this._stock = bancor.stock
     this._stockBalance = bancor.stockBalance
+    this._stockPrecision = bancor.stockPrecision
     this._relay = bancor.relay
+    this._name = bancor.name
+    this._timestamp = bancor.timestamp
+    this._fee = bancor.fee
+    this._status = bancor.status
     this._balanceMap = new Map()
     this._cwMap = new Map()
     this._balanceMap.set(this._money, this._moneyBalance)
@@ -60,6 +66,26 @@ class Bancor {
     this._cwMap.set(this._money, this._moneyCw)
     this._cwMap.set(this._stock, this._stockCw)
     return 1
+  }
+
+  getBancorInfo() {
+    return {
+      owner: this._owner,
+      moneyCw: this._moneyCw,
+      stockCw: this._stockCw,
+      supply: this._supply,
+      money: this._money,
+      moneyBalance: this._moneyBalance,
+      moneyPrecision: this._moneyPrecision,
+      stock: this._stock,
+      stockBalance: this._stockBalance,
+      stockPrecision: this._stockPrecision,
+      relay: this._relay,
+      name: this._name,
+      timestamp: this._timestamp,
+      fee: this._fee,
+      status: this._status,
+    }
   }
 
   // Use connected token to buy relay token
