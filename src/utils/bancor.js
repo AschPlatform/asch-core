@@ -119,12 +119,12 @@ class Bancor {
   async exchangeByTarget(sourceCurrency, targetCurrency, targetAmount, isExchange) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     const needsRT = this.getPriceFromCurrencyToRT(targetCurrency) * targetAmount
-    const needsSrcAmount = this.getPriceFromRTToCurrency(sourceCurrency) * needsRT
+    const needsSrcAmount = this.getPriceFromRTToCurrency(sourceCurrency) * needsRT * 1.2
     if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, Math.ceil(needsSrcAmount * 1.2))
+      const actualRT = await this.buyRT(sourceCurrency, Math.ceil(needsSrcAmount))
       const actualTargetAmount = await this.sellRT(targetCurrency, Math.ceil(actualRT))
       return {
-        sourceAmount: Math.ceil(needsSrcAmount * 1.2),
+        sourceAmount: Math.ceil(needsSrcAmount),
         targetAmount: Math.floor(actualTargetAmount),
       }
     }
