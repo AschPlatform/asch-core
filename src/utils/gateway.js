@@ -5,19 +5,35 @@ const addressHelper = require('../utils/address.js')
 module.exports = {
   async getAllGatewayMember(gatewayName) {
     const members = await app.sdb.findAll('GatewayMember', { condition: { gateway: gatewayName } })
-    await Promise.all(members.map(async (member) => {
-      const addr = addressHelper.generateLockedAddress(member.address)
-      const newAccount = await app.sdb.findOne('Account', { condition: { address: addr } })
+    if (!members) throw new Error('No gateway members found')
+    // await Promise.all(members.map(async (member) => {
+    //   const addr = addressHelper.generateLockedAddress(member.address)
+    //   const newAccount = await app.sdb.findOne('Account', { condition: { address: addr } })
+    //   if (newAccount) {
+    //     member.bail = newAccount.xas
+    //   } else {
+    //     member.bail = 0
+    //   }
+    //   const srcAccount = await app.sdb.findOne('Account', { condition: { address: member.address } })
+    //   if (srcAccount) {
+    //     member.name = srcAccount.name
+    //   }
+    // }))
+    for (let i = 0; i < members.length; i++) {
+      const addr = addressHelper.generateLockedAddress(members[i].address)
+      // const newAccount = await app.sdb.findOne('Account', { condition: { address: addr } })
+      const newAccount = await app.sdb.load('Account', { address: addr })
       if (newAccount) {
-        member.bail = newAccount.xas
+        members[i].bail = newAccount.xas
       } else {
-        member.bail = 0
+        members[i].bail = 0
       }
-      const srcAccount = await app.sdb.findOne('Account', { condition: { address: member.address } })
+      // const srcAccount = await app.sdb.findOne('Account', { condition: { address: members[i].address } })
+      const srcAccount = await app.sdb.load('Account', { address: members[i].address })
       if (srcAccount) {
-        member.name = srcAccount.name
+        members[i].name = srcAccount.name
       }
-    }))
+    }
     return members
   },
 
@@ -25,7 +41,8 @@ module.exports = {
     const m = await app.sdb.findOne('GatewayMember', { condition: { gateway: gatewayName, address: memberAddr } })
     if (!m) return null
     const addr = addressHelper.generateLockedAddress(memberAddr)
-    const account = await app.sdb.findOne('Account', { condition: { address: addr } })
+    // const account = await app.sdb.findOne('Account', { condition: { address: addr } })
+    const account = await app.sdb.load('Account', { address: addr })
     if (account) {
       m.bail = account.xas
     } else {
@@ -72,7 +89,8 @@ module.exports = {
   },
 
   async getAmountByCurrency(gateway, symbol) {
-    const gwCurrency = await app.sdb.findOne('GatewayCurrency', { condition: { gateway, symbol } })
+    // const gwCurrency = await app.sdb.findOne('GatewayCurrency', { condition: { gateway, symbol } })
+    const gwCurrency = await app.sdb.load('GatewayCurrency', { gateway, symbol })
     if (gwCurrency) {
       return gwCurrency.quantity
     }
@@ -93,8 +111,8 @@ module.exports = {
       return { ratio, needSupply }
     }
     const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', allBCH, false)
-    if (result.targetAmount === 0) return { ratio, currentBail, needSupply }
-    ratio = totalBail / result.targetAmount
+    if (result.targetAmount.toNumber() === 0) return { ratio, currentBail, needSupply }
+    ratio = totalBail / result.targetAmount.toNumber()
     if (ratio < constants.warningCriteria) {
       const minimumMember = await this.getMinimumBailMember(gatewayName)
       minimumBail = constants.supplyCriteria * minimumMember.bail
