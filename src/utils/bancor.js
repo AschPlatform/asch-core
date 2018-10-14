@@ -103,7 +103,7 @@ class Bancor {
     this._balanceMap.set(currency,
       app.util.bignumber(this._balanceMap.get(currency)).plus(T).toString(10))
     // this._supply += E
-    this._supply = app.util.bignumber(this._supply).plus(E).toString(10)
+    this._supply = app.util.bignumber(this._supply).plus(Math.floor(E)).toString(10)
     if (currency === this._money) {
       await app.sdb.update('Bancor', { moneyBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
     } else if (currency === this._stock) {
@@ -122,7 +122,7 @@ class Bancor {
     const E = amount
     const T = C * (((1 + E / R) ** F) - 1)
     this._balanceMap.set(currency,
-      app.util.bignumber(this._balanceMap.get(currency)).minus(T).toString(10))
+      app.util.bignumber(this._balanceMap.get(currency)).minus(Math.floor(T)).toString(10))
     // this._supply -= amount
     this._supply = app.util.bignumber(this._supply).minus(E).toString(10)
     if (currency === this._money) {
@@ -145,7 +145,7 @@ class Bancor {
   getPriceFromRTToCurrency(currency) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     return app.util.bignumber(this._balanceMap.get(currency)).toNumber()
-          * ((((1 + 1 / app.util.bignumber(this._supply)).toNumber()
+          * ((((1 + 1 / app.util.bignumber(this._supply).toNumber())
           ** (1 / this._cwMap.get(currency))) - 1))
   }
 
@@ -157,16 +157,16 @@ class Bancor {
     const needsRT = this.getPriceFromCurrencyToRT(targetCurrency) * amount
     const needsSrcAmount = this.getPriceFromRTToCurrency(sourceCurrency) * needsRT
     if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, needsSrcAmount)
+      const actualRT = await this.buyRT(sourceCurrency, Math.ceil(needsSrcAmount))
       const actualTargetAmount = await this.sellRT(targetCurrency, Math.ceil(actualRT))
       return {
-        sourceAmount: app.util.bignumber(needsSrcAmount).toString(10),
-        targetAmount: app.util.bignumber(actualTargetAmount).toString(10),
+        sourceAmount: app.util.bignumber(Math.ceil(needsSrcAmount)),
+        targetAmount: app.util.bignumber(Math.floor(actualTargetAmount)),
       }
     }
     return {
-      sourceAmount: app.util.bignumber(needsSrcAmount),
-      targetAmount: app.util.bignumber(amount),
+      sourceAmount: app.util.bignumber(Math.ceil(needsSrcAmount)),
+      targetAmount: app.util.bignumber(Math.floor(amount)),
     }
   }
 
@@ -178,16 +178,16 @@ class Bancor {
     const getsRT = this.getPriceFromCurrencyToRT(sourceCurrency) * amount
     const getsTargetAmount = this.getPriceFromRTToCurrency(targetCurrency) * getsRT
     if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, amount)
-      const actualTargetAmount = await this.sellRT(targetCurrency, actualRT)
+      const actualRT = await this.buyRT(sourceCurrency, Math.ceil(amount))
+      const actualTargetAmount = await this.sellRT(targetCurrency, Math.ceil(actualRT))
       return {
-        sourceAmount: app.util.bignumber(amount).toString(10),
-        targetAmount: app.util.bignumber(actualTargetAmount).toString(10),
+        sourceAmount: app.util.bignumber(Math.ceil(amount)),
+        targetAmount: app.util.bignumber(Math.floor(actualTargetAmount)),
       }
     }
     return {
-      sourceAmount: app.util.bignumber(amount),
-      targetAmount: app.util.bignumber(getsTargetAmount),
+      sourceAmount: app.util.bignumber(Math.ceil(amount)),
+      targetAmount: app.util.bignumber(Math.floor(getsTargetAmount)),
     }
   }
 }
