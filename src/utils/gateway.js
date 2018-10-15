@@ -112,6 +112,7 @@ module.exports = {
     }
     const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', allBCH, false)
     if (result.targetAmount.toNumber() === 0) return { ratio, currentBail, needSupply }
+    app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toNumber()}`)
     ratio = totalBail / result.targetAmount.toNumber()
     if (ratio < constants.warningCriteria) {
       const minimumMember = await this.getMinimumBailMember(gatewayName)
@@ -147,12 +148,13 @@ module.exports = {
     const threshold = await this.getThreshold(gatewayName)
     let canBeWithdrawl = 0
     if (m.elected === 1 && threshold.ratio > constants.supplyCriteria) {
-      const neesBail = quantity * threshold.ratio * 1.5 / count
+      const needsBail = quantity * threshold.ratio * 1.5 / count
       const initialDeposit = constants.initialDeposit
-      if (neesBail <= initialDeposit) {
+      app.logger.debug(`====needsBail is ${needsBail}, locked bail is ${lockAccount.xas}`)
+      if (needsBail <= initialDeposit) {
         canBeWithdrawl = lockAccount.xas - initialDeposit
-      } else {
-        canBeWithdrawl = lockAccount.xas - Math.ceil(neesBail)
+      } else if (lockAccount.xas > Math.ceil(needsBail)) {
+        canBeWithdrawl = lockAccount.xas - Math.ceil(needsBail)
       }
     }
     return canBeWithdrawl
