@@ -132,6 +132,11 @@ module.exports = {
   },
 
   async getMaximumBailWithdrawl(gatewayName, memberAddr) {
+    const gwCurrency = await app.sdb.findAll('GatewayCurrency', { condition: { gateway: gatewayName }, limit: 1 })
+    const gatewayMembers = await this.getElectedGatewayMember(gatewayName)
+    const count = gatewayMembers.length
+    const quantity = app.util.bignumber(gwCurrency[0].quantity).toNumber()
+
     const m = await this.getGatewayMember(gatewayName, memberAddr)
     if (!m) return 0
     const addr = addressHelper.generateLockedAddress(memberAddr)
@@ -140,12 +145,16 @@ module.exports = {
       return lockAccount.xas
     }
     const threshold = await this.getThreshold(gatewayName)
+    let canBeWithdrawl = 0
     if (m.elected === 1 && threshold.ratio > constants.supplyCriteria) {
-      const minimumMember = await this.getMinimumBailMember(gatewayName)
-      const canBeWithdrawl = lockAccount.xas - minimumMember.bail
-                            + minimumMember.bail * (threshold.ratio - constants.supplyCriteria)
-      return canBeWithdrawl
+      const neesBail = quantity * threshold.ratio * 1.5 / count
+      const initialDeposit = constants.initialDeposit
+      if (neesBail <= initialDeposit) {
+        canBeWithdrawl = lockAccount.xas - initialDeposit
+      } else {
+        canBeWithdrawl = lockAccount.xas - Math.ceil(neesBail)
+      }
     }
-    return 0
+    return canBeWithdrawl
   },
 }
