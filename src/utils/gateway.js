@@ -136,8 +136,6 @@ module.exports = {
     const gwCurrency = await app.sdb.findAll('GatewayCurrency', { condition: { gateway: gatewayName }, limit: 1 })
     const gatewayMembers = await this.getElectedGatewayMember(gatewayName)
     const count = gatewayMembers.length
-    const quantity = app.util.bignumber(gwCurrency[0].quantity).toNumber()
-
     const m = await this.getGatewayMember(gatewayName, memberAddr)
     if (!m) return 0
     const addr = addressHelper.generateLockedAddress(memberAddr)
@@ -148,7 +146,9 @@ module.exports = {
     const threshold = await this.getThreshold(gatewayName)
     let canBeWithdrawl = 0
     if (m.elected === 1 && threshold.ratio > constants.supplyCriteria) {
-      const needsBail = quantity * threshold.ratio * 1.5 / count
+      const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
+      const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
+      const needsBail = result.targetAmount.toNumber() * 1.5 / count
       const initialDeposit = constants.initialDeposit
       app.logger.debug(`====needsBail is ${needsBail}, locked bail is ${lockAccount.xas}`)
       if (needsBail <= initialDeposit) {
