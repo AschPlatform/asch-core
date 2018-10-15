@@ -96,14 +96,15 @@ class Bancor {
     if (this._balanceMap.get(currency) === undefined || this._cwMap.get(currency) === undefined) throw new Error('cw or balance is not found')
     // const R = this._supply
     const R = app.util.bignumber(this._supply).toNumber()
-    const T = amount
+    const T = amount.toNumber()
     const C = app.util.bignumber(this._balanceMap.get(currency)).toNumber()
     const F = this._cwMap.get(currency)
     const E = R * (((1 + T / C) ** F) - 1)
     this._balanceMap.set(currency,
-      app.util.bignumber(this._balanceMap.get(currency)).plus(T).toString(10))
+      app.util.bignumber(this._balanceMap.get(currency)).plus(amount).toString(10))
     // this._supply += E
-    this._supply = app.util.bignumber(this._supply).plus(Math.floor(E)).toString(10)
+    this._supply = app.util.bignumber(this._supply)
+      .plus(this.getBigNumber(E).toNumber()).toString(10)
     if (currency === this._money) {
       await app.sdb.update('Bancor', { moneyBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
     } else if (currency === this._stock) {
@@ -119,18 +120,31 @@ class Bancor {
     const R = app.util.bignumber(this._supply).toNumber()
     const C = app.util.bignumber(this._balanceMap.get(currency)).toNumber()
     const F = 1 / this._cwMap.get(currency)
-    const E = amount
+    const E = amount.toNumber()
     const T = C * (((1 + E / R) ** F) - 1)
     this._balanceMap.set(currency,
-      app.util.bignumber(this._balanceMap.get(currency)).minus(Math.floor(T)).toString(10))
+      app.util.bignumber(this._balanceMap.get(currency))
+        .minus(this.getBigNumber(T).toNumber()).toString(10))
     // this._supply -= amount
-    this._supply = app.util.bignumber(this._supply).minus(E).toString(10)
+    this._supply = app.util.bignumber(this._supply).minus(amount).toString(10)
     if (currency === this._money) {
       await app.sdb.update('Bancor', { moneyBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
     } else if (currency === this._stock) {
       await app.sdb.update('Bancor', { stockBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
     }
     return T
+  }
+
+  getBigNumber(amount) {
+    let result
+    const stringAmount = String(amount)
+    const loc = stringAmount.indexOf('.')
+    if (loc > 0) {
+      result = app.util.bignumber(stringAmount.substring(0, loc))
+    } else {
+      result = app.util.bignumber(stringAmount)
+    }
+    return result
   }
 
   // Get relay token price from one connected token
@@ -157,16 +171,16 @@ class Bancor {
     const needsRT = this.getPriceFromCurrencyToRT(targetCurrency) * amount
     const needsSrcAmount = this.getPriceFromRTToCurrency(sourceCurrency) * needsRT
     if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, Math.ceil(needsSrcAmount))
-      const actualTargetAmount = await this.sellRT(targetCurrency, Math.ceil(actualRT))
+      const actualRT = await this.buyRT(sourceCurrency, this.getBigNumber(needsSrcAmount))
+      const actualTargetAmount = await this.sellRT(targetCurrency, this.getBigNumber(actualRT))
       return {
-        sourceAmount: app.util.bignumber(Math.ceil(needsSrcAmount)),
-        targetAmount: app.util.bignumber(Math.floor(actualTargetAmount)),
+        sourceAmount: this.getBigNumber(needsSrcAmount),
+        targetAmount: this.getBigNumber(actualTargetAmount),
       }
     }
     return {
-      sourceAmount: app.util.bignumber(Math.ceil(needsSrcAmount)),
-      targetAmount: app.util.bignumber(Math.floor(amount)),
+      sourceAmount: this.getBigNumber(needsSrcAmount),
+      targetAmount: this.getBigNumber(amount),
     }
   }
 
@@ -178,16 +192,16 @@ class Bancor {
     const getsRT = this.getPriceFromCurrencyToRT(sourceCurrency) * amount
     const getsTargetAmount = this.getPriceFromRTToCurrency(targetCurrency) * getsRT
     if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, Math.ceil(amount))
-      const actualTargetAmount = await this.sellRT(targetCurrency, Math.ceil(actualRT))
+      const actualRT = await this.buyRT(sourceCurrency, this.getBigNumber(amount))
+      const actualTargetAmount = await this.sellRT(targetCurrency, this.getBigNumber(actualRT))
       return {
-        sourceAmount: app.util.bignumber(Math.ceil(amount)),
-        targetAmount: app.util.bignumber(Math.floor(actualTargetAmount)),
+        sourceAmount: this.getBigNumber(amount),
+        targetAmount: this.getBigNumber(actualTargetAmount),
       }
     }
     return {
-      sourceAmount: app.util.bignumber(Math.ceil(amount)),
-      targetAmount: app.util.bignumber(Math.floor(getsTargetAmount)),
+      sourceAmount: this.getBigNumber(amount),
+      targetAmount: (getsTargetAmount),
     }
   }
 }
