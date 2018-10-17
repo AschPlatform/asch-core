@@ -103,7 +103,7 @@ module.exports = {
     const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
     const allBCH = await this.getAmountByCurrency(gatewayName, gwCurrency[0].symbol)
     const totalBail = await this.getBailTotalAmount(gatewayName)
-    let ratio = -1
+    let ratio = 0
     let needSupply = 0
     let minimumBail = 0
     let currentBail = 0
@@ -136,15 +136,17 @@ module.exports = {
     const gwCurrency = await app.sdb.findAll('GatewayCurrency', { condition: { gateway: gatewayName }, limit: 1 })
     const gatewayMembers = await this.getElectedGatewayMember(gatewayName)
     const count = gatewayMembers.length
+    let canBeWithdrawl = 0
     const m = await this.getGatewayMember(gatewayName, memberAddr)
     if (!m) return 0
     const addr = addressHelper.generateLockedAddress(memberAddr)
     const lockAccount = await app.sdb.load('Account', addr)
+    if (!lockAccount) return canBeWithdrawl
     if (m.elected === 0) {
       return lockAccount.xas
     }
     const threshold = await this.getThreshold(gatewayName)
-    let canBeWithdrawl = 0
+
     if (m.elected === 1 && threshold.ratio > constants.supplyCriteria) {
       const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
       const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
