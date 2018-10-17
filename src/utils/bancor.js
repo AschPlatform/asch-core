@@ -20,7 +20,7 @@ class Bancor {
     const owner = this._owner
     let bancor
     if (owner) {
-      bancor = await app.sdb.findOne(
+      bancor = await app.sdb.findAll(
         'Bancor',
         {
           condition: {
@@ -31,7 +31,7 @@ class Bancor {
         },
       )
     } else {
-      bancor = await app.sdb.findOne(
+      bancor = await app.sdb.findAll(
         'Bancor',
         {
           condition: {
@@ -42,24 +42,24 @@ class Bancor {
       )
     }
 
-    if (!bancor) return -1
-    this._bancor = bancor
-    this._id = bancor.id
-    this._owner = bancor.owner
-    this._moneyCw = bancor.moneyCw
-    this._stockCw = bancor.stockCw
-    this._supply = bancor.supply
-    this._money = bancor.money
-    this._moneyBalance = bancor.moneyBalance
-    this._moneyPrecision = bancor.moneyPrecision
-    this._stock = bancor.stock
-    this._stockBalance = bancor.stockBalance
-    this._stockPrecision = bancor.stockPrecision
-    this._relay = bancor.relay
-    this._name = bancor.name
-    this._timestamp = bancor.timestamp
-    this._fee = bancor.fee
-    this._status = bancor.status
+    if (bancor.length === 0) return -1
+    this._bancor = bancor[0]
+    this._id = bancor[0].id
+    this._owner = bancor[0].owner
+    this._moneyCw = bancor[0].moneyCw
+    this._stockCw = bancor[0].stockCw
+    this._supply = bancor[0].supply
+    this._money = bancor[0].money
+    this._moneyBalance = bancor[0].moneyBalance
+    this._moneyPrecision = bancor[0].moneyPrecision
+    this._stock = bancor[0].stock
+    this._stockBalance = bancor[0].stockBalance
+    this._stockPrecision = bancor[0].stockPrecision
+    this._relay = bancor[0].relay
+    this._name = bancor[0].name
+    this._timestamp = bancor[0].timestamp
+    this._fee = bancor[0].fee
+    this._status = bancor[0].status
     this._balanceMap = new Map()
     this._cwMap = new Map()
     this._balanceMap.set(this._money, this._moneyBalance)
@@ -201,7 +201,7 @@ class Bancor {
     }
     return {
       sourceAmount: this.getBigNumber(amount),
-      targetAmount: (getsTargetAmount),
+      targetAmount: (this.getBigNumber(getsTargetAmount)),
     }
   }
 }
