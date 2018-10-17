@@ -340,8 +340,8 @@ module.exports = async function runtime(options) {
   await contractSandbox.connect()
   app.contract = contractSandbox
 
-  app.sdb.on(AschCore.SmartDB.events.commitBlock, async (block) => {
-    const result = await contractSandbox.commit(block.height)
+  app.sdb.on(AschCore.SmartDB.events.commitBlock, async (height) => {
+    const result = await contractSandbox.commit(height)
     if (!result.success) throw new Error(result.error)
   })
 
