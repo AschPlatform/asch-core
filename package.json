@@ -13,6 +13,7 @@
     "asch-smartdb": "https://github.com/AschPlatform/asch-smartdb-dist/tarball/v1.1.1",
     "async": "=1.5.2",
     "bignumber": "https://github.com/AschPlatform/bignumber/tarball/v1.3.0-2+asch.1",
+    "decimal.js": "=10.0.1",
     "bitcore-mnemonic": "=1.2.5",
     "bittorrent-dht": "https://github.com/AschPlatform/bittorrent-dht/tarball/master",
     "body-parser": "=1.15.2",

@@ -111,10 +111,10 @@ module.exports = {
       return { ratio, needSupply }
     }
     const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', allBCH, false)
-    if (result.targetAmount.toNumber() === 0) return { ratio, currentBail, needSupply }
+    if (result.targetAmount.eq(0)) return { ratio, currentBail, needSupply }
     app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toNumber()}`)
-    ratio = totalBail / result.targetAmount.toNumber()
-    if (ratio < constants.warningCriteria) {
+    ratioCalc = app.util.bignumber(totalBail).div(result.targetAmount)
+    if (ratioCalc.lt(constants.warningCriteria)) {
       const minimumMember = await this.getMinimumBailMember(gatewayName)
       minimumBail = constants.supplyCriteria * minimumMember.bail
     }
@@ -128,7 +128,7 @@ module.exports = {
         currentBail = member.bail
       }
     }
-
+    ratio = Number(ratioCalc.toFixed(2).toString())
     return { ratio, currentBail, needSupply }
   },
 
@@ -150,13 +150,13 @@ module.exports = {
     if (m.elected === 1 && threshold.ratio > constants.supplyCriteria) {
       const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
       const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
-      const needsBail = result.targetAmount.toNumber() * 1.5 / count
+      const needsBail = result.targetAmount.times(1.5).div(count).round()
       const initialDeposit = constants.initialDeposit
       app.logger.debug(`====needsBail is ${needsBail}, locked bail is ${lockAccount.xas}`)
-      if (needsBail <= initialDeposit) {
+      if (needsBail.le(initialDeposit)) {
         canBeWithdrawl = lockAccount.xas - initialDeposit
-      } else if (lockAccount.xas > Math.ceil(needsBail)) {
-        canBeWithdrawl = lockAccount.xas - Math.ceil(needsBail)
+      } else if (needsBail.lt(lockAccount.xas)) {
+        canBeWithdrawl = lockAccount.xas - needsBail.toNumber()
       }
     }
     return canBeWithdrawl
