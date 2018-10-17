@@ -5,6 +5,7 @@ const ed = require('../utils/ed.js')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const addressHelper = require('../utils/address.js')
+const featureSwitch = require('../utils/feature-switch.js')
 
 const PIFY = util.promisify
 
@@ -88,12 +89,11 @@ priv.openAccount2 = (publicKey, cb) => {
   })
 }
 
-Accounts.prototype.generateAddressByPublicKey = (publicKey) => {
-  return addressHelper.generateNormalAddress(publicKey)
-}
+Accounts.prototype.generateAddressByPublicKey = publicKey => addressHelper.generateNormalAddress(publicKey)
 
 Accounts.prototype.generateAddressByPublicKey2 = (publicKey) => {
-  if (!global.featureSwitch.enableUIA) {
+  // if (!global.featureSwitch.enableUIA) {
+  if (!featureSwitch.isEnabled('enableUIA')) {
     return self.generateAddressByPublicKey(publicKey)
   }
   const oldAddress = self.generateAddressByPublicKey(publicKey)

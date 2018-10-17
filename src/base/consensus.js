@@ -4,6 +4,7 @@ const ByteBuffer = require('bytebuffer')
 const ip = require('ip')
 const ed = require('../utils/ed.js')
 const slots = require('../utils/slots.js')
+const featureSwitch = require('../utils/feature-switch.js')
 
 let self
 function Consensus(scope) {
@@ -44,7 +45,8 @@ Consensus.prototype.verifyVote = (height, id, voteItem) => {
 Consensus.prototype.getVoteHash = (height, id) => {
   const bytes = new ByteBuffer()
   bytes.writeLong(height)
-  if (global.featureSwitch.enableLongId) {
+  // if (global.featureSwitch.enableLongId) {
+  if (featureSwitch.isEnabled('enableLongId')) {
     bytes.writeString(id)
   } else {
     const idBytes = app.util.bignumber(id).toBuffer({ size: 8 })
@@ -127,7 +129,8 @@ Consensus.prototype.getProposeHash = (propose) => {
   const bytes = new ByteBuffer()
   bytes.writeLong(propose.height)
 
-  if (global.featureSwitch.enableLongId) {
+  // if (global.featureSwitch.enableLongId) {
+  if (featureSwitch.isEnabled('enableLongId')) {
     bytes.writeString(propose.id)
   } else {
     const idBytes = app.util.bignumber(propose.id).toBuffer({ size: 8 })

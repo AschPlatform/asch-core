@@ -4,11 +4,13 @@ const base58check = require('./base58check')
 const NORMAL_PREFIX = 'A'
 const CHAIN_PREFIX = 'C'
 const GROUP_PREFIX = 'G'
+const LOCK_PREFIX = 'L'
 
 const VALID_PREFIX = [
   NORMAL_PREFIX,
   CHAIN_PREFIX,
   GROUP_PREFIX,
+  LOCK_PREFIX,
 ]
 
 const TYPE = {
@@ -16,12 +18,14 @@ const TYPE = {
   NORMAL: 1,
   CHAIN: 2,
   GROUP: 3,
+  LOCK: 4,
 }
 
 const PREFIX_MAP = {}
 PREFIX_MAP[NORMAL_PREFIX] = TYPE.NORMAL
 PREFIX_MAP[CHAIN_PREFIX] = TYPE.CHAIN
 PREFIX_MAP[GROUP_PREFIX] = TYPE.GROUP
+PREFIX_MAP[LOCK_PREFIX] = TYPE.LOCK
 
 function generateRawBase58CheckAddress(hashes) {
   if (!hashes || !hashes.length) throw new Error('Invalid hashes')
@@ -74,7 +78,9 @@ module.exports = {
   },
 
   isNormalAddress(address) {
-    return this.isBase58CheckAddress(address) && address[0] === NORMAL_PREFIX
+    const result = (this.isBase58CheckAddress(address) && address[0] === NORMAL_PREFIX)
+                  || (this.isBase58CheckAddress(address) && address[0] === LOCK_PREFIX)
+    return result
   },
 
   isGroupAddress(address) {
@@ -92,5 +98,9 @@ module.exports = {
   generateGroupAddress(name) {
     const hash = crypto.createHash('sha256').update(name).digest()
     return GROUP_PREFIX + generateRawBase58CheckAddress([hash])
+  },
+
+  generateLockedAddress(address) {
+    return `${LOCK_PREFIX}${address.slice(1, address.length)}`
   },
 }

@@ -6,6 +6,8 @@ const slots = require('../utils/slots.js')
 const addressHelper = require('../utils/address.js')
 const feeCalculators = require('../utils/calculate-fee.js')
 const transactionMode = require('../utils/transaction-mode.js')
+const featureSwitch = require('../utils/feature-switch.js')
+const Bancor = require('../utils/bancor.js')
 
 let self
 // Constructor
@@ -43,12 +45,6 @@ Transaction.prototype.create = (data) => {
   } else {
     throw new Error('Unexpected transaction mode')
   }
-
-  // if (trs.senderId) {
-  //   trs.requestorId = signerId
-  // } else {
-  //   trs.senderId = signerId
-  // }
 
   trs.signatures = [self.sign(data.keypair, trs)]
 
@@ -225,7 +221,17 @@ Transaction.prototype.verify = async (context) => {
   const feeCalculator = feeCalculators[trs.type]
   if (!feeCalculator) return 'Fee calculator not found'
   const minFee = 100000000 * feeCalculator(trs)
-  if (trs.fee < minFee) return 'Fee not enough'
+  if (trs.fee >= 0 && trs.fee < minFee) {
+    return 'Fee not enough'
+  }
+  if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
+    const bancor = await Bancor.create('BCH', 'XAS')
+    if (!bancor) return 'Bancor is not ready'
+    const result = await bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
+    if (result.sourceAmount.toNumber() > Math.abs(trs.fee)) {
+      return 'Fee exceeds gas limit'
+    }
+  }
 
   try {
     const bytes = self.getBytes(trs, true, true)
@@ -299,26 +305,67 @@ Transaction.prototype.apply = async (context) => {
   }
 
   if (block.height !== 0) {
+    const bancor = await Bancor.create('BCH', 'XAS')
     if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
       const requestorFee = 20000000
-      if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
-      requestor.xas -= requestorFee
-      app.addRoundFee(requestorFee, modules.round.calc(block.height))
-      // trs.executed = 0
-      app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
-      app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
-      return
+      if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
+        if (!bancor) return 'Bancor is not ready'
+        const needsBCH = await bancor.exchangeByTarget('BCH', 'XAS', requestorFee, false)
+        if (needsBCH.sourceAmount.toNumber() > Math.abs(trs.fee)) throw new Error('Fee exceeds gas limit')
+        const balance = app.balances.get(requestor.address, 'BCH')
+        if (balance.lt(needsBCH.sourceAmount)) throw new Error('Insufficient requestor balance')
+        app.balances.decrease(requestor.address, 'BCH', needsBCH.sourceAmount.toNumber())
+        app.balances.increase(app.repurchaseAddr, 'BCH', needsBCH.sourceAmount.toNumber())
+        app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
+        app.sdb.create('Gasconsumption',
+          {
+            bancorOwner: bancor._owner,
+            stock: bancor._stock,
+            money: bancor._money,
+            tid: trs.id,
+            height: block.height,
+            gasUsed: needsBCH.sourceAmount.toNumber(),
+          })
+      } else {
+        if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
+        requestor.xas -= requestorFee
+        app.addRoundFee(requestorFee, modules.round.calc(block.height))
+        app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
+        app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
+      }
+      return null
     }
-    if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
-    sender.xas -= trs.fee
-    app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
+    if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
+      const feeCalculator = feeCalculators[trs.type]
+      if (!feeCalculator) throw new Error('Fee calculator not found')
+      const minFee = 100000000 * feeCalculator(trs)
+      const result = await bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
+      if (result.sourceAmount.toNumber() > Math.abs(trs.fee)) throw new Error('Fee exceeds gas limit')
+      const balance = app.balances.get(sender.address, 'BCH')
+      if (balance.lt(result.sourceAmount)) throw new Error('Insufficient sender balance')
+      app.balances.decrease(sender.address, 'BCH', result.sourceAmount.toNumber())
+      app.balances.increase(app.repurchaseAddr, 'BCH', result.sourceAmount.toNumber())
+      app.sdb.create('Gasconsumption',
+        {
+          bancorOwner: bancor._owner,
+          stock: bancor._stock,
+          money: bancor._money,
+          tid: trs.id,
+          height: block.height,
+          gasUsed: result.sourceAmount.toNumber(),
+        })
+    } else {
+      if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
+      sender.xas -= trs.fee
+      app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
+    }
   }
 
   const error = await fn.apply(context, trs.args)
   if (error) {
     throw new Error(error)
   }
-  // trs.executed = 1
+  return null
 }
 
 Transaction.prototype.objectNormalize = (trs) => {
@@ -357,7 +404,7 @@ Transaction.prototype.objectNormalize = (trs) => {
       type: { type: 'integer' },
       timestamp: { type: 'integer' },
       senderId: { type: 'string' },
-      fee: { type: 'integer', minimum: 0, maximum: constants.totalAmount },
+      fee: { type: 'integer', maximum: constants.totalAmount },
       secondSignature: { type: 'string', format: 'signature' },
       signatures: { type: 'array' },
       // args: { type: "array" },

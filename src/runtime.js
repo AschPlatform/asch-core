@@ -74,7 +74,7 @@ async function loadModels(dir) {
   async function updateSchemaIfNoRecords(name) {
     const count = await app.sdb.count(name, {})
     if (count === 0) {
-      const schema = schemas.find((schema) => schema.modelName === name)
+      const schema = schemas.find(schema => schema.modelName === name)
       await app.sdb.updateSchema(schema)
     }
   }
@@ -178,6 +178,10 @@ module.exports = async function runtime(options) {
     hooks: {},
     custom: {},
     logger: options.logger,
+    repurchaseAddr: 'ARepurchaseAddr1234567890123456789',
+    buringPoolAddr: 'ABuringPoolAddr1234567890123456789',
+    storeClaimedAddr: 'AStoreClaimedAddr12345678901234567',
+    councilAddress: 'GADQ2bozmxjBfYHDQx3uwtpwXmdhafUdkN',
   }
   app.validators = {
     amount: value => amountHelper.validate(value),
@@ -218,18 +222,18 @@ module.exports = async function runtime(options) {
   }
   app.getContractName = type => app.contractTypeMapping[type]
 
-  app.registerFee = (type, min, currency) => {
-    app.feeMapping[type] = {
-      currency: currency || app.defaultFee.currency,
-      min,
-    }
-  }
-  app.getFee = type => app.feeMapping[type]
+  // app.registerFee = (type, min, currency) => {
+  //   app.feeMapping[type] = {
+  //     currency: currency || app.defaultFee.currency,
+  //     min,
+  //   }
+  // }
+  // app.getFee = type => app.feeMapping[type]
 
-  app.setDefaultFee = (min, currency) => {
-    app.defaultFee.currency = currency
-    app.defaultFee.min = min
-  }
+  // app.setDefaultFee = (min, currency) => {
+  //   app.defaultFee.currency = currency
+  //   app.defaultFee.min = min
+  // }
 
   app.addRoundFee = (fee, roundNumber) => {
     modules.blocks.increaseRoundData({ fees: fee }, roundNumber)
@@ -270,10 +274,8 @@ module.exports = async function runtime(options) {
   }
 
   app.gateway = {
-    createMultisigAddress: (gateway, m, accounts) =>
-      gatewayLib.getGatewayUtil(gateway).createMultisigAccount(m, accounts),
-    isValidAddress: (gateway, address) =>
-      gatewayLib.getGatewayUtil(gateway).isValidAddress(address),
+    createMultisigAddress: (gateway, m, accounts) => gatewayLib.getGatewayUtil(gateway).createMultisigAccount(m, accounts),
+    isValidAddress: (gateway, address) => gatewayLib.getGatewayUtil(gateway).isValidAddress(address),
   }
 
   app.isCurrentBookkeeper = addr => modules.delegates.getBookkeeperAddresses().has(addr)
@@ -308,7 +310,11 @@ module.exports = async function runtime(options) {
     address: require('./utils/address.js'),
     bignumber: require('./utils/bignumber'),
     transactionMode: require('./utils/transaction-mode.js'),
-    lodash: require('lodash')
+    lodash: require('lodash'),
+    bancor: require('./utils/bancor.js'),
+    slots: require('./utils/slots.js'),
+    constants: require('./utils/constants.js'),
+    gateway: require('./utils/gateway.js'),
   }
 
   await loadModels(path.join(appDir, 'model'))
@@ -327,6 +333,9 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[10] = 'basic.registerDelegate'
   app.contractTypeMapping[11] = 'basic.vote'
   app.contractTypeMapping[12] = 'basic.unvote'
+  app.contractTypeMapping[20] = 'exchange.exchangeByTarget'
+  app.contractTypeMapping[21] = 'exchange.exchangeBySource'
+  app.contractTypeMapping[22] = 'exchange.burnXAS'
 
   app.contractTypeMapping[100] = 'uia.registerIssuer'
   app.contractTypeMapping[101] = 'uia.registerAsset'
@@ -351,6 +360,9 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[404] = 'gateway.submitWithdrawalTransaction'
   app.contractTypeMapping[405] = 'gateway.submitWithdrawalSignature'
   app.contractTypeMapping[406] = 'gateway.submitOutTransactionId'
+  app.contractTypeMapping[407] = 'gateway.depositBail'
+  app.contractTypeMapping[408] = 'gateway.withdrawalBail'
+  app.contractTypeMapping[409] = 'gateway.claim'
 
   app.contractTypeMapping[500] = 'group.vote'
   app.contractTypeMapping[501] = 'group.activate'
