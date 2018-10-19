@@ -314,8 +314,8 @@ Transaction.prototype.apply = async (context) => {
         if (needsBCH.sourceAmount.gt(Math.abs(trs.fee))) throw new Error('Fee exceeds gas limit')
         const balance = app.balances.get(requestor.address, 'BCH')
         if (balance.lt(needsBCH.sourceAmount)) throw new Error('Insufficient requestor balance')
-        app.balances.decrease(requestor.address, 'BCH', needsBCH.sourceAmount)
-        app.balances.increase(app.repurchaseAddr, 'BCH', needsBCH.sourceAmount)
+        app.balances.decrease(requestor.address, 'BCH', needsBCH.sourceAmount.toString())
+        app.balances.increase(app.repurchaseAddr, 'BCH', needsBCH.sourceAmount.toString())
         app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
         app.sdb.create('Gasconsumption',
           {
@@ -343,8 +343,8 @@ Transaction.prototype.apply = async (context) => {
       if (result.sourceAmount.gt(Math.abs(trs.fee))) throw new Error('Fee exceeds gas limit')
       const balance = app.balances.get(sender.address, 'BCH')
       if (balance.lt(result.sourceAmount)) throw new Error('Insufficient sender balance')
-      app.balances.decrease(sender.address, 'BCH', result.sourceAmount)
-      app.balances.increase(app.repurchaseAddr, 'BCH', result.sourceAmount)
+      app.balances.decrease(sender.address, 'BCH', result.sourceAmount.toString())
+      app.balances.increase(app.repurchaseAddr, 'BCH', result.sourceAmount.toString())
       app.sdb.create('Gasconsumption',
         {
           bancorOwner: bancor._owner,
