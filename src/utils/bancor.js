@@ -115,7 +115,7 @@ class Bancor {
     //   await app.sdb.update('Bancor', { stockBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
     // }
     if (isExchange) {
-      await updateBancorDB(currency)
+      await this.updateBancorDB(currency)
     }
     return E
   }
@@ -144,7 +144,7 @@ class Bancor {
     //   await app.sdb.update('Bancor', { stockBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
     // }
     if (isExchange) {
-      await updateBancorDB(currency)
+      await this.updateBancorDB(currency)
     }
     return T
   }
