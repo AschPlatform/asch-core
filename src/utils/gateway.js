@@ -103,6 +103,8 @@ module.exports = {
     const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
     const allBCH = await this.getAmountByCurrency(gatewayName, gwCurrency[0].symbol)
     const totalBail = await this.getBailTotalAmount(gatewayName)
+    const gatewayMembers = await this.getElectedGatewayMember(gatewayName)
+    const count = gatewayMembers.length
     let ratio = 0
     let needSupply = 0
     let minimumBail = 0
@@ -114,9 +116,11 @@ module.exports = {
     if (result.targetAmount.eq(0)) return { ratio, currentBail, needSupply }
     app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toString()}`)
     ratioCalc = app.util.bignumber(totalBail).div(result.targetAmount)
+    ratio = Number(ratioCalc.toFixed(2).toString())
     if (ratioCalc.lt(constants.warningCriteria)) {
-      const minimumMember = await this.getMinimumBailMember(gatewayName)
-      minimumBail = constants.supplyCriteria * minimumMember.bail
+      minimumBail = Math.ceil(totalBail / ratio * 1.5 / (Math.floor(count / 2) + 1))
+      // const minimumMember = await this.getMinimumBailMember(gatewayName)
+      // minimumBail = constants.supplyCriteria * minimumMember.bail
     }
 
     if (memberAddr) {
@@ -128,7 +132,6 @@ module.exports = {
         currentBail = member.bail
       }
     }
-    ratio = Number(ratioCalc.toFixed(2).toString())
     return { ratio, currentBail, needSupply }
   },
 
@@ -147,16 +150,20 @@ module.exports = {
     }
     const threshold = await this.getThreshold(gatewayName)
 
-    if (m.elected === 1 && threshold.ratio > constants.supplyCriteria) {
-      const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
-      const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
-      const needsBail = result.targetAmount.times(1.5).div(count).round()
-      const initialDeposit = constants.initialDeposit
-      app.logger.debug(`====needsBail is ${needsBail}, locked bail is ${lockAccount.xas}`)
-      if (needsBail.le(initialDeposit)) {
-        canBeWithdrawl = lockAccount.xas - initialDeposit
-      } else if (needsBail.lt(lockAccount.xas)) {
-        canBeWithdrawl = lockAccount.xas - needsBail.toNumber()
+    if (m.elected === 1) {
+      if (threshold.ratio > constants.supplyCriteria) {
+        const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
+        const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
+        const needsBail = result.targetAmount.times(1.5).div(count).round()
+        const initialDeposit = constants.initialDeposit
+        app.logger.debug(`====needsBail is ${needsBail}, locked bail is ${lockAccount.xas}`)
+        if (needsBail.le(initialDeposit)) {
+          canBeWithdrawl = lockAccount.xas - initialDeposit
+        } else if (needsBail.lt(lockAccount.xas)) {
+          canBeWithdrawl = lockAccount.xas - needsBail.toNumber()
+        }
+      } else if (threshold.ratio === 0) {
+        canBeWithdrawl = lockAccount.xas - constants.initialDeposit
       }
     }
     return canBeWithdrawl
