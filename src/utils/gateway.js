@@ -122,7 +122,7 @@ module.exports = {
     const count = gatewayMembers.length
     const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
     const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
-    const needsBail = result.targetAmount.times(1.5).div(count).round()
+    const needsBail = result.targetAmount.times(1.5).div(Math.floor(count / 2) + 1).round()
     return needsBail
   },
 
@@ -148,10 +148,10 @@ module.exports = {
         // const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
         // const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
         // const needsBail = result.targetAmount.times(1.5).div(count).round()
-        const needsBail = this.getNeedsBail(gatewayName)
+        const needsBail = await this.getNeedsBail(gatewayName)
         const initialDeposit = constants.initialDeposit
         app.logger.debug(`====needsBail is ${needsBail}, locked bail is ${lockAccount.xas}`)
-        if (needsBail.le(initialDeposit)) {
+        if (needsBail.lt(initialDeposit)) {
           canBeWithdrawl = lockAccount.xas - initialDeposit
         } else if (needsBail.lt(lockAccount.xas)) {
           canBeWithdrawl = lockAccount.xas - needsBail.toNumber()
