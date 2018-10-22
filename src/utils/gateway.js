@@ -28,7 +28,6 @@ module.exports = {
       } else {
         members[i].bail = 0
       }
-      // const srcAccount = await app.sdb.findOne('Account', { condition: { address: members[i].address } })
       const srcAccount = await app.sdb.load('Account', { address: members[i].address })
       if (srcAccount) {
         members[i].name = srcAccount.name
@@ -41,7 +40,6 @@ module.exports = {
     const m = await app.sdb.findOne('GatewayMember', { condition: { gateway: gatewayName, address: memberAddr } })
     if (!m) return null
     const addr = addressHelper.generateLockedAddress(memberAddr)
-    // const account = await app.sdb.findOne('Account', { condition: { address: addr } })
     const account = await app.sdb.load('Account', { address: addr })
     if (account) {
       m.bail = account.xas
@@ -89,7 +87,6 @@ module.exports = {
   },
 
   async getAmountByCurrency(gateway, symbol) {
-    // const gwCurrency = await app.sdb.findOne('GatewayCurrency', { condition: { gateway, symbol } })
     const gwCurrency = await app.sdb.load('GatewayCurrency', { gateway, symbol })
     if (gwCurrency) {
       return gwCurrency.quantity
@@ -104,6 +101,7 @@ module.exports = {
     const allBCH = await this.getAmountByCurrency(gatewayName, gwCurrency[0].symbol)
     const totalBail = await this.getBailTotalAmount(gatewayName)
     const gatewayMembers = await this.getElectedGatewayMember(gatewayName)
+    const member = await this.getGatewayMember(gatewayName, memberAddr)
     const count = gatewayMembers.length
     let ratio = 0
     let needSupply = 0
@@ -112,25 +110,22 @@ module.exports = {
     if (!bancor) {
       return { ratio, needSupply }
     }
+    if (member) {
+      currentBail = member.bail
+    }
+    if (member.elected === 0) {
+      minimumBail = constants.initialDeposit
+    }
     const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', allBCH, false)
     if (result.targetAmount.eq(0)) return { ratio, currentBail, needSupply }
     app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toString()}`)
     ratioCalc = app.util.bignumber(totalBail).div(result.targetAmount)
     ratio = Number(ratioCalc.toFixed(2).toString())
-    if (ratioCalc.lt(constants.warningCriteria)) {
+    if (ratioCalc.lt(constants.warningCriteria) && member.elected !== 0) {
       minimumBail = Math.ceil(totalBail / ratio * 1.5 / (Math.floor(count / 2) + 1))
-      // const minimumMember = await this.getMinimumBailMember(gatewayName)
-      // minimumBail = constants.supplyCriteria * minimumMember.bail
     }
-
-    if (memberAddr) {
-      const member = await this.getGatewayMember(gatewayName, memberAddr)
-      if (member && minimumBail > member.bail) {
-        needSupply = minimumBail - member.bail
-      }
-      if (member) {
-        currentBail = member.bail
-      }
+    if (minimumBail > currentBail) {
+      needSupply = minimumBail - currentBail
     }
     return { ratio, currentBail, needSupply }
   },
@@ -148,10 +143,12 @@ module.exports = {
     if (m.elected === 0) {
       return lockAccount.xas
     }
-    const threshold = await this.getThreshold(gatewayName)
+    const threshold = await this.getThreshold(gatewayName, memberAddr)
 
-    if (m.elected === 1) {
-      if (threshold.ratio > constants.supplyCriteria) {
+    if (m.elected === 1 && lockAccount.xas > constants.initialDeposit) {
+      if (threshold.ratio === 0) {
+        canBeWithdrawl = lockAccount.xas - constants.initialDeposit
+      } else {
         const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
         const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
         const needsBail = result.targetAmount.times(1.5).div(count).round()
@@ -162,8 +159,6 @@ module.exports = {
         } else if (needsBail.lt(lockAccount.xas)) {
           canBeWithdrawl = lockAccount.xas - needsBail.toNumber()
         }
-      } else if (threshold.ratio === 0) {
-        canBeWithdrawl = lockAccount.xas - constants.initialDeposit
       }
     }
     return canBeWithdrawl
