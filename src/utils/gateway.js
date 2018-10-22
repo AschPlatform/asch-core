@@ -113,7 +113,7 @@ module.exports = {
     if (member) {
       currentBail = member.bail
     }
-    if (member.elected === 0) {
+    if (member && member.elected === 0) {
       minimumBail = constants.initialDeposit
     }
     const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', allBCH, false)
@@ -121,7 +121,7 @@ module.exports = {
     app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toString()}`)
     ratioCalc = app.util.bignumber(totalBail).div(result.targetAmount)
     ratio = Number(ratioCalc.toFixed(2).toString())
-    if (ratioCalc.lt(constants.warningCriteria) && member.elected !== 0) {
+    if (ratioCalc.lt(constants.warningCriteria) && member && member.elected !== 0) {
       minimumBail = Math.ceil(totalBail / ratio * 1.5 / (Math.floor(count / 2) + 1))
     }
     if (minimumBail > currentBail) {
