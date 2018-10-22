@@ -94,12 +94,6 @@ class Bancor {
   async buyRT(currency, amount, isExchange) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     if (this._balanceMap.get(currency) === undefined || this._cwMap.get(currency) === undefined) throw new Error('cw or balance is not found')
-    // const R = this._supply
-    // const R = app.util.bignumber(this._supply).toNumber()
-    // const T = amount.toNumber()
-    // const C = app.util.bignumber(this._balanceMap.get(currency)).toNumber()
-    // const F = this._cwMap.get(currency)
-    // const E = R * (((1 + T / C) ** F) - 1)
     const R = app.util.bignumber(this._supply)
     const T = amount
     const C = app.util.bignumber(this._balanceMap.get(currency))
@@ -107,13 +101,7 @@ class Bancor {
     const E = R.times(app.util.bigdecimal(T.div(C).plus(1).toString()).pow(F).minus(1)).round()
     this._balanceMap.set(currency,
       app.util.bignumber(this._balanceMap.get(currency)).plus(amount).toString())
-    // this._supply += E
     this._supply = app.util.bignumber(this._supply).plus(E).toString()
-    // if (currency === this._money) {
-    //   await app.sdb.update('Bancor', { moneyBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
-    // } else if (currency === this._stock) {
-    //   await app.sdb.update('Bancor', { stockBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
-    // }
     if (isExchange) {
       await this.updateBancorDB(currency)
     }
@@ -124,11 +112,6 @@ class Bancor {
   async sellRT(currency, amount, isExchange) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     if (this._balanceMap.get(currency) === undefined || this._cwMap.get(currency) === undefined) throw new Error('cw or balance is not found')
-    // const R = app.util.bignumber(this._supply).toNumber()
-    // const C = app.util.bignumber(this._balanceMap.get(currency)).toNumber()
-    // const F = 1 / this._cwMap.get(currency)
-    // const E = amount.toNumber()
-    // const T = C * (((1 + E / R) ** F) - 1)
     const R = app.util.bignumber(this._supply)
     const C = app.util.bignumber(this._balanceMap.get(currency))
     const F = 1 / this._cwMap.get(currency)
@@ -136,13 +119,7 @@ class Bancor {
     const T = C.times(app.util.bigdecimal(E.div(R).plus(1).toString()).pow(F).minus(1)).round()
     this._balanceMap.set(currency,
       app.util.bignumber(this._balanceMap.get(currency)).minus(T).toString())
-    // this._supply -= amount
     this._supply = app.util.bignumber(this._supply).minus(amount).toString()
-    // if (currency === this._money) {
-    //   await app.sdb.update('Bancor', { moneyBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
-    // } else if (currency === this._stock) {
-    //   await app.sdb.update('Bancor', { stockBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
-    // }
     if (isExchange) {
       await this.updateBancorDB(currency)
     }
@@ -160,9 +137,6 @@ class Bancor {
   // Get relay token price from one connected token
   getPriceFromCurrencyToRT(currency) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    // return app.util.bignumber(this._supply).toNumber()
-    //       * ((((1 + 1 / app.util.bignumber(this._balanceMap.get(currency)).toNumber())
-    //       ** this._cwMap.get(currency)) - 1))
     return app.util.bigdecimal(this._supply)
       .times((app.util.bigdecimal(1)
         .div(app.util.bigdecimal(this._balanceMap.get(currency))).plus(1))
@@ -173,9 +147,6 @@ class Bancor {
   // Get connected token price from one relay token
   getPriceFromRTToCurrency(currency) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    // return app.util.bignumber(this._balanceMap.get(currency)).toNumber()
-    //       * ((((1 + 1 / app.util.bignumber(this._supply).toNumber())
-    //       ** (1 / this._cwMap.get(currency))) - 1))
     return app.util.bigdecimal(this._balanceMap.get(currency))
       .times((app.util.bigdecimal(1)
         .div(app.util.bigdecimal(this._supply)).plus(1))
