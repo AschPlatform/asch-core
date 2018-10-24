@@ -161,18 +161,18 @@ class Bancor {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     const needsRT = amount.times(this.getPriceFromCurrencyToRT(targetCurrency))
     const needsSrcAmount = needsRT.times(this.getPriceFromRTToCurrency(sourceCurrency)).round()
-    if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, needsSrcAmount, isExchange)
-      const actualTargetAmount = await this.sellRT(targetCurrency, actualRT, isExchange)
-      return {
-        sourceAmount: needsSrcAmount,
-        targetAmount: actualTargetAmount,
-      }
-    }
+    // if (isExchange) {
+    const actualRT = await this.buyRT(sourceCurrency, needsSrcAmount, isExchange)
+    const actualTargetAmount = await this.sellRT(targetCurrency, actualRT, isExchange)
     return {
       sourceAmount: needsSrcAmount,
-      targetAmount: amount,
+      targetAmount: actualTargetAmount,
     }
+    // }
+    // return {
+    //   sourceAmount: needsSrcAmount,
+    //   targetAmount: amount,
+    // }
   }
 
   // Exchange based on the amount of source currency
@@ -180,20 +180,20 @@ class Bancor {
   async exchangeBySource(sourceCurrency, targetCurrency, sourceAmount, isExchange) {
     const amount = app.util.bignumber(sourceAmount)
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    const getsRT = amount.times(this.getPriceFromCurrencyToRT(sourceCurrency))
-    const getsTargetAmount = getsRT.times(this.getPriceFromRTToCurrency(targetCurrency)).round()
-    if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, amount, isExchange)
-      const actualTargetAmount = await this.sellRT(targetCurrency, actualRT, isExchange)
-      return {
-        sourceAmount: amount,
-        targetAmount: actualTargetAmount,
-      }
-    }
+    // const getsRT = amount.times(this.getPriceFromCurrencyToRT(sourceCurrency))
+    // const getsTargetAmount = getsRT.times(this.getPriceFromRTToCurrency(targetCurrency)).round()
+    // if (isExchange) {
+    const actualRT = await this.buyRT(sourceCurrency, amount, isExchange)
+    const actualTargetAmount = await this.sellRT(targetCurrency, actualRT, isExchange)
     return {
       sourceAmount: amount,
-      targetAmount: getsTargetAmount,
+      targetAmount: actualTargetAmount,
     }
+    // }
+    // return {
+    //   sourceAmount: amount,
+    //   targetAmount: getsTargetAmount,
+    // }
   }
 }
 

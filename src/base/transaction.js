@@ -305,10 +305,11 @@ Transaction.prototype.apply = async (context) => {
   }
 
   if (block.height !== 0) {
-    const bancor = await Bancor.create('BCH', 'XAS')
+    // const bancor = await Bancor.create('BCH', 'XAS')
     if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
       const requestorFee = 20000000
       if (featureSwitch.isEnabled('enableBCH') && trs.fee < 0) {
+        const bancor = await Bancor.create('BCH', 'XAS')
         if (!bancor) return 'Bancor is not ready'
         const needsBCH = await bancor.exchangeByTarget('BCH', 'XAS', requestorFee, false)
         if (needsBCH.sourceAmount.gt(Math.abs(trs.fee))) throw new Error('Fee exceeds gas limit')
@@ -339,6 +340,7 @@ Transaction.prototype.apply = async (context) => {
       const feeCalculator = feeCalculators[trs.type]
       if (!feeCalculator) throw new Error('Fee calculator not found')
       const minFee = 100000000 * feeCalculator(trs)
+      const bancor = await Bancor.create('BCH', 'XAS')
       const result = await bancor.exchangeByTarget('BCH', 'XAS', minFee, false)
       if (result.sourceAmount.gt(Math.abs(trs.fee))) throw new Error('Fee exceeds gas limit')
       const balance = app.balances.get(sender.address, 'BCH')
