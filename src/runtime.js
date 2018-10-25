@@ -3,10 +3,10 @@ const path = require('path')
 const util = require('util')
 const { EventEmitter } = require('events')
 const _ = require('lodash')
-const changeCase = require('change-case')
 const validate = require('validate.js')
 const gatewayLib = require('./gateway')
 const { AschCore } = require('asch-smartdb')
+const { AschContract } = require('asch-contract')
 const slots = require('./utils/slots')
 const amountHelper = require('./utils/amount')
 const Router = require('./utils/router.js')
@@ -74,7 +74,7 @@ async function loadModels(dir) {
   async function updateSchemaIfNoRecords(name) {
     const count = await app.sdb.count(name, {})
     if (count === 0) {
-      const schema = schemas.find(schema => schema.modelName === name)
+      const schema = schemas.find(s => s.modelName === name)
       await app.sdb.updateSchema(schema)
     }
   }
@@ -93,7 +93,7 @@ async function loadContracts(dir) {
   contractFiles.forEach((contractFile) => {
     app.logger.info('loading contract', contractFile)
     const basename = path.basename(contractFile, '.js')
-    const contractName = changeCase.snakeCase(basename)
+    const contractName = _.snakeCase(basename)
     const fullpath = path.resolve(dir, contractFile)
     const contract = require(fullpath)
     if (contractFile !== 'index.js') {
@@ -161,6 +161,14 @@ function adaptSmartDBLogger(config) {
       return levelMap[appLogLevel] || LogLevel.Info
     },
   }
+}
+
+async function loadSmartContracts() {
+  const contracts = await app.sdb.find('Contract', {}, undefined, undefined, ['name'])
+  contracts.forEach(async (c) => {
+    const loadResult = await app.contract.loadContract(c.name)
+    app.logger.debug(`Load contract '${c.name}' `, loadResult)
+  })
 }
 
 module.exports = async function runtime(options) {
@@ -274,8 +282,13 @@ module.exports = async function runtime(options) {
   }
 
   app.gateway = {
-    createMultisigAddress: (gateway, m, accounts) => gatewayLib.getGatewayUtil(gateway).createMultisigAccount(m, accounts),
-    isValidAddress: (gateway, address) => gatewayLib.getGatewayUtil(gateway).isValidAddress(address),
+    createMultisigAddress: (gateway, m, accounts) => gatewayLib
+      .getGatewayUtil(gateway)
+      .createMultisigAccount(m, accounts),
+
+    isValidAddress: (gateway, address) => gatewayLib
+      .getGatewayUtil(gateway)
+      .isValidAddress(address),
   }
 
   app.isCurrentBookkeeper = addr => modules.delegates.getBookkeeperAddresses().has(addr)
@@ -318,9 +331,40 @@ module.exports = async function runtime(options) {
     gateway: require('./utils/gateway.js'),
   }
 
+  const contractSandbox = new AschContract.SandboxConnector({
+    entry: path.join(appDir, '../node_modules/asch-core/node_modules/asch-contract/sandbox-launcher.js'),
+    dataDir: path.join(appDir, '../data/contracts'),
+    logDir: path.join(__dirname, '../logs/contracts/'),
+    debug: false,
+  })
+
+  await contractSandbox.connect()
+  app.contract = contractSandbox
+
+  app.sdb.on(AschCore.SmartDB.events.commitBlock, async (height) => {
+    const result = await contractSandbox.commit(height)
+    if (!result.success) throw new Error(result.error)
+  })
+
+  app.sdb.on(AschCore.SmartDB.events.rollbackBlock, async (info) => {
+    const result = await contractSandbox.rollback(info.to)
+    if (!result.success) throw new Error(result.error)
+  })
+
+  app.sdb.on(AschCore.SmartDB.events.beforeCommitContract, async () => {
+    const result = await contractSandbox.confirmChanges()
+    if (!result.success) throw new Error(result.error)
+  })
+
+  app.sdb.on(AschCore.SmartDB.events.beforeRollbackContract, async () => {
+    const result = await contractSandbox.cancelChanges()
+    if (!result.success) throw new Error(result.error)
+  })
+
   await loadModels(path.join(appDir, 'model'))
   await loadContracts(path.join(appDir, 'contract'))
   await loadInterfaces(path.join(appDir, 'interface'), options.library.network.app)
+  await loadSmartContracts()
 
   app.contractTypeMapping[1] = 'basic.transfer'
   app.contractTypeMapping[2] = 'basic.setName'
@@ -369,4 +413,8 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[501] = 'group.activate'
   app.contractTypeMapping[502] = 'group.addMember'
   app.contractTypeMapping[503] = 'group.removeMember'
+
+  app.contractTypeMapping[600] = 'contract.register'
+  app.contractTypeMapping[601] = 'contract.call'
+  app.contractTypeMapping[602] = 'contract.pay'
 }

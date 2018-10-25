@@ -59,14 +59,24 @@ class Application {
           } else {
             scope.logger.info('Cleaned up successfully')
           }
+          if (global.app.contract) {
+            (async () => {
+              try {
+                await global.app.contract.disconnect()
+                scope.logger.info('Smart contract engine disconnected')
+              } catch (e) {
+                scope.logger.error('Failed to disconnect smart contract engine', e)
+              }
+            })()
+          }
           (async () => {
             try {
               await global.app.sdb.close()
+              scope.logger.info('Smart db closed')
             } catch (e) {
-              scope.logger.error('failed to close sdb', e)
+              scope.logger.error('Failed to close smart db', e)
             }
           })()
-
           if (fs.existsSync(pidFile)) {
             fs.unlinkSync(pidFile)
           }

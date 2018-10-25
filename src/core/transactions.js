@@ -333,12 +333,12 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     if (error) throw new Error(error)
   }
 
+  app.sdb.beginContract()
   try {
-    app.sdb.beginContract()
     await library.base.transaction.apply(context)
-    app.sdb.commitContract()
+    await app.sdb.commitContract()
   } catch (e) {
-    app.sdb.rollbackContract()
+    await app.sdb.rollbackContract()
     library.logger.error(e)
     throw e
   }
@@ -351,14 +351,14 @@ Transactions.prototype.toAPIV1Transactions = (transArray, block) => {
   return []
 }
 
-Transactions.prototype.tranfersToAPIV1Transactions = async (transferArray, block, heightAsString) => {
-  if (transferArray && isArray(transferArray) && transferArray.length > 0) {
+Transactions.prototype.tranfersToAPIV1Transactions = async (transfers, block, heightAsString) => {
+  if (transfers && isArray(transfers) && transfers.length > 0) {
     const transMap = new Map()
-    const transIds = transferArray.map(t => t.tid)
+    const transIds = transfers.map(t => t.tid)
     const transArray = await app.sdb.find('Transaction', { id: { $in: transIds } })
     transArray.forEach(t => transMap.set(t.id, t))
 
-    transferArray.forEach((transfer) => {
+    transfers.forEach((transfer) => {
       const trans = transMap.get(transfer.tid)
       if (trans !== undefined) {
         transfer.senderPublicKey = trans.senderPublicKey
@@ -371,7 +371,7 @@ Transactions.prototype.tranfersToAPIV1Transactions = async (transferArray, block
       }
     })
 
-    return transferArray.map(t => self.toAPIV1Transaction(t, block, heightAsString))
+    return transfers.map(t => self.toAPIV1Transaction(t, block, heightAsString))
   }
   return []
 }
@@ -615,8 +615,12 @@ shared.getTransaction = (req, cb) => {
     if (err) {
       return cb(err[0].message)
     }
-    const callback = (err2, ret) => (async () => {
-      if (err2) return cb(err2)
+
+    const convertResult = async (getTransError, ret) => {
+      if (getTransError) {
+        cb(getTransError)
+        return
+      }
 
       if (!ret || !ret.transactions || ret.transactions.length < 1) {
         cb('transaction not found', ret)
@@ -628,7 +632,8 @@ shared.getTransaction = (req, cb) => {
 
         cb(null, { transaction })
       }
-    })()
+    }
+    const callback = (err2, ret) => convertResult(err2, ret)
     return shared.getTransactions(req, callback)
   })
 }

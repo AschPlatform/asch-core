@@ -5,6 +5,7 @@ const NORMAL_PREFIX = 'A'
 const CHAIN_PREFIX = 'C'
 const GROUP_PREFIX = 'G'
 const LOCK_PREFIX = 'L'
+const CONTRACT_PREFIX = 'S'
 
 const VALID_PREFIX = [
   NORMAL_PREFIX,
@@ -19,6 +20,7 @@ const TYPE = {
   CHAIN: 2,
   GROUP: 3,
   LOCK: 4,
+  CONTRACT: 5,
 }
 
 const PREFIX_MAP = {}
@@ -26,6 +28,7 @@ PREFIX_MAP[NORMAL_PREFIX] = TYPE.NORMAL
 PREFIX_MAP[CHAIN_PREFIX] = TYPE.CHAIN
 PREFIX_MAP[GROUP_PREFIX] = TYPE.GROUP
 PREFIX_MAP[LOCK_PREFIX] = TYPE.LOCK
+PREFIX_MAP[CONTRACT_PREFIX] = TYPE.CONTRACT
 
 function generateRawBase58CheckAddress(hashes) {
   if (!hashes || !hashes.length) throw new Error('Invalid hashes')
@@ -87,6 +90,10 @@ module.exports = {
     return this.isBase58CheckAddress(address) && address[0] === GROUP_PREFIX
   },
 
+  isContractAddress(address) {
+    return this.isBase58CheckAddress(address) && address[0] === CONTRACT_PREFIX
+  },
+
   generateNormalAddress(publicKey) {
     return NORMAL_PREFIX + generateRawBase58CheckAddress([publicKey])
   },
@@ -102,5 +109,10 @@ module.exports = {
 
   generateLockedAddress(address) {
     return `${LOCK_PREFIX}${address.slice(1, address.length)}`
+  },
+
+  generateContractAddress(info) {
+    const hash = crypto.createHash('sha256').update(info).digest()
+    return CONTRACT_PREFIX + generateRawBase58CheckAddress([hash])
   },
 }
