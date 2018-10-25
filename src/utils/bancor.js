@@ -117,6 +117,8 @@ class Bancor {
     const F = 1 / this._cwMap.get(currency)
     const E = amount
     const T = C.times(app.util.bigdecimal(E.div(R).plus(1).toString()).pow(F).minus(1)).round()
+    if (app.util.bignumber(this._balanceMap.get(currency)).lt(T)) throw new Error(`Balance in bancor ${this._name} is not enough`)
+    if (app.util.bignumber(this._supply).lt(amount)) throw new Error(`Supply in bancor ${this._name} is not enough`)
     this._balanceMap.set(currency,
       app.util.bignumber(this._balanceMap.get(currency)).minus(T).toString())
     this._supply = app.util.bignumber(this._supply).minus(amount).toString()
@@ -159,15 +161,21 @@ class Bancor {
   async exchangeByTarget(sourceCurrency, targetCurrency, targetAmount, isExchange) {
     const amount = app.util.bignumber(targetAmount)
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    const needsRT = amount.times(this.getPriceFromCurrencyToRT(targetCurrency))
-    const needsSrcAmount = needsRT.times(this.getPriceFromRTToCurrency(sourceCurrency)).round()
-    // if (isExchange) {
-    const actualRT = await this.buyRT(sourceCurrency, needsSrcAmount, isExchange)
-    const actualTargetAmount = await this.sellRT(targetCurrency, actualRT, isExchange)
+    const actualRT = await this.buyRT(targetCurrency, amount, isExchange)
+    const actualSourceAmount = await this.sellRT(sourceCurrency, actualRT, isExchange)
     return {
-      sourceAmount: needsSrcAmount,
-      targetAmount: actualTargetAmount,
+      sourceAmount: actualSourceAmount,
+      targetAmount: amount,
     }
+    // const needsRT = amount.times(this.getPriceFromCurrencyToRT(targetCurrency))
+    // const needsSrcAmount = needsRT.times(this.getPriceFromRTToCurrency(sourceCurrency)).round()
+    // if (isExchange) {
+    // const actualRT = await this.buyRT(sourceCurrency, needsSrcAmount, isExchange)
+    // const actualTargetAmount = await this.sellRT(targetCurrency, actualRT, isExchange)
+    // return {
+    //   sourceAmount: needsSrcAmount,
+    //   targetAmount: actualTargetAmount,
+    // }
     // }
     // return {
     //   sourceAmount: needsSrcAmount,
