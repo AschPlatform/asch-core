@@ -102,8 +102,14 @@ module.exports = {
     if (member && member.elected === 0) {
       minimumBail = constants.initialDeposit
     }
-    const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', allBCH, false)
-    if (result.targetAmount.eq(0)) return { ratio, currentBail, needSupply }
+    const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', 1, false)
+    result.targetAmount = result.targetAmount.times(allBCH)
+    if (result.targetAmount.eq(0)) {
+      if (currentBail < constants.initialDeposit) {
+        needSupply = constants.initialDeposit - currentBail
+      }
+      return { ratio, currentBail, needSupply }
+    }
     app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toString()}`)
     ratioCalc = app.util.bignumber(totalBail).div(result.targetAmount)
     ratio = Number(ratioCalc.toFixed(2).toString())
@@ -121,7 +127,9 @@ module.exports = {
     const gatewayMembers = await this.getElectedGatewayMember(gatewayName)
     const count = gatewayMembers.length
     const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
-    const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
+    if (!bancor) throw new Error(`Bancor from ${gwCurrency[0].symbol} to XAS is not ready`)
+    const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', 1, false)
+    result.targetAmount = result.targetAmount.times(gwCurrency[0].quantity)
     const needsBail = result.targetAmount.times(1.5).div(Math.floor(count / 2) + 1).round()
     return needsBail
   },

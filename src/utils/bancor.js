@@ -99,9 +99,12 @@ class Bancor {
     const C = app.util.bignumber(this._balanceMap.get(currency))
     const F = this._cwMap.get(currency)
     const E = R.times(app.util.bigdecimal(T.div(C).plus(1).toString()).pow(F).minus(1)).round()
+    if (E.gt(R.div(100))) throw new Error('Buy too many')
+    app.logger.debug(`--->buyRT: supply = ${this._supply} + ${E.toString()}, ${currency} balance = ${this._balanceMap.get(currency)} + ${amount.toString()}`)
     this._balanceMap.set(currency,
       app.util.bignumber(this._balanceMap.get(currency)).plus(amount).toString())
     this._supply = app.util.bignumber(this._supply).plus(E).toString()
+    app.logger.debug(`--->buyRT: supply = ${this._supply},  ${currency} balance = ${this._balanceMap.get(currency)}`)
     if (isExchange) {
       await this.updateBancorDB(currency)
     }
@@ -117,11 +120,14 @@ class Bancor {
     const F = 1 / this._cwMap.get(currency)
     const E = amount
     const T = C.times(app.util.bigdecimal(E.div(R).plus(1).toString()).pow(F).minus(1)).round()
+    if (amount.gt(R.div(100))) throw new Error('Sell too many')
+    app.logger.debug(`--->sellRT: supply = ${this._supply} - ${amount.toString()}, ${currency} balance = ${this._balanceMap.get(currency)} - ${T.toString()}`)
     if (app.util.bignumber(this._balanceMap.get(currency)).lt(T)) throw new Error(`Balance in bancor ${this._name} is not enough`)
     if (app.util.bignumber(this._supply).lt(amount)) throw new Error(`Supply in bancor ${this._name} is not enough`)
     this._balanceMap.set(currency,
       app.util.bignumber(this._balanceMap.get(currency)).minus(T).toString())
     this._supply = app.util.bignumber(this._supply).minus(amount).toString()
+    app.logger.debug(`--->sellRT: supply = ${this._supply},  ${currency} balance = ${this._balanceMap.get(currency)}`)
     if (isExchange) {
       await this.updateBancorDB(currency)
     }
@@ -129,6 +135,7 @@ class Bancor {
   }
 
   async updateBancorDB(currency) {
+    app.logger.debug(`--->updateBancorDB: supply = ${this._supply}, ${currency} balance = ${this._balanceMap.get(currency)}`)
     if (currency === this._money) {
       await app.sdb.update('Bancor', { moneyBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
     } else if (currency === this._stock) {
