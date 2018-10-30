@@ -93,11 +93,11 @@ module.exports = {
     let needSupply = 0
     let minimumBail = 0
     let currentBail = 0
-    if (!bancor) {
-      return { ratio, needSupply }
-    }
     if (member) {
       currentBail = member.bail
+    }
+    if (!bancor) {
+      return { ratio, currentBail, needSupply }
     }
     if (member && member.elected === 0) {
       minimumBail = constants.initialDeposit
