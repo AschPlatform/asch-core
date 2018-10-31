@@ -20,26 +20,9 @@ class Bancor {
     const owner = this._owner
     let bancor
     if (owner) {
-      bancor = await app.sdb.findAll(
-        'Bancor',
-        {
-          condition: {
-            money,
-            stock,
-            owner,
-          },
-        },
-      )
+      bancor = await app.sdb.loadMany('Bancor', { money, stock, owner }, 1)
     } else {
-      bancor = await app.sdb.findAll(
-        'Bancor',
-        {
-          condition: {
-            money,
-            stock,
-          },
-        },
-      )
+      bancor = await app.sdb.loadMany('Bancor', { money, stock }, 1)
     }
 
     if (bancor.length === 0) return -1
@@ -174,20 +157,6 @@ class Bancor {
       sourceAmount: actualSourceAmount,
       targetAmount: amount,
     }
-    // const needsRT = amount.times(this.getPriceFromCurrencyToRT(targetCurrency))
-    // const needsSrcAmount = needsRT.times(this.getPriceFromRTToCurrency(sourceCurrency)).round()
-    // if (isExchange) {
-    // const actualRT = await this.buyRT(sourceCurrency, needsSrcAmount, isExchange)
-    // const actualTargetAmount = await this.sellRT(targetCurrency, actualRT, isExchange)
-    // return {
-    //   sourceAmount: needsSrcAmount,
-    //   targetAmount: actualTargetAmount,
-    // }
-    // }
-    // return {
-    //   sourceAmount: needsSrcAmount,
-    //   targetAmount: amount,
-    // }
   }
 
   // Exchange based on the amount of source currency
@@ -195,20 +164,12 @@ class Bancor {
   async exchangeBySource(sourceCurrency, targetCurrency, sourceAmount, isExchange) {
     const amount = app.util.bignumber(sourceAmount)
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    // const getsRT = amount.times(this.getPriceFromCurrencyToRT(sourceCurrency))
-    // const getsTargetAmount = getsRT.times(this.getPriceFromRTToCurrency(targetCurrency)).round()
-    // if (isExchange) {
     const actualRT = await this.buyRT(sourceCurrency, amount, isExchange)
     const actualTargetAmount = await this.sellRT(targetCurrency, actualRT, isExchange)
     return {
       sourceAmount: amount,
       targetAmount: actualTargetAmount,
     }
-    // }
-    // return {
-    //   sourceAmount: amount,
-    //   targetAmount: getsTargetAmount,
-    // }
   }
 }
 
