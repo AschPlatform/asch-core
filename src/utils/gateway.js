@@ -113,8 +113,9 @@ module.exports = {
     app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toString()}`)
     ratioCalc = app.util.bignumber(totalBail).div(result.targetAmount)
     ratio = Number(ratioCalc.toFixed(2).toString())
-    if (ratioCalc.lt(constants.warningCriteria) && member && member.elected !== 0) {
-      minimumBail = Math.ceil(totalBail / ratio * 1.5 / (Math.floor(count / 2) + 1))
+    if (ratioCalc.lt(constants.supplyCriteria) && member && member.elected !== 0) {
+      minimumBail = Math.ceil(totalBail / ratio
+        * constants.supplyCriteria / (Math.floor(count / 2) + 1))
     }
     if (minimumBail > currentBail) {
       needSupply = minimumBail - currentBail
