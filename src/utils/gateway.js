@@ -96,6 +96,9 @@ module.exports = {
     if (member) {
       currentBail = member.bail
     }
+    if (currentBail < constants.initialDeposit) {
+      needSupply = constants.initialDeposit - currentBail
+    }
     if (!bancor) {
       return { ratio, currentBail, needSupply }
     }
@@ -105,9 +108,6 @@ module.exports = {
     const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', 1000, false)
     result.targetAmount = result.targetAmount.times(allBCH).div(1000)
     if (result.targetAmount.eq(0)) {
-      if (currentBail < constants.initialDeposit) {
-        needSupply = constants.initialDeposit - currentBail
-      }
       return { ratio, currentBail, needSupply }
     }
     app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toString()}`)
@@ -116,6 +116,9 @@ module.exports = {
     if (ratioCalc.lt(constants.supplyCriteria) && member && member.elected !== 0) {
       minimumBail = Math.ceil(totalBail / ratio
         * constants.supplyCriteria / (Math.floor(count / 2) + 1))
+      if (minimumBail < constants.initialDeposit) {
+        minimumBail = constants.initialDeposit
+      }
     }
     if (minimumBail > currentBail) {
       needSupply = minimumBail - currentBail
