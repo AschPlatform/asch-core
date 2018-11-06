@@ -322,6 +322,7 @@ module.exports = async function runtime(options) {
   app.util = {
     address: require('./utils/address.js'),
     bignumber: require('./utils/bignumber'),
+    bigdecimal: require('./utils/bigdecimal'),
     transactionMode: require('./utils/transaction-mode.js'),
     lodash: require('lodash'),
     bancor: require('./utils/bancor.js'),

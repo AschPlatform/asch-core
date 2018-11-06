@@ -6,29 +6,14 @@ module.exports = {
   async getAllGatewayMember(gatewayName) {
     const members = await app.sdb.findAll('GatewayMember', { condition: { gateway: gatewayName } })
     if (!members) throw new Error('No gateway members found')
-    // await Promise.all(members.map(async (member) => {
-    //   const addr = addressHelper.generateLockedAddress(member.address)
-    //   const newAccount = await app.sdb.findOne('Account', { condition: { address: addr } })
-    //   if (newAccount) {
-    //     member.bail = newAccount.xas
-    //   } else {
-    //     member.bail = 0
-    //   }
-    //   const srcAccount = await app.sdb.findOne('Account', { condition: { address: member.address } })
-    //   if (srcAccount) {
-    //     member.name = srcAccount.name
-    //   }
-    // }))
     for (let i = 0; i < members.length; i++) {
       const addr = addressHelper.generateLockedAddress(members[i].address)
-      // const newAccount = await app.sdb.findOne('Account', { condition: { address: addr } })
       const newAccount = await app.sdb.load('Account', { address: addr })
       if (newAccount) {
         members[i].bail = newAccount.xas
       } else {
         members[i].bail = 0
       }
-      // const srcAccount = await app.sdb.findOne('Account', { condition: { address: members[i].address } })
       const srcAccount = await app.sdb.load('Account', { address: members[i].address })
       if (srcAccount) {
         members[i].name = srcAccount.name
@@ -41,7 +26,6 @@ module.exports = {
     const m = await app.sdb.findOne('GatewayMember', { condition: { gateway: gatewayName, address: memberAddr } })
     if (!m) return null
     const addr = addressHelper.generateLockedAddress(memberAddr)
-    // const account = await app.sdb.findOne('Account', { condition: { address: addr } })
     const account = await app.sdb.load('Account', { address: addr })
     if (account) {
       m.bail = account.xas
@@ -89,7 +73,6 @@ module.exports = {
   },
 
   async getAmountByCurrency(gateway, symbol) {
-    // const gwCurrency = await app.sdb.findOne('GatewayCurrency', { condition: { gateway, symbol } })
     const gwCurrency = await app.sdb.load('GatewayCurrency', { gateway, symbol })
     if (gwCurrency) {
       return gwCurrency.quantity
@@ -103,39 +86,59 @@ module.exports = {
     const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
     const allBCH = await this.getAmountByCurrency(gatewayName, gwCurrency[0].symbol)
     const totalBail = await this.getBailTotalAmount(gatewayName)
+    const gatewayMembers = await this.getElectedGatewayMember(gatewayName)
+    const member = await this.getGatewayMember(gatewayName, memberAddr)
+    const count = gatewayMembers.length
     let ratio = 0
     let needSupply = 0
     let minimumBail = 0
     let currentBail = 0
+    if (member) {
+      currentBail = member.bail
+    }
+    if (currentBail < constants.initialDeposit) {
+      needSupply = constants.initialDeposit - currentBail
+    }
     if (!bancor) {
-      return { ratio, needSupply }
+      return { ratio, currentBail, needSupply }
     }
-    const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', allBCH, false)
-    if (result.targetAmount.toNumber() === 0) return { ratio, currentBail, needSupply }
-    app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toNumber()}`)
-    ratio = totalBail / result.targetAmount.toNumber()
-    if (ratio < constants.warningCriteria) {
-      const minimumMember = await this.getMinimumBailMember(gatewayName)
-      minimumBail = constants.supplyCriteria * minimumMember.bail
+    if (member && member.elected === 0) {
+      minimumBail = constants.initialDeposit
     }
-
-    if (memberAddr) {
-      const member = await this.getGatewayMember(gatewayName, memberAddr)
-      if (member && minimumBail > member.bail) {
-        needSupply = minimumBail - member.bail
+    const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', 1000, false)
+    result.targetAmount = result.targetAmount.times(allBCH).div(1000)
+    if (result.targetAmount.eq(0)) {
+      return { ratio, currentBail, needSupply }
+    }
+    app.logger.debug(`====ratio: totalBail is ${totalBail}, targetAmount is ${result.targetAmount.toString()}`)
+    ratioCalc = app.util.bignumber(totalBail).div(result.targetAmount)
+    ratio = Number(ratioCalc.toFixed(2).toString())
+    if (ratioCalc.lt(constants.supplyCriteria) && member && member.elected !== 0) {
+      minimumBail = Math.ceil(totalBail / ratio
+        * constants.supplyCriteria / (Math.floor(count / 2) + 1))
+      if (minimumBail < constants.initialDeposit) {
+        minimumBail = constants.initialDeposit
       }
-      if (member) {
-        currentBail = member.bail
-      }
     }
-
+    if (minimumBail > currentBail) {
+      needSupply = minimumBail - currentBail
+    }
     return { ratio, currentBail, needSupply }
   },
 
-  async getMaximumBailWithdrawl(gatewayName, memberAddr) {
+  async getNeedsBail(gatewayName) {
     const gwCurrency = await app.sdb.findAll('GatewayCurrency', { condition: { gateway: gatewayName }, limit: 1 })
     const gatewayMembers = await this.getElectedGatewayMember(gatewayName)
     const count = gatewayMembers.length
+    const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
+    if (!bancor) throw new Error(`Bancor from ${gwCurrency[0].symbol} to XAS is not ready`)
+    const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', 1000, false)
+    result.targetAmount = result.targetAmount.times(gwCurrency[0].quantity).div(1000)
+    const needsBail = result.targetAmount.times(1.5).div(Math.floor(count / 2) + 1).round()
+    return needsBail
+  },
+
+  async getMaximumBailWithdrawl(gatewayName, memberAddr) {
     let canBeWithdrawl = 0
     const m = await this.getGatewayMember(gatewayName, memberAddr)
     if (!m) return 0
@@ -145,18 +148,20 @@ module.exports = {
     if (m.elected === 0) {
       return lockAccount.xas
     }
-    const threshold = await this.getThreshold(gatewayName)
+    const threshold = await this.getThreshold(gatewayName, memberAddr)
 
-    if (m.elected === 1 && threshold.ratio > constants.supplyCriteria) {
-      const bancor = await Bancor.create(gwCurrency[0].symbol, 'XAS')
-      const result = await bancor.exchangeBySource(gwCurrency[0].symbol, 'XAS', gwCurrency[0].quantity, false)
-      const needsBail = result.targetAmount.toNumber() * 1.5 / count
-      const initialDeposit = constants.initialDeposit
-      app.logger.debug(`====needsBail is ${needsBail}, locked bail is ${lockAccount.xas}`)
-      if (needsBail <= initialDeposit) {
-        canBeWithdrawl = lockAccount.xas - initialDeposit
-      } else if (lockAccount.xas > Math.ceil(needsBail)) {
-        canBeWithdrawl = lockAccount.xas - Math.ceil(needsBail)
+    if (m.elected === 1 && lockAccount.xas > constants.initialDeposit) {
+      if (threshold.ratio === 0) {
+        canBeWithdrawl = lockAccount.xas - constants.initialDeposit
+      } else {
+        const needsBail = await this.getNeedsBail(gatewayName)
+        const initialDeposit = constants.initialDeposit
+        app.logger.debug(`====needsBail is ${needsBail}, locked bail is ${lockAccount.xas}`)
+        if (needsBail.lt(initialDeposit)) {
+          canBeWithdrawl = lockAccount.xas - initialDeposit
+        } else if (needsBail.lt(lockAccount.xas)) {
+          canBeWithdrawl = lockAccount.xas - needsBail.toNumber()
+        }
       }
     }
     return canBeWithdrawl

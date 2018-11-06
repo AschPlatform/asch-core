@@ -20,26 +20,9 @@ class Bancor {
     const owner = this._owner
     let bancor
     if (owner) {
-      bancor = await app.sdb.findAll(
-        'Bancor',
-        {
-          condition: {
-            money,
-            stock,
-            owner,
-          },
-        },
-      )
+      bancor = await app.sdb.loadMany('Bancor', { money, stock, owner }, 1)
     } else {
-      bancor = await app.sdb.findAll(
-        'Bancor',
-        {
-          condition: {
-            money,
-            stock,
-          },
-        },
-      )
+      bancor = await app.sdb.loadMany('Bancor', { money, stock }, 1)
     }
 
     if (bancor.length === 0) return -1
@@ -91,117 +74,101 @@ class Bancor {
   }
 
   // Use connected token to buy relay token
-  async buyRT(currency, amount) {
+  async buyRT(currency, amount, isExchange) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     if (this._balanceMap.get(currency) === undefined || this._cwMap.get(currency) === undefined) throw new Error('cw or balance is not found')
-    // const R = this._supply
-    const R = app.util.bignumber(this._supply).toNumber()
-    const T = amount.toNumber()
-    const C = app.util.bignumber(this._balanceMap.get(currency)).toNumber()
+    const R = app.util.bignumber(this._supply)
+    const T = amount
+    const C = app.util.bignumber(this._balanceMap.get(currency))
     const F = this._cwMap.get(currency)
-    const E = R * (((1 + T / C) ** F) - 1)
+    const E = R.times(app.util.bigdecimal(T.div(C).plus(1).toString()).pow(F).minus(1)).round()
+    if (E.gt(R.div(100))) throw new Error('Buy too many')
+    app.logger.debug(`--->buyRT: supply = ${this._supply} + ${E.toString()}, ${currency} balance = ${this._balanceMap.get(currency)} + ${amount.toString()}`)
     this._balanceMap.set(currency,
-      app.util.bignumber(this._balanceMap.get(currency)).plus(amount).toString(10))
-    // this._supply += E
-    this._supply = app.util.bignumber(this._supply)
-      .plus(this.getBigNumber(E).toNumber()).toString(10)
-    if (currency === this._money) {
-      await app.sdb.update('Bancor', { moneyBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
-    } else if (currency === this._stock) {
-      await app.sdb.update('Bancor', { stockBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
+      app.util.bignumber(this._balanceMap.get(currency)).plus(amount).toString())
+    this._supply = app.util.bignumber(this._supply).plus(E).toString()
+    app.logger.debug(`--->buyRT: supply = ${this._supply},  ${currency} balance = ${this._balanceMap.get(currency)}`)
+    if (isExchange) {
+      await this.updateBancorDB(currency)
     }
     return E
   }
 
   // Sell relay token to get assigned connected token
-  async sellRT(currency, amount) {
+  async sellRT(currency, amount, isExchange) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
     if (this._balanceMap.get(currency) === undefined || this._cwMap.get(currency) === undefined) throw new Error('cw or balance is not found')
-    const R = app.util.bignumber(this._supply).toNumber()
-    const C = app.util.bignumber(this._balanceMap.get(currency)).toNumber()
+    const R = app.util.bignumber(this._supply)
+    const C = app.util.bignumber(this._balanceMap.get(currency))
     const F = 1 / this._cwMap.get(currency)
-    const E = amount.toNumber()
-    const T = C * (((1 + E / R) ** F) - 1)
+    const E = amount
+    const T = C.times(app.util.bigdecimal(E.div(R).plus(1).toString()).pow(F).minus(1)).round()
+    if (amount.gt(R.div(100))) throw new Error('Sell too many')
+    app.logger.debug(`--->sellRT: supply = ${this._supply} - ${amount.toString()}, ${currency} balance = ${this._balanceMap.get(currency)} - ${T.toString()}`)
+    if (app.util.bignumber(this._balanceMap.get(currency)).lt(T)) throw new Error(`Balance in bancor ${this._name} is not enough`)
+    if (app.util.bignumber(this._supply).lt(amount)) throw new Error(`Supply in bancor ${this._name} is not enough`)
     this._balanceMap.set(currency,
-      app.util.bignumber(this._balanceMap.get(currency))
-        .minus(this.getBigNumber(T).toNumber()).toString(10))
-    // this._supply -= amount
-    this._supply = app.util.bignumber(this._supply).minus(amount).toString(10)
-    if (currency === this._money) {
-      await app.sdb.update('Bancor', { moneyBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
-    } else if (currency === this._stock) {
-      await app.sdb.update('Bancor', { stockBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
+      app.util.bignumber(this._balanceMap.get(currency)).minus(T).toString())
+    this._supply = app.util.bignumber(this._supply).minus(amount).toString()
+    app.logger.debug(`--->sellRT: supply = ${this._supply},  ${currency} balance = ${this._balanceMap.get(currency)}`)
+    if (isExchange) {
+      await this.updateBancorDB(currency)
     }
     return T
   }
 
-  getBigNumber(amount) {
-    let result
-    const stringAmount = String(amount)
-    const loc = stringAmount.indexOf('.')
-    if (loc > 0) {
-      result = app.util.bignumber(stringAmount.substring(0, loc))
-    } else {
-      result = app.util.bignumber(stringAmount)
+  async updateBancorDB(currency) {
+    app.logger.debug(`--->updateBancorDB: supply = ${this._supply}, ${currency} balance = ${this._balanceMap.get(currency)}`)
+    if (currency === this._money) {
+      app.sdb.update('Bancor', { moneyBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
+    } else if (currency === this._stock) {
+      app.sdb.update('Bancor', { stockBalance: this._balanceMap.get(currency), supply: this._supply }, { owner: this._owner, money: this._money, stock: this._stock })
     }
-    return result
   }
 
   // Get relay token price from one connected token
   getPriceFromCurrencyToRT(currency) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    return app.util.bignumber(this._supply).toNumber()
-          * ((((1 + 1 / app.util.bignumber(this._balanceMap.get(currency)).toNumber())
-          ** this._cwMap.get(currency)) - 1))
+    return app.util.bigdecimal(this._supply)
+      .times((app.util.bigdecimal(1)
+        .div(app.util.bigdecimal(this._balanceMap.get(currency))).plus(1))
+        .pow(this._cwMap.get(currency))
+        .minus(1))
   }
 
   // Get connected token price from one relay token
   getPriceFromRTToCurrency(currency) {
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    return app.util.bignumber(this._balanceMap.get(currency)).toNumber()
-          * ((((1 + 1 / app.util.bignumber(this._supply).toNumber())
-          ** (1 / this._cwMap.get(currency))) - 1))
+    return app.util.bigdecimal(this._balanceMap.get(currency))
+      .times((app.util.bigdecimal(1)
+        .div(app.util.bigdecimal(this._supply)).plus(1))
+        .pow(this._cwMap.get(currency))
+        .minus(1))
   }
 
   // Exchange based on the amount of target currency
   // return values are how much source currency was used and target amount
   async exchangeByTarget(sourceCurrency, targetCurrency, targetAmount, isExchange) {
-    const amount = app.util.bignumber(targetAmount).toNumber()
+    const amount = app.util.bignumber(targetAmount)
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    const needsRT = this.getPriceFromCurrencyToRT(targetCurrency) * amount
-    const needsSrcAmount = this.getPriceFromRTToCurrency(sourceCurrency) * needsRT
-    if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, this.getBigNumber(needsSrcAmount))
-      const actualTargetAmount = await this.sellRT(targetCurrency, this.getBigNumber(actualRT))
-      return {
-        sourceAmount: this.getBigNumber(needsSrcAmount),
-        targetAmount: this.getBigNumber(actualTargetAmount),
-      }
-    }
+    const actualRT = await this.buyRT(targetCurrency, amount, isExchange)
+    const actualSourceAmount = await this.sellRT(sourceCurrency, actualRT, isExchange)
     return {
-      sourceAmount: this.getBigNumber(needsSrcAmount),
-      targetAmount: this.getBigNumber(amount),
+      sourceAmount: actualSourceAmount,
+      targetAmount: amount,
     }
   }
 
   // Exchange based on the amount of source currency
   // return values are source amount and how much target currency was get
   async exchangeBySource(sourceCurrency, targetCurrency, sourceAmount, isExchange) {
-    const amount = app.util.bignumber(sourceAmount).toNumber()
+    const amount = app.util.bignumber(sourceAmount)
     if (!this._bancor) throw new Error('Bancor was not initialized')
-    const getsRT = this.getPriceFromCurrencyToRT(sourceCurrency) * amount
-    const getsTargetAmount = this.getPriceFromRTToCurrency(targetCurrency) * getsRT
-    if (isExchange) {
-      const actualRT = await this.buyRT(sourceCurrency, this.getBigNumber(amount))
-      const actualTargetAmount = await this.sellRT(targetCurrency, this.getBigNumber(actualRT))
-      return {
-        sourceAmount: this.getBigNumber(amount),
-        targetAmount: this.getBigNumber(actualTargetAmount),
-      }
-    }
+    const actualRT = await this.buyRT(sourceCurrency, amount, isExchange)
+    const actualTargetAmount = await this.sellRT(targetCurrency, actualRT, isExchange)
     return {
-      sourceAmount: this.getBigNumber(amount),
-      targetAmount: (this.getBigNumber(getsTargetAmount)),
+      sourceAmount: amount,
+      targetAmount: actualTargetAmount,
     }
   }
 }
