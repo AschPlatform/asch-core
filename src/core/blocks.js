@@ -152,12 +152,14 @@ Blocks.prototype.setLastBlock = (block) => {
     global.featureSwitch.enableClubBonus = priv.lastBlock.height >= 3320000
     global.featureSwitch.enableMoreLockTypes = global.featureSwitch.enableClubBonus
     global.featureSwitch.enableLockReset = priv.lastBlock.height >= 4290000
+    global.featureSwitch.enableUpdateProduceRatio = priv.lastBlock.height >= 6880000
   } else {
     global.featureSwitch.enableLongId = true
     global.featureSwitch.enable1_3_0 = true
     global.featureSwitch.enableClubBonus = (!!global.state.clubInfo)
     global.featureSwitch.enableMoreLockTypes = true
     global.featureSwitch.enableLockReset = true
+    global.featureSwitch.enableUpdateProduceRatio = true
   }
   global.featureSwitch.fixVoteNewAddressIssue = true
   if (global.Config.netVersion === 'mainnet' && priv.lastBlock.height < 1854000) {
@@ -428,7 +430,12 @@ Blocks.prototype.applyRound = async (block) => {
   const forgedBlocks = await app.sdb.getBlocksByHeightRange(block.height - 100, block.height - 1)
   const forgedDelegates = [...forgedBlocks.map(b => b.delegate), block.delegate]
 
-  const missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
+  let missedDelegates
+  if (global.featureSwitch.enableUpdateProduceRatio) {
+    missedDelegates = delegates.filter(fd => !forgedDelegates.includes(fd))
+  } else {
+    missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
+  }
   missedDelegates.forEach((md) => {
     address = addressHelper.generateNormalAddress(md)
     app.sdb.increase('Delegate', { missedDelegate: 1 }, { address })
@@ -643,10 +650,10 @@ Blocks.prototype.onReceiveBlock = (block, votes) => {
 
   library.sequence.add((cb) => {
     if (block.prevBlockId === priv.lastBlock.id && priv.lastBlock.height + 1 === block.height) {
-      library.logger.info(`Received new block id: ${block.id}` +
-        ` height: ${block.height}` +
-        ` round: ${modules.round.calc(modules.blocks.getLastBlock().height)}` +
-        ` slot: ${slots.getSlotNumber(block.timestamp)}`)
+      library.logger.info(`Received new block id: ${block.id}`
+        + ` height: ${block.height}`
+        + ` round: ${modules.round.calc(modules.blocks.getLastBlock().height)}`
+        + ` slot: ${slots.getSlotNumber(block.timestamp)}`)
       return (async () => {
         const pendingTrsMap = new Map()
         try {

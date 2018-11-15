@@ -1,4 +1,4 @@
- const crypto = require('crypto')
+const crypto = require('crypto')
 const isArray = require('util').isArray
 const jsonSql = require('json-sql')()
 
@@ -393,7 +393,7 @@ shared.getTransfers = (req, cb) => {
     },
     required: ['address', 'currency'],
   })
-  if (!validateResult) return cb( library.scheme.getLastError().details[0].message )
+  if (!validateResult) return cb(library.scheme.getLastError().details[0].message)
 
   validateResult = library.scheme.validate(req.body, {
     type: 'object',
@@ -406,15 +406,15 @@ shared.getTransfers = (req, cb) => {
       offset: {
         type: 'integer',
         minimum: 0,
-      }
+      },
     },
   })
-  if (!validateResult) return cb( library.scheme.getLastError().details[0].message )
+  if (!validateResult) return cb(library.scheme.getLastError().details[0].message)
 
   const limit = req.body.limit || 100
   const offset = req.body.offset || 0
 
-  let orderBy = undefined
+  let orderBy
   if (req.body.orderBy) {
     let [orderField, sortOrder] = req.body.orderBy.split(':')
     if (orderField && sortOrder !== undefined) {
@@ -422,15 +422,17 @@ shared.getTransfers = (req, cb) => {
       sortOrder = sortOrder.toUpperCase()
       orderBy = {}
       orderBy[orderField] = sortOrder
-    } 
+    }
   }
 
   const condition = [
-    { $or : { 
-      senderId : query.address, 
-      recipientId: query.address }
-    }, 
-    { currency : query.currency }]
+    {
+      $or: {
+        senderId: query.address,
+        recipientId: query.address,
+      },
+    },
+    { currency: query.currency }]
 
   return (async () => {
     try {
