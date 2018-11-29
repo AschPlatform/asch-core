@@ -8,15 +8,15 @@ const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const { promisify } = require('util')
 const Database = require('nedb')
+// const fs = require('fs')
 
 let modules
 let library
 let self
 
 const SAVE_PEERS_INTERVAL = 1 * 60 * 1000
-const CHECK_BUCKET_OUTDATE = 1 * 60 * 1000
-const MAX_BOOTSTRAP_PEERS = 25
-const RECONNECT_SEED_INTERVAL = 10 * 1000
+const CHECK_BUCKET_OUTDATE = 3 * 60 * 1000
+const RECONNECT_SEED_INTERVAL = 30 * 1000
 
 const priv = {
   handlers: {},
@@ -27,25 +27,11 @@ const priv = {
     return crypto.createHash('ripemd160').update(address).digest().toString('hex')
   },
 
-  getSeedPeerNodes: (seedPeers) => {
-    return seedPeers.map(peer => {
-      const node = { host: peer.ip, port: Number(peer.port) }
-      node.id = priv.getNodeIdentity(node)
-      return node
-    })
-  },
-
-  getBootstrapNodes: (seedPeers, lastNodes, maxCount) => {
-    let nodeMap = new Map()
-    priv.getSeedPeerNodes(seedPeers).forEach(node => nodeMap.set(node.id, node))
-    lastNodes.forEach(node => {
-      if (!nodeMap.has(node.id)) {
-        nodeMap.set(node.id, node)
-      }
-    })
-
-    return [...nodeMap.values()].slice(0, maxCount)
-  },
+  getSeedPeerNodes: seedPeers => seedPeers.map((peer) => {
+    const node = { host: peer.ip, port: Number(peer.port) }
+    node.id = priv.getNodeIdentity(node)
+    return node
+  }),
 
   initDHT: async (p2pOptions) => {
     p2pOptions = p2pOptions || {}
@@ -61,20 +47,16 @@ const priv = {
         app.logger.error('Last nodes not found', e)
       }
     }
-    const bootstrapNodes = priv.getBootstrapNodes(
-      p2pOptions.seedPeers,
-      lastNodes,
-      MAX_BOOTSTRAP_PEERS
-    )
-
+    const bootstrapNodes = [...priv.getSeedPeerNodes(p2pOptions.seedPeers)]
+    const [host, port] = [p2pOptions.publicIp, p2pOptions.peerPort]
     const dht = new DHT({
       timeBucketOutdated: CHECK_BUCKET_OUTDATE,
-      bootstrap: true,
-      id: priv.getNodeIdentity({ host: p2pOptions.publicIp, port: p2pOptions.peerPort })
+      bootstrap: bootstrapNodes,
+      nodeId: priv.getNodeIdentity({ host, port }),
     })
     priv.dht = dht
+    priv.bootstrapNodes = bootstrapNodes
 
-    const port = p2pOptions.peerPort
     dht.listen(port, () => library.logger.info(`p2p server listen on ${port}`))
 
     dht.on('node', (node) => {
@@ -96,28 +78,53 @@ const priv = {
       library.logger.warn('dht warning message', msg)
     })
 
-    if (p2pOptions.eventHandlers) Object.keys(p2pOptions.eventHandlers).forEach(eventName =>
-      dht.on(eventName, p2pOptions.eventHandlers[eventName])
-    )
+    if (p2pOptions.eventHandlers) {
+      Object.keys(p2pOptions.eventHandlers).forEach(eventName =>
+        dht.on(eventName, p2pOptions.eventHandlers[eventName]))
+    }
 
-    bootstrapNodes.forEach(n => dht.addNode(n))
+    lastNodes.forEach(n => dht.addNode(n))
+
+    // setInterval(() => {
+    //   const allNodes = dht.nodes.toArray().map(n => ({
+    //     host: n.host,
+    //     port: n.port,
+    //     seen: n.seen,
+    //     distance: n.distance,
+    //   }))
+    //   const peersFilePath = path.join(p2pOptions.peersDbDir, 'peers.json')
+    //   try {
+    //     const peersJson = JSON.stringify(allNodes, null, 2)
+    //     library.logger.debug('save %d peers, ', allNodes.length, peersJson)
+    //     fs.writeFileSync(peersFilePath, peersJson)
+    //   } catch (e) {
+    //     library.logger.warn('save peers failed, ', e)
+    //   }
+    // }, SAVE_PEERS_INTERVAL)
 
     setInterval(() => {
-      priv.findSeenNodesInDb((err, peers) => {
-        if (err) {
-          library.logger.error('check peers error', err)
-          return
-        }
-        if (!peers || !peers.length) {
-          library.logger.info('no peers found, reconnect seed nodes')
-          priv.getSeedPeerNodes(p2pOptions.seedPeers).forEach(n => dht.addNode(n))
-        }
-      })
+      const allNodes = dht.nodes.toArray()
+      const isInDht = n => allNodes.some(dn => dn.host === n.host && dn.port === n.port)
+      bootstrapNodes.filter(node => !isInDht(node))
+        .filter(n => n.host !== host && n.port !== port)
+        .forEach(n => dht.addNode(n))
     }, RECONNECT_SEED_INTERVAL)
   },
 
   findSeenNodesInDb: (callback) => {
-    priv.nodesDb.find({ seen: { $exists: true } }).sort({ seen: -1 }).exec(callback)
+    priv.nodesDb.find({ /* seen: { $exists: true } */ })
+      .sort({ seen: -1 })
+      .exec((err, nodes) => {
+        if (err) return callback(err)
+
+        // filter duplicated nodes
+        const nodesMap = new Map()
+        nodes.forEach((n) => {
+          const address = `${n.host}:${n.port}`
+          if (!nodesMap.has(address)) nodesMap.set(address, n)
+        })
+        return callback(err, [...nodesMap.values()])
+      })
   },
 
   initNodesDb: (peerNodesDbPath, cb) => {
@@ -126,7 +133,7 @@ const priv = {
       priv.nodesDb = db
       db.persistence.setAutocompactionInterval(SAVE_PEERS_INTERVAL)
 
-      const errorHandler = (err) => err && app.logger.info('peer node index error', err)
+      const errorHandler = err => err && app.logger.info('peer node index error', err)
       db.ensureIndex({ fieldName: 'id' }, errorHandler)
       db.ensureIndex({ fieldName: 'seen' }, errorHandler)
     }
@@ -137,11 +144,11 @@ const priv = {
   updateNode: (nodeId, node, callback) => {
     if (!nodeId || !node) return
 
-    let upsertNode = Object.assign({}, node)
+    const upsertNode = Object.assign({}, node)
     upsertNode.id = nodeId
     priv.nodesDb.update({ id: nodeId }, upsertNode, { upsert: true }, (err, data) => {
       if (err) app.logger.warn(`faild to update node (${nodeId}) ${node.host}:${node.port}`)
-      callback && callback(err, data)
+      if (_.isFunction(callback)) callback(err, data)
     })
   },
 
@@ -150,9 +157,9 @@ const priv = {
 
     priv.nodesDb.remove({ id: nodeId }, (err, numRemoved) => {
       if (err) app.logger.warn(`faild to remove node id (${nodeId})`)
-      callback && callback(err, numRemoved)
+      if (_.isFunction(callback)) callback(err, numRemoved)
     })
-  }
+  },
 }
 
 const shared = {}
@@ -259,6 +266,10 @@ Peer.prototype.publish = (topic, message, recursive = 1) => {
   }
   message.topic = topic
   message.recursive = recursive
+  if (topic === 'transaction') {
+    library.logger.debug('broadcast transactions to bootstrapNodes, ', priv.bootstrapNodes)
+    priv.dht.broadcast(message, priv.bootstrapNodes)
+  }
   priv.dht.broadcast(message)
 }
 
@@ -318,14 +329,14 @@ Peer.prototype.onBlockchainReady = () => {
     publicIp: library.config.publicIp,
     peerPort: library.config.peerPort,
     seedPeers: library.config.peers.list,
-    persistentPeers: library.config.peers.persistent === false ? false : true,
+    persistentPeers: library.config.peers.persistent !== false,
     peersDbDir: global.Config.dataDir,
     eventHandlers: {
-      'broadcast': (msg, node) => self.onpublish(msg, node)
-    }
+      broadcast: (msg, node) => self.onpublish(msg, node),
+    },
   }).then(() => {
     library.bus.message('peerReady')
-  }).catch(err => {
+  }).catch((err) => {
     library.logger.error('Failed to init dht', err)
   })
 }
