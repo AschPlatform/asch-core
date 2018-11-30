@@ -24,7 +24,7 @@ const priv = {
 
   getNodeIdentity: (node) => {
     const address = `${node.host}:${node.port}`
-    return crypto.createHash('ripemd160').update(address).digest().toString('hex')
+    return crypto.createHash('ripemd160').update(address).digest()
   },
 
   getSeedPeerNodes: seedPeers => seedPeers.map((peer) => {
