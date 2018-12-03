@@ -57,6 +57,11 @@ const priv = {
     priv.dht = dht
     priv.bootstrapNodes = bootstrapNodes
 
+    priv.blackPeers = new Set();
+    (p2pOptions.blackPeers || []).forEach(p => {
+      if (!priv.blackPeers.has(p.ip)) priv.blackPeers.add(p.ip)
+    })
+
     dht.listen(port, () => library.logger.info(`p2p server listen on ${port}`))
 
     dht.on('node', (node) => {
@@ -160,6 +165,37 @@ const priv = {
       if (_.isFunction(callback)) callback(err, numRemoved)
     })
   },
+
+  getHealthNodes: () => {
+    return priv.dht.nodes.toArray().filter(n => !priv.blackPeers.has(n.host))
+  },
+
+  getRandomNode: ()=>{  
+    let nodes = priv.getHealthNodes() 
+    nodes = nodes.length === 0 ? priv.bootstrapNodes : nodes
+    const rnd = Math.floor(Math.random() * nodes.length)
+    return nodes[rnd]     
+  },
+
+  broadcast: (message, peers) =>{
+    function getRandomPeers(count, allNodes) {
+      if (allNodes.length <= count) return allNodes
+  
+      const randomPeers = []
+      while(count-- > 0 && allNodes.length > 0) {
+        const rnd = Math.floor(Math.random() * allNodes.length)
+        const peer = allNodes[rnd]
+        allNodes.splice(rnd, 1)
+        randomPeers.push(peer)
+      }
+      return randomPeers
+    }
+
+    let nodes = priv.getHealthNodes() 
+    nodes = nodes.length === 0 ? priv.bootstrapNodes : nodes
+    peers = peers || getRandomPeers(20, nodes)
+    priv.dht.broadcast(message, peers)
+  }
 }
 
 const shared = {}
@@ -266,11 +302,12 @@ Peer.prototype.publish = (topic, message, recursive = 1) => {
   }
   message.topic = topic
   message.recursive = recursive
-  if (topic === 'transaction') {
-    library.logger.debug('broadcast transactions to bootstrapNodes, ', priv.bootstrapNodes)
-    priv.dht.broadcast(message, priv.bootstrapNodes)
+  // TODO: Optimize broadcasting efficiency
+  if (true) {
+    library.logger.debug('broadcast message %s to bootstrap nodes, ', message.topics)
+    priv.broadcast(message, priv.bootstrapNodes)
   }
-  priv.dht.broadcast(message)
+  priv.broadcast(message)
 }
 
 Peer.prototype.request = (method, params, contact, cb) => {
@@ -299,7 +336,7 @@ Peer.prototype.request = (method, params, contact, cb) => {
 }
 
 Peer.prototype.randomRequest = (method, params, cb) => {
-  const randomNode = priv.dht.getRandomNode()
+  const randomNode = priv.getRandomNode()
   if (!randomNode) return cb('No contact')
   library.logger.debug('select random contract', randomNode)
   let isCallbacked = false
@@ -329,6 +366,7 @@ Peer.prototype.onBlockchainReady = () => {
     publicIp: library.config.publicIp,
     peerPort: library.config.peerPort,
     seedPeers: library.config.peers.list,
+    blackPeers: library.config.peers.blackList,
     persistentPeers: library.config.peers.persistent !== false,
     peersDbDir: global.Config.dataDir,
     eventHandlers: {

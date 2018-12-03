@@ -28,15 +28,8 @@ priv.attachApi = () => {
   const router = new Router()
 
   router.use((req, res, next) => {
-    if (modules.loader.syncing()) {
-      return res.status(500).send({
-        success: false,
-        error: 'Blockchain is syncing',
-      })
-    }
 
     res.set(priv.headers)
-
     if (req.headers.magic !== library.config.magic) {
       return res.status(500).send({
         success: false,
@@ -55,7 +48,7 @@ priv.attachApi = () => {
     }
     const newBlock = priv.latestBlocksCache.get(body.id)
     if (!newBlock) {
-      return res.status(500).send({ error: 'New block not found' })
+      return res.status(500).send({ error: 'New block not found: '+ body.id })
     }
     return res.send({ success: true, block: newBlock.block, votes: newBlock.votes })
   })
@@ -120,6 +113,12 @@ priv.attachApi = () => {
   })
 
   router.post('/transactions', (req, res) => {
+    if (modules.loader.syncing()) {
+      return res.status(500).send({
+        success: false,
+        error: 'Blockchain is syncing',
+      })
+    }
     const lastBlock = modules.blocks.getLastBlock()
     const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
     if (slots.getNextSlot() - lastSlot >= 12) {
