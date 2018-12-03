@@ -304,7 +304,7 @@ Peer.prototype.publish = (topic, message, recursive = 1) => {
   message.recursive = recursive
   // TODO: Optimize broadcasting efficiency
   if (true) {
-    library.logger.debug('broadcast message %s to bootstrap nodes, ', message.topics)
+    library.logger.debug('broadcast message %s to bootstrap nodes', topic)
     priv.broadcast(message, priv.bootstrapNodes)
   }
   priv.broadcast(message)
