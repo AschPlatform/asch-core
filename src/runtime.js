@@ -4,9 +4,9 @@ const util = require('util')
 const { EventEmitter } = require('events')
 const _ = require('lodash')
 const validate = require('validate.js')
-const gatewayLib = require('./gateway')
 const { AschCore } = require('asch-smartdb')
 const { AschContract } = require('asch-contract')
+const gatewayLib = require('./gateway')
 const slots = require('./utils/slots')
 const amountHelper = require('./utils/amount')
 const Router = require('./utils/router.js')
@@ -329,6 +329,7 @@ module.exports = async function runtime(options) {
     slots: require('./utils/slots.js'),
     constants: require('./utils/constants.js'),
     gateway: require('./utils/gateway.js'),
+    pledges: require('./utils/pledges.js'),
   }
 
   const contractSandbox = new AschContract.SandboxConnector({
@@ -378,6 +379,8 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[10] = 'basic.registerDelegate'
   app.contractTypeMapping[11] = 'basic.vote'
   app.contractTypeMapping[12] = 'basic.unvote'
+  app.contractTypeMapping[13] = 'basic.pledge'
+  app.contractTypeMapping[14] = 'basic.unpledge'
   app.contractTypeMapping[20] = 'exchange.exchangeByTarget'
   app.contractTypeMapping[21] = 'exchange.exchangeBySource'
   app.contractTypeMapping[22] = 'exchange.burnXAS'

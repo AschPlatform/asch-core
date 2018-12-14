@@ -21,4 +21,7 @@ module.exports = {
   warningCriteria: 1.2,
   frozenCriteria: 1.0,
   supplyCriteria: 1.5,
+  netPerXAS: 1000,
+  energyPerXAS: 1000,
+  blocksPerDay: 24 * 60 * 6,
 }

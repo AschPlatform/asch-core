@@ -8,6 +8,7 @@ const feeCalculators = require('../utils/calculate-fee.js')
 const transactionMode = require('../utils/transaction-mode.js')
 const featureSwitch = require('../utils/feature-switch.js')
 const Bancor = require('../utils/bancor.js')
+const pledges = require('../utils/pledges.js')
 
 let self
 // Constructor
@@ -328,11 +329,15 @@ Transaction.prototype.apply = async (context) => {
             gasUsed: needsBCH.sourceAmount.toNumber(),
           })
       } else {
-        if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
-        requestor.xas -= requestorFee
-        app.addRoundFee(requestorFee, modules.round.calc(block.height))
+        if (await pledges.isNetCovered(requestorFee / constants.fixedPoint, requestor.address, block.height)) {
+          pledges.updateNet(requestorFee / constants.fixedPoint, requestor.address, block.height)
+        } else {
+          if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
+          requestor.xas -= requestorFee
+          app.addRoundFee(requestorFee, modules.round.calc(block.height))
+          app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
+        }
         app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
-        app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
       }
       return null
     }
@@ -357,8 +362,10 @@ Transaction.prototype.apply = async (context) => {
           gasUsed: result.sourceAmount.toNumber(),
         })
     } else {
-      if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
-      sender.xas -= trs.fee
+      if (await !pledges.isNetCovered(requestorFee / constants.fixedPoint, sender.address, block.height)) {
+        if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
+        sender.xas -= trs.fee
+      }
       app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
     }
   }

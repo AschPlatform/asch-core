@@ -11,6 +11,7 @@ const sandboxHelper = require('../utils/sandbox.js')
 const addressHelper = require('../utils/address.js')
 const transactionMode = require('../utils/transaction-mode.js')
 const featureSwitch = require('../utils/feature-switch.js')
+const pledges = require('../utils/pledges.js')
 
 let genesisblock = null
 let modules
@@ -446,7 +447,11 @@ Blocks.prototype.applyRound = async (block) => {
   let transFee = 0
   for (const t of block.transactions) {
     if (transactionMode.isDirectMode(t.mode) && t.fee >= 0) {
-      transFee += t.fee
+      if (await pledges.isNetCovered(t.fee / constants.fixedPoint, t.senderId, block.height)) {
+        pledges.updateNet(t.fee / constants.fixedPoint, t.senderId, block.height)
+      } else {
+        transFee += t.fee
+      }
     }
   }
 
