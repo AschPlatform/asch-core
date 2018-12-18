@@ -362,7 +362,7 @@ Transaction.prototype.apply = async (context) => {
           gasUsed: result.sourceAmount.toNumber(),
         })
     } else {
-      if (await !pledges.isNetCovered(requestorFee / constants.fixedPoint, sender.address, block.height)) {
+      if (!(await pledges.isNetCovered(trs.fee / constants.fixedPoint, sender.address, block.height))) {
         if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
         sender.xas -= trs.fee
       }

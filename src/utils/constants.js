@@ -24,4 +24,7 @@ module.exports = {
   netPerXAS: 1000,
   energyPerXAS: 1000,
   blocksPerDay: 24 * 60 * 6,
+  pledageDays: 3,
+  initialTotalNetLimit: 350000000000,
+  initialTotalEnergyLimit: 350000000000,
 }
