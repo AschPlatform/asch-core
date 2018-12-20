@@ -2,9 +2,9 @@ const constants = require('../utils/constants.js')
 
 module.exports = {
   async getNetEnergyLimit(address) {
-    const pledgeAccount = await app.sdb.findOne('AccountPledge', { condition: { address } })
+    const pledgeAccount = await app.sdb.load('AccountPledge', address)
     if (!pledgeAccount) return null
-    const totalPledges = await app.sdb.findAll('AccountTotalPledge', { })
+    const totalPledges = await app.sdb.loadMany('AccountTotalPledge', { })
     if (totalPledges.length === 0) return null
     const totalPledge = totalPledges[0]
     const netLimit = parseInt(pledgeAccount.pledgeAmountForBP
@@ -74,7 +74,7 @@ module.exports = {
   },
 
   async updateNet(fee, address, blockHeight) {
-    const pledgeAccount = await app.sdb.findOne('AccountPledge', { condition: { address } })
+    const pledgeAccount = await app.sdb.load('AccountPledge', address)
     if (!pledgeAccount) throw new Error('Pledge account is not found')
     const netUsed = fee * constants.netPerXAS
     let totalUsed = netUsed

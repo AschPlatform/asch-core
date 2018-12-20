@@ -363,7 +363,9 @@ Transaction.prototype.apply = async (context) => {
         })
     } else {
       if (await pledges.isNetCovered(trs.fee / constants.fixedPoint, sender.address, block.height)) {
-        pledges.updateNet(trs.fee / constants.fixedPoint, requestor.address, block.height)
+        if (trs.fee > 0) {
+          pledges.updateNet(trs.fee / constants.fixedPoint, requestor.address, block.height)
+        }
       } else {
         if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
         sender.xas -= trs.fee
