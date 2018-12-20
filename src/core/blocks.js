@@ -171,7 +171,7 @@ Blocks.prototype.setLastBlock = (block) => {
     }
     // FIXME: this height nees adjustment
     if (priv.lastBlock.height >= 6666666) {
-      featureSwitch.enable('enableBCH')
+      // featureSwitch.enable('enableBCH')
     }
   } else {
     // global.featureSwitch.enableLongId = true
@@ -189,7 +189,7 @@ Blocks.prototype.setLastBlock = (block) => {
 
     featureSwitch.enable('enableMoreLockTypes')
     featureSwitch.enable('enableLockReset')
-    featureSwitch.enable('enableBCH')
+    // featureSwitch.enable('enableBCH')
   }
   // global.featureSwitch.fixVoteNewAddressIssue = true
   featureSwitch.enable('fixVoteNewAddressIssue')
