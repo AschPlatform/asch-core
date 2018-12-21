@@ -448,7 +448,7 @@ Blocks.prototype.applyRound = async (block) => {
   for (const t of block.transactions) {
     if (transactionMode.isDirectMode(t.mode) && t.fee >= 0) {
       if (await pledges.isNetCovered(t.fee / constants.fixedPoint, t.senderId, block.height)) {
-        pledges.updateNet(t.fee / constants.fixedPoint, t.senderId, block.height)
+        pledges.updateNet(t.fee / constants.fixedPoint, t.senderId, block.height, t.id)
       } else {
         transFee += t.fee
       }

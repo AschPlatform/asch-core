@@ -330,7 +330,7 @@ Transaction.prototype.apply = async (context) => {
           })
       } else {
         if (await pledges.isNetCovered(requestorFee / constants.fixedPoint, requestor.address, block.height)) {
-          pledges.updateNet(requestorFee / constants.fixedPoint, requestor.address, block.height)
+          pledges.updateNet(requestorFee / constants.fixedPoint, requestor.address, block.height, trs.id)
         } else {
           if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
           requestor.xas -= requestorFee
@@ -362,11 +362,7 @@ Transaction.prototype.apply = async (context) => {
           gasUsed: result.sourceAmount.toNumber(),
         })
     } else {
-      if (await pledges.isNetCovered(trs.fee / constants.fixedPoint, sender.address, block.height)) {
-        if (trs.fee > 0) {
-          pledges.updateNet(trs.fee / constants.fixedPoint, requestor.address, block.height)
-        }
-      } else {
+      if (!(await pledges.isNetCovered(trs.fee / constants.fixedPoint, sender.address, block.height))) {
         if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
         sender.xas -= trs.fee
       }

@@ -73,7 +73,7 @@ module.exports = {
     return false
   },
 
-  async updateNet(fee, address, blockHeight) {
+  async updateNet(fee, address, blockHeight, tid) {
     const pledgeAccount = await app.sdb.load('AccountPledge', address)
     if (!pledgeAccount) throw new Error('Pledge account is not found')
     const netUsed = fee * constants.netPerXAS
@@ -101,6 +101,14 @@ module.exports = {
       pledgeAccount.lastFreeNetUpdateHeight = blockHeight
       app.sdb.update('AccountPledge', pledgeAccount, { address })
     }
+
+    app.sdb.create('Netenergyconsumption',
+      {
+        tid,
+        height: blockHeight,
+        netUsed,
+        isFeeDeduct: 0,
+      })
 
     return null
   },
