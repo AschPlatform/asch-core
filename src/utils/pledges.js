@@ -13,7 +13,7 @@ module.exports = {
     const energyLimit = parseInt(pledgeAccount.pledgeAmountForEnergy
                       / totalPledge.totalPledgeForEnergy
                       * totalPledge.totalEnergyLimit, 10)
-    const freeNetLimit = pledgeAccount.freeNetLimit
+    const freeNetLimit = totalPledge.freeNetLimit
     const freeNetUsed = pledgeAccount.freeNetUsed
     const netUsed = pledgeAccount.netUsed
     const energyUsed = pledgeAccount.energyUsed
@@ -102,13 +102,12 @@ module.exports = {
       app.sdb.update('AccountPledge', pledgeAccount, { address })
     }
 
-    app.sdb.create('Netenergyconsumption',
-      {
-        tid,
-        height: blockHeight,
-        netUsed,
-        isFeeDeduct: 0,
-      })
+    app.sdb.create('Netenergyconsumption', {
+      tid,
+      height: blockHeight,
+      netUsed,
+      isFeeDeduct: 0,
+    })
 
     return null
   },
