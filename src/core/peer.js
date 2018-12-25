@@ -3,11 +3,12 @@ const ip = require('ip')
 const crypto = require('crypto')
 const _ = require('lodash')
 const DHT = require('bittorrent-dht')
-const request = require('request')
+const axios = require('axios')
 const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const { promisify } = require('util')
 const Database = require('nedb')
+const { EventEmitter } = require('events')
 // const fs = require('fs')
 
 let modules
@@ -18,9 +19,292 @@ const SAVE_PEERS_INTERVAL = 1 * 60 * 1000
 const CHECK_BUCKET_OUTDATE = 3 * 60 * 1000
 const RECONNECT_SEED_INTERVAL = 30 * 1000
 
+const CHECK_COMPATIABLE_NODES_INTERVAL = 1 * 60 * 1000
+const CHECK_UNCOMPATIABLE_NODES_INTERVAL = 2 * 60 * 1000
+const DEFAULT_PEER_TIMEOUT = 4 * 1000
+
+// interface NodeInfo {
+//   host: string
+//   port: number
+//   status: NodeStatus
+//   updateAt: timestamp
+//   isSeed: boolean
+
+//   height: number
+//   blockId: string
+//   magic: string
+//   net: string
+//   version: string
+// }
+
+const NodeStatus = {
+  Unknow : 0,
+  Healthy : 1,
+  Unhealthy : 2,
+
+  Uncompatiable : -1
+}
+
+class NodeManager extends EventEmitter {
+  constructor() {
+    super()
+    this._allNodes = new Map()
+    this._shackingNodes = new Set()
+    this._isChecking = false
+    this._checkCompatiableTimer = undefined
+    this._checkUncompatiableTimer = undefined
+  }
+
+  get healthyNodes() {
+    return [...this._allNodes.values()].filter(n => n.status === NodeStatus.Healthy)
+  }
+
+  get compatibleNodes() {
+    return [...this._allNodes.values()].filter(n => n.status === NodeStatus.Healthy || n.status === NodeStatus.Unhealthy)
+  }
+
+  get uncompatibleNodes() {
+    return [...this._allNodes.values()].filter(n => n.status === NodeStatus.Uncompatiable || n.status === NodeStatus.Unknow)
+  }
+
+  isHealthy( height, blockId ) {
+    const lastBlock = modules.blocks.getLastBlock()
+    return lastBlock.height <= height + 100
+  }
+
+  isCompatible ( net, version, magic ) {
+    if (net !== library.config.netVersion) return false
+    if (magic && magic !== library.config.magic) return false
+
+    if (version === library.config.version)  return true
+
+    const [nodeMajor, nodeMinor, nodePath] = version
+    if ([nodeMajor, nodeMajor, nodePath].some(v => !Number.isInteger(v))) return false
+
+    const [major, minor, path ] = library.config.version.split('.')
+
+    return nodeMajor === major && minor === nodeMinor && path <= nodePath
+  }
+
+  startCheckNodes() {
+    const checkCompatiableNodes = () => this.compatibleNodes
+      .forEach( node => this._checkCompatiableNode(node) )
+
+    const checkUncompatiableNodes = () => this.uncompatibleNodes
+      .forEach( node => this._checkUncompatiableNode(node) )
+
+    if (this._isChecking) return 
+
+    library.logger.debug(`start check nodes`)
+
+    this._isChecking = true
+    this._checkCompatiableTimer = setInterval(checkCompatiableNodes, CHECK_COMPATIABLE_NODES_INTERVAL)
+    this._checkUncompatiableTimer = setInterval(checkUncompatiableNodes, CHECK_UNCOMPATIABLE_NODES_INTERVAL)
+  }
+
+  stopCheckNodes() {
+    if (!this._isChecking) return 
+
+    if (this._checkCompatiableTimer)
+      clearInterval(this._checkUncompatiableNode)
+    if (this._checkCompatiableTimer)
+      clearInterval(this._checkUncompatiableNode)
+  }
+
+  updateNodeHealthy(peer, height, blockId) {
+    const node = this.getNodeInfo(peer)
+    if (node === undefined)  return false
+    if (node.status === NodeStatus.Uncompatiable || node.status === NodeStatus.Unknow) return false
+
+    const status = this.isHealthy(height, blockId) ? NodeStatus.Healthy : NodeStatus.Unhealthy
+    this._updateNode(node, { status, height, blockId })
+
+    return true
+  }
+
+  setUncompatiable(ip, magic) {
+    this._allNodes.forEach( node => {
+      if (node.host === ip) {
+        this._updateNode(node, { magic, status: NodeStatus.Uncompatiable})
+      }
+    })
+  }
+
+  getNodeInfo(peer) {
+    return this._allNodes.get(this._makeId(peer))
+  }
+
+  addPeer(peer, id) {
+    id = id || this._makeId(peer)
+    if (this._allNodes.has(id) || this._shackingNodes.has(id)) return 
+
+    this._shackingNodes.add(id)
+    library.logger.debug(`nodeManager add peer ${peer.host}:${peer.port}`)
+
+    this._shackhands(peer, (err, info) => {
+      this._shackingNodes.delete(id)
+      const { host, port, isSeed, status } = peer
+      const node = { host, port, isSeed } 
+      if (err && status === NodeStatus.Uncompatiable) {
+        return
+      }
+      const updateInfo = info || { status: NodeStatus.Unknow }
+      this._updateNode(node, updateInfo)
+      this._allNodes.set(id, node)
+    })
+  }
+
+  removePeer(id) {
+    this._allNodes.delete(id)
+  }
+
+  _updateNode(node, info) {
+    const { height, blockId, magic, status, net, version } = info || {}
+    const origin = Object.assign({}, node)
+    const data = { status, height, blockId, magic, net, version, updateAt: Date.now() }
+    let modifier = {}
+    Object.keys(data).forEach(k => { if (data[k] !== undefined) modifier[k] = data[k] })
+    Object.assign(node, modifier)
+
+    this.emit('change', origin, modifier)
+  }
+
+  _makeId(peer) { return priv.getNodeIdentity(peer) }
+
+  async _sleep( ms ) {
+    return new Promise((resolve, reject) => {
+      setTimeout( () => resolve(), ms)
+    })
+  }
+
+  _httpGet(peer, path, cb) {
+    const url = `http://${peer.host}:${peer.port - 1}/api/${path}`
+    axios.get(url, {}, { timeout: priv.peerTimeout })
+      .then ( response => {
+        const data = response.data
+        return data.success ? cb(undefined, data) : cb(data.error || 'Get from server failed')
+      }) 
+      .catch( err => cb(String(err)) )
+  }
+
+  _httpPost(peer, path, cb) {
+    const url = `http://${peer.host}:${peer.port - 1}/peer/${path}`
+    const options =  {
+      timeout: priv.peerTimeout,
+      headers: {
+        magic: global.Config.magic,
+        version: global.Config.version,
+      }
+    }
+    axios.post(url, {}, options)
+      .then ( response => {
+        const data = response.data
+        library.logger.debug(`post ${url}, `, response.data)
+        return data ? cb(undefined, data, response.headers) : cb(data.error || 'request server failed')
+      })
+      .catch( err => {
+        const headers = (err.response) ? err.response.headers : undefined
+        library.logger.debug(`post ${url} error, `, String(err))
+        cb(String(err), undefined, headers)
+      })
+  }
+
+  async _retry( asyncFunc, maxRetry, times = 1) {
+    try {
+      return await asyncFunc()
+    }
+    catch( err ){
+      library.logger.debug(`nodeManager retry async call, retry = ${times}`)
+      if (times >= maxRetry) throw err
+      const ms = 3 ** times * 1000
+      await _sleep(ms)
+      await _retry(asyncFunc, maxRetry, times + 1)
+    }
+  }
+
+  async _getVersion(peer) {
+    return new Promise((resolve, reject) => {
+      this._httpGet(peer, 'peers/version', (err, ret)=>{
+        if (err) return reject(err)
+        resolve(ret)
+      })
+    })
+  }
+
+  async _getMagicAndHeight(peer) {
+    return new Promise((resolve, reject) => {
+      this._httpPost(peer, 'getHeight', (err, ret, headers) => {
+        const magic = headers !== undefined ? headers.magic : undefined
+        if (magic) { 
+          let result = ret || {}
+          result['magic'] = magic
+          return resolve(result)
+        } 
+        reject(String(err) || `get magic and height failed`)
+      })
+    })
+  }
+
+  _shackhands (peer, cb) {
+    library.logger.debug(`start shackhands with ${peer.host}:${peer.port}`)
+    const self = this
+    Promise.all([
+      this._getVersion(peer), 
+      this._getMagicAndHeight(peer)
+    ])
+    .then( results => {
+      const [versionRet, lastBlockRet] = results
+      library.logger.log(`shack hands, `, versionRet, lastBlockRet)
+      if (!versionRet.success) return cb(versionRet.err || 'get version failed')
+
+      const { net, version } = versionRet
+      const { height, blockId, magic } = lastBlockRet
+
+      let status = this.isCompatible(net, version, magic) ? NodeStatus.Unhealthy : NodeStatus.Uncompatiable
+      if (status === NodeStatus.Uncompatiable) {
+        return cb(undefined, { net, version, status })
+      }
+
+      status = this.isHealthy( height, blockId ) ? NodeStatus.Healthy : NodeStatus.Unhealthy
+      return cb(undefined,{ net, version, status, magic, height, blockId }) 
+    })
+    .catch(err => {
+      cb(err)
+    }) 
+  }
+
+  _checkCompatiableNode(node) {
+    if (Date.now() - (node.updateAt || 0) < CHECK_COMPATIABLE_NODES_INTERVAL) {
+      return 
+    }
+    library.logger.debug(`nodeManager check compatiable node ${node.host}:${node.port}`)
+    this._getMagicAndHeight(node)
+      .then(info => this.updateNodeHealthy(node, info.height, info.blockId))
+      .catch(err => this._updateNode(node, { status : NodeStatus.Unhealthy }))
+  }
+
+  _checkUncompatiableNode(node) {
+    if (Date.now() - (node.updateAt || 0) < CHECK_UNCOMPATIABLE_NODES_INTERVAL) {
+      return 
+    }
+
+    library.logger.debug(`nodeManager check uncompatiable node ${node.host}:${node.port}`)
+    this._shackhands(node, (err, info) => {
+      if (err && node.status === NodeStatus.Uncompatiable) {
+        return
+      }
+      const updateInfo = info || { status: NodeStatus.Unknow }
+      this._updateNode(node, updateInfo)
+    })
+  }
+}
+
+
 const priv = {
   handlers: {},
   dht: null,
+  peerTimeout: DEFAULT_PEER_TIMEOUT,
+  nodeManager: new NodeManager(),
 
   getNodeIdentity: (node) => {
     const address = `${node.host}:${node.port}`
@@ -33,9 +317,7 @@ const priv = {
     return node
   }),
 
-  initDHT: async (p2pOptions) => {
-    p2pOptions = p2pOptions || {}
-
+  initP2P: async (p2pOptions) => {
     let lastNodes = []
     if (p2pOptions.persistentPeers) {
       const peerNodesDbPath = path.join(p2pOptions.peersDbDir, 'peers.db')
@@ -54,29 +336,49 @@ const priv = {
       bootstrap: bootstrapNodes,
       nodeId: priv.getNodeIdentity({ host, port }),
     })
+    
     priv.dht = dht
+    priv.peerTimeout = p2pOptions.timeout || DEFAULT_PEER_TIMEOUT
     priv.bootstrapNodes = bootstrapNodes
-
-    priv.blackPeers = new Set();
-    (p2pOptions.blackPeers || []).forEach(p => {
-      if (!priv.blackPeers.has(p.ip)) priv.blackPeers.add(p.ip)
+  
+    bootstrapNodes.forEach(node => {
+      priv.nodeManager.addPeer({ host: node.host, port: node.port, isSeed: true })
     })
 
+    priv.nodeManager.on('change', (node, modifier) => {
+      library.logger.debug('node changed', node, modifier)
+      if (modifier.status === NodeStatus.Uncompatiable ) {
+        dht.addBlackIPs(node.host)
+      }
+      else if (modifier.status === NodeStatus.Healthy || modifier.status === NodeStatus.Unhealthy) {
+        dht.removeBlackIP(node.host)
+      }
+    })
+
+    
+    dht.addBlackIPs(...(p2pOptions.blackPeers || []).map(p=>p.id))
     dht.listen(port, () => library.logger.info(`p2p server listen on ${port}`))
 
     dht.on('node', (node) => {
       const nodeId = node.id.toString('hex')
       library.logger.info(`add node (${nodeId}) ${node.host}:${node.port}`)
       priv.updateNode(nodeId, node)
+      priv.nodeManager.addPeer(node, nodeId)
     })
 
     dht.on('remove', (nodeId, reason) => {
       library.logger.info(`remove node (${nodeId}), reason: ${reason}`)
       priv.removeNode(nodeId)
+      priv.nodeManager.removePeer(nodeId)
     })
 
     dht.on('error', (err) => {
       library.logger.warn('dht error message', err)
+    })
+
+    dht.on('black', (peer, type, message) =>{
+      library.logger.debug('black list', priv.dht.blackList())
+      library.logger.debug(`black node (${peer.host||peer.address}:${peer.port}) message, type: ${type}, ${message && message.topic} `)
     })
 
     dht.on('warning', (msg) => {
@@ -89,24 +391,7 @@ const priv = {
     }
 
     lastNodes.forEach(n => dht.addNode(n))
-
-    // setInterval(() => {
-    //   const allNodes = dht.nodes.toArray().map(n => ({
-    //     host: n.host,
-    //     port: n.port,
-    //     seen: n.seen,
-    //     distance: n.distance,
-    //   }))
-    //   const peersFilePath = path.join(p2pOptions.peersDbDir, 'peers.json')
-    //   try {
-    //     const peersJson = JSON.stringify(allNodes, null, 2)
-    //     library.logger.debug('save %d peers, ', allNodes.length, peersJson)
-    //     fs.writeFileSync(peersFilePath, peersJson)
-    //   } catch (e) {
-    //     library.logger.warn('save peers failed, ', e)
-    //   }
-    // }, SAVE_PEERS_INTERVAL)
-
+   
     setInterval(() => {
       const allNodes = dht.nodes.toArray()
       const isInDht = n => allNodes.some(dn => dn.host === n.host && dn.port === n.port)
@@ -114,6 +399,8 @@ const priv = {
         .filter(n => n.host !== host && n.port !== port)
         .forEach(n => dht.addNode(n))
     }, RECONNECT_SEED_INTERVAL)
+
+    priv.nodeManager.startCheckNodes()
   },
 
   findSeenNodesInDb: (callback) => {
@@ -166,12 +453,12 @@ const priv = {
     })
   },
 
-  getHealthNodes: () => {
-    return priv.dht.nodes.toArray().filter(n => !priv.blackPeers.has(n.host))
+  getCompatibleNodes: () => {
+    return priv.nodeManager.compatibleNodes
   },
 
   getRandomNode: ()=>{  
-    let nodes = priv.getHealthNodes() 
+    let nodes = priv.getCompatibleNodes() 
     nodes = nodes.length === 0 ? priv.bootstrapNodes : nodes
     const rnd = Math.floor(Math.random() * nodes.length)
     return nodes[rnd]     
@@ -191,9 +478,10 @@ const priv = {
       return randomPeers
     }
 
-    let nodes = priv.getHealthNodes() 
+    let nodes = priv.getCompatibleNodes() 
     nodes = nodes.length === 0 ? priv.bootstrapNodes : nodes
     peers = peers || getRandomPeers(20, nodes)
+    library.logger.debug('broadcast to nodes', peers)
     priv.dht.broadcast(message, peers)
   }
 }
@@ -292,6 +580,12 @@ Peer.prototype.onpublish = (msg, peer) => {
     library.logger.debug('Receive invalid publish message topic', msg)
     return
   }
+
+  if (msg.magic && msg.magic !== library.config.magic) {
+    library.logger.debug('Receive invalid publish message magic', msg)
+    priv.nodeManager.setUncompatiable(peer.host, msg.magic)
+    return
+  }
   priv.handlers[msg.topic](msg, peer)
 }
 
@@ -301,6 +595,7 @@ Peer.prototype.publish = (topic, message, recursive = 1) => {
     return
   }
   message.topic = topic
+  message.magic = library.config.magic
   message.recursive = recursive
   // TODO: Optimize broadcasting efficiency
   if (true) {
@@ -310,35 +605,39 @@ Peer.prototype.publish = (topic, message, recursive = 1) => {
   priv.broadcast(message)
 }
 
+Peer.prototype.setNodeUncompatiable = (ip, magic) => {
+  if (!priv.dht) return 
+  priv.nodeManager.setUncompatiable(ip, magic)
+}
+
 Peer.prototype.request = (method, params, contact, cb) => {
   const address = `${contact.host}:${contact.port - 1}`
   const uri = `http://${address}/peer/${method}`
   library.logger.debug(`start to request ${uri}`)
-  const reqOptions = {
-    uri,
-    method: 'POST',
-    body: params,
+
+  const options = {
+    timeout: priv.peerTimeout,
     headers: {
       magic: global.Config.magic,
       version: global.Config.version,
-    },
-    json: true,
-  }
-  request(reqOptions, (err, response, result) => {
-    if (err) {
-      return cb(`Failed to request remote peer: ${err}`)
-    } else if (response.statusCode !== 200) {
-      library.logger.debug('remote service error', result)
-      return cb(`Invalid status code: ${response.statusCode}`)
     }
-    return cb(null, result)
-  })
+  }
+  axios.post(uri, params, options)
+    .then( response => {
+      const result = response.data
+      if (response.status !== 200) {
+        library.logger.debug('remote service error', result)
+        return cb(`Invalid status code: ${response.status}`)
+      }
+      return cb(null, result)
+    })
+    .catch(err=> cb(err.toString()))
 }
 
 Peer.prototype.randomRequest = (method, params, cb) => {
   const randomNode = priv.getRandomNode()
   if (!randomNode) return cb('No contact')
-  library.logger.debug('select random contract', randomNode)
+  library.logger.debug('select random contact', randomNode)
   let isCallbacked = false
   setTimeout(() => {
     if (isCallbacked) return
@@ -352,6 +651,7 @@ Peer.prototype.randomRequest = (method, params, cb) => {
   })
 }
 
+
 Peer.prototype.sandboxApi = (call, args, cb) => {
   sandboxHelper.callMethod(shared, call, args, cb)
 }
@@ -362,12 +662,16 @@ Peer.prototype.onBind = (scope) => {
 }
 
 Peer.prototype.onBlockchainReady = () => {
-  priv.initDHT({
-    publicIp: library.config.publicIp,
-    peerPort: library.config.peerPort,
-    seedPeers: library.config.peers.list,
-    blackPeers: library.config.peers.blackList,
-    persistentPeers: library.config.peers.persistent !== false,
+  const { publicIp, peerPort } = library.config
+  const { list, blackList, timeout, persistent } = library.config.peers
+
+  priv.initP2P({
+    publicIp,
+    peerPort,
+    seedPeers: list,
+    blackPeers: blackList,
+    timeout,
+    persistentPeers: persistent !== false,
     peersDbDir: global.Config.dataDir,
     eventHandlers: {
       broadcast: (msg, node) => self.onpublish(msg, node),
