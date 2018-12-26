@@ -19,8 +19,8 @@ const SAVE_PEERS_INTERVAL = 1 * 60 * 1000
 const CHECK_BUCKET_OUTDATE = 3 * 60 * 1000
 const RECONNECT_SEED_INTERVAL = 30 * 1000
 
-const CHECK_COMPATIABLE_NODES_INTERVAL = 1 * 60 * 1000
-const CHECK_UNCOMPATIABLE_NODES_INTERVAL = 2 * 60 * 1000
+const CHECK_COMPATIBLE_NODES_INTERVAL = 5 * 60 * 1000
+const CHECK_INCOMPATIBLE_NODES_INTERVAL = 15 * 60 * 1000
 const DEFAULT_PEER_TIMEOUT = 4 * 1000
 
 // interface NodeInfo {
@@ -42,7 +42,7 @@ const NodeStatus = {
   Healthy : 1,
   Unhealthy : 2,
 
-  Uncompatiable : -1
+  Incompatible : -1
 }
 
 class NodeManager extends EventEmitter {
@@ -51,8 +51,8 @@ class NodeManager extends EventEmitter {
     this._allNodes = new Map()
     this._shackingNodes = new Set()
     this._isChecking = false
-    this._checkCompatiableTimer = undefined
-    this._checkUncompatiableTimer = undefined
+    this._checkCompatibleTimer = undefined
+    this._checkIncompatileTimer = undefined
   }
 
   get healthyNodes() {
@@ -63,8 +63,8 @@ class NodeManager extends EventEmitter {
     return [...this._allNodes.values()].filter(n => n.status === NodeStatus.Healthy || n.status === NodeStatus.Unhealthy)
   }
 
-  get uncompatibleNodes() {
-    return [...this._allNodes.values()].filter(n => n.status === NodeStatus.Uncompatiable || n.status === NodeStatus.Unknow)
+  get incompatibleNodes() {
+    return [...this._allNodes.values()].filter(n => n.status === NodeStatus.Incompatible || n.status === NodeStatus.Unknow)
   }
 
   isHealthy( height, blockId ) {
@@ -73,48 +73,51 @@ class NodeManager extends EventEmitter {
   }
 
   isCompatible ( net, version, magic ) {
-    if (net !== library.config.netVersion) return false
-    if (magic && magic !== library.config.magic) return false
+    const config = library.config
+    if (net !== config.netVersion) return false
+    if (magic && magic !== config.magic) return false
 
-    if (version === library.config.version)  return true
+    if (version === config.version)  return true
 
-    const [nodeMajor, nodeMinor, nodePath] = version
-    if ([nodeMajor, nodeMajor, nodePath].some(v => !Number.isInteger(v))) return false
+    const [nodeMajor, nodeMinor, nodePatch] = version.split('.').map(p => Number.parseInt(p))
 
-    const [major, minor, path ] = library.config.version.split('.')
+    const invalidVersion = ([nodeMajor, nodeMinor, nodePatch]).some(v => !Number.isInteger(v))
+    if (invalidVersion) return false
 
-    return nodeMajor === major && minor === nodeMinor && path <= nodePath
+    const [major, minor, patch] = config.version.split('.').map(p => Number.parseInt(p))
+
+    return nodeMajor === major && minor === nodeMinor // && patch <= nodePatch
   }
 
   startCheckNodes() {
-    const checkCompatiableNodes = () => this.compatibleNodes
-      .forEach( node => this._checkCompatiableNode(node) )
+    const checkCompatibleNodes = () => this.compatibleNodes
+      .forEach( node => this._checkCompatibleNode(node) )
 
-    const checkUncompatiableNodes = () => this.uncompatibleNodes
-      .forEach( node => this._checkUncompatiableNode(node) )
+    const checkIncompatileNodes = () => this.incompatibleNodes
+      .forEach( node => this._checkIncompatibleNode(node) )
 
     if (this._isChecking) return 
 
     library.logger.debug(`start check nodes`)
 
     this._isChecking = true
-    this._checkCompatiableTimer = setInterval(checkCompatiableNodes, CHECK_COMPATIABLE_NODES_INTERVAL)
-    this._checkUncompatiableTimer = setInterval(checkUncompatiableNodes, CHECK_UNCOMPATIABLE_NODES_INTERVAL)
+    this._checkCompatibleTimer = setInterval(checkCompatibleNodes, CHECK_COMPATIBLE_NODES_INTERVAL)
+    this._checkIncompatileTimer = setInterval(checkIncompatileNodes, CHECK_INCOMPATIBLE_NODES_INTERVAL)
   }
 
   stopCheckNodes() {
     if (!this._isChecking) return 
 
-    if (this._checkCompatiableTimer)
-      clearInterval(this._checkUncompatiableNode)
-    if (this._checkCompatiableTimer)
-      clearInterval(this._checkUncompatiableNode)
+    if (this._checkCompatibleTimer)
+      clearInterval(this._checkCompatibleTimer)
+    if (this._checkIncompatileTimer)
+      clearInterval(this._checkIncompatileTimer)
   }
 
   updateNodeHealthy(peer, height, blockId) {
     const node = this.getNodeInfo(peer)
     if (node === undefined)  return false
-    if (node.status === NodeStatus.Uncompatiable || node.status === NodeStatus.Unknow) return false
+    if (node.status === NodeStatus.Incompatible || node.status === NodeStatus.Unknow) return false
 
     const status = this.isHealthy(height, blockId) ? NodeStatus.Healthy : NodeStatus.Unhealthy
     this._updateNode(node, { status, height, blockId })
@@ -122,10 +125,10 @@ class NodeManager extends EventEmitter {
     return true
   }
 
-  setUncompatiable(ip, magic) {
+  setIncompatible(ip, magic) {
     this._allNodes.forEach( node => {
-      if (node.host === ip) {
-        this._updateNode(node, { magic, status: NodeStatus.Uncompatiable})
+      if (node.host === ip && node.status !== NodeStatus.Incompatible) {
+        this._updateNode(node, { magic, status: NodeStatus.Incompatible})
       }
     })
   }
@@ -137,19 +140,22 @@ class NodeManager extends EventEmitter {
   addPeer(peer, id) {
     id = id || this._makeId(peer)
     if (this._allNodes.has(id) || this._shackingNodes.has(id)) return 
+    if (peer.host === library.config.publicIp && peer.port === library.config.peerPort) return
 
     this._shackingNodes.add(id)
-    library.logger.debug(`nodeManager add peer ${peer.host}:${peer.port}`)
-
     this._shackhands(peer, (err, info) => {
       this._shackingNodes.delete(id)
       const { host, port, isSeed, status } = peer
       const node = { host, port, isSeed } 
-      if (err && status === NodeStatus.Uncompatiable) {
+      if (err && status === NodeStatus.Incompatible) {
         return
       }
       const updateInfo = info || { status: NodeStatus.Unknow }
       this._updateNode(node, updateInfo)
+      const nodes = [...this._allNodes.values()]
+      nodes.filter(node => node.host === peer.host && node.port === peer.port)
+        .forEach(node => this._allNodes.delete(node.id))
+
       this._allNodes.set(id, node)
     })
   }
@@ -183,8 +189,7 @@ class NodeManager extends EventEmitter {
       .then ( response => {
         const data = response.data
         return data.success ? cb(undefined, data) : cb(data.error || 'Get from server failed')
-      }) 
-      .catch( err => cb(String(err)) )
+      }).catch( err => cb(String(err)) )
   }
 
   _httpPost(peer, path, cb) {
@@ -200,26 +205,12 @@ class NodeManager extends EventEmitter {
       .then ( response => {
         const data = response.data
         library.logger.debug(`post ${url}, `, response.data)
-        return data ? cb(undefined, data, response.headers) : cb(data.error || 'request server failed')
-      })
-      .catch( err => {
+        return data ? cb(undefined, data, response.headers) : cb('request server failed')
+      }).catch( err => {
         const headers = (err.response) ? err.response.headers : undefined
         library.logger.debug(`post ${url} error, `, String(err))
         cb(String(err), undefined, headers)
       })
-  }
-
-  async _retry( asyncFunc, maxRetry, times = 1) {
-    try {
-      return await asyncFunc()
-    }
-    catch( err ){
-      library.logger.debug(`nodeManager retry async call, retry = ${times}`)
-      if (times >= maxRetry) throw err
-      const ms = 3 ** times * 1000
-      await _sleep(ms)
-      await _retry(asyncFunc, maxRetry, times + 1)
-    }
   }
 
   async _getVersion(peer) {
@@ -254,43 +245,44 @@ class NodeManager extends EventEmitter {
     ])
     .then( results => {
       const [versionRet, lastBlockRet] = results
-      library.logger.log(`shack hands, `, versionRet, lastBlockRet)
-      if (!versionRet.success) return cb(versionRet.err || 'get version failed')
+      library.logger.debug(`shack hands with ${peer.host}:${peer.port} result is `, versionRet, lastBlockRet)
+      if (!versionRet.success) return cb(versionRet.error|| 'get version failed')
 
       const { net, version } = versionRet
       const { height, blockId, magic } = lastBlockRet
 
-      let status = this.isCompatible(net, version, magic) ? NodeStatus.Unhealthy : NodeStatus.Uncompatiable
-      if (status === NodeStatus.Uncompatiable) {
+      let status = this.isCompatible(net, version, magic) ? NodeStatus.Unhealthy : NodeStatus.Incompatible
+      if (status === NodeStatus.Incompatible) {
         return cb(undefined, { net, version, status })
       }
 
       status = this.isHealthy( height, blockId ) ? NodeStatus.Healthy : NodeStatus.Unhealthy
       return cb(undefined,{ net, version, status, magic, height, blockId }) 
-    })
-    .catch(err => {
+
+    }).catch(err => {
+      library.logger.debug(`shack hands error`, err)
       cb(err)
     }) 
   }
 
-  _checkCompatiableNode(node) {
-    if (Date.now() - (node.updateAt || 0) < CHECK_COMPATIABLE_NODES_INTERVAL) {
+  _checkCompatibleNode(node) {
+    if (Date.now() - (node.updateAt || 0) < CHECK_COMPATIBLE_NODES_INTERVAL) {
       return 
     }
-    library.logger.debug(`nodeManager check compatiable node ${node.host}:${node.port}`)
+    library.logger.debug(`Check compatible node ${node.host}:${node.port}`)
     this._getMagicAndHeight(node)
       .then(info => this.updateNodeHealthy(node, info.height, info.blockId))
       .catch(err => this._updateNode(node, { status : NodeStatus.Unhealthy }))
   }
 
-  _checkUncompatiableNode(node) {
-    if (Date.now() - (node.updateAt || 0) < CHECK_UNCOMPATIABLE_NODES_INTERVAL) {
+  _checkIncompatibleNode(node) {
+    if (Date.now() - (node.updateAt || 0) < CHECK_INCOMPATIBLE_NODES_INTERVAL) {
       return 
     }
 
-    library.logger.debug(`nodeManager check uncompatiable node ${node.host}:${node.port}`)
+    library.logger.debug(`Check incompatible node ${node.host}:${node.port}`)
     this._shackhands(node, (err, info) => {
-      if (err && node.status === NodeStatus.Uncompatiable) {
+      if (err && node.status === NodeStatus.Incompatible) {
         return
       }
       const updateInfo = info || { status: NodeStatus.Unknow }
@@ -311,7 +303,7 @@ const priv = {
     return crypto.createHash('ripemd160').update(address).digest()
   },
 
-  getSeedPeerNodes: seedPeers => seedPeers.map((peer) => {
+  getSeedPeerNodes: seedList => seedList.map((peer) => {
     const node = { host: peer.ip, port: Number(peer.port) }
     node.id = priv.getNodeIdentity(node)
     return node
@@ -329,7 +321,7 @@ const priv = {
         app.logger.error('Last nodes not found', e)
       }
     }
-    const bootstrapNodes = [...priv.getSeedPeerNodes(p2pOptions.seedPeers)]
+    const bootstrapNodes = [...priv.getSeedPeerNodes(p2pOptions.seedList)]
     const [host, port] = [p2pOptions.publicIp, p2pOptions.peerPort]
     const dht = new DHT({
       timeBucketOutdated: CHECK_BUCKET_OUTDATE,
@@ -347,16 +339,15 @@ const priv = {
 
     priv.nodeManager.on('change', (node, modifier) => {
       library.logger.debug('node changed', node, modifier)
-      if (modifier.status === NodeStatus.Uncompatiable ) {
-        dht.addBlackIPs(node.host)
-      }
-      else if (modifier.status === NodeStatus.Healthy || modifier.status === NodeStatus.Unhealthy) {
-        dht.removeBlackIP(node.host)
+      if (modifier.status === NodeStatus.Incompatible ) {
+        dht.ban(node.host)
+      } else if (modifier.status === NodeStatus.Healthy || modifier.status === NodeStatus.Unhealthy) {
+        dht.unban(node.host)
       }
     })
 
     
-    dht.addBlackIPs(...(p2pOptions.blackPeers || []).map(p=>p.id))
+    dht.ban(...(p2pOptions.blackList || []).map(p=>p.id))
     dht.listen(port, () => library.logger.info(`p2p server listen on ${port}`))
 
     dht.on('node', (node) => {
@@ -376,9 +367,9 @@ const priv = {
       library.logger.warn('dht error message', err)
     })
 
-    dht.on('black', (peer, type, message) =>{
-      library.logger.debug('black list', priv.dht.blackList())
-      library.logger.debug(`black node (${peer.host||peer.address}:${peer.port}) message, type: ${type}, ${message && message.topic} `)
+    dht.on('banned_message', (peer, type, message) =>{
+      library.logger.debug('banned hosts ', priv.dht.bannedIPs())
+      library.logger.debug(`banned message from ${peer.host||peer.address}:${peer.port}, type: ${type}, ${message && message.topic} `)
     })
 
     dht.on('warning', (msg) => {
@@ -481,7 +472,7 @@ const priv = {
     let nodes = priv.getCompatibleNodes() 
     nodes = nodes.length === 0 ? priv.bootstrapNodes : nodes
     peers = peers || getRandomPeers(20, nodes)
-    library.logger.debug('broadcast to nodes', peers)
+    library.logger.debug('broadcast to nodes', peers.map(p=>`${p.host}:${p.port}`))
     priv.dht.broadcast(message, peers)
   }
 }
@@ -581,9 +572,9 @@ Peer.prototype.onpublish = (msg, peer) => {
     return
   }
 
-  if (msg.magic && msg.magic !== library.config.magic) {
+  if (msg.magic && msg.magic.toString() !== library.config.magic) {
     library.logger.debug('Receive invalid publish message magic', msg)
-    priv.nodeManager.setUncompatiable(peer.host, msg.magic)
+    priv.nodeManager.setIncompatible(peer.host, msg.magic)
     return
   }
   priv.handlers[msg.topic](msg, peer)
@@ -605,9 +596,9 @@ Peer.prototype.publish = (topic, message, recursive = 1) => {
   priv.broadcast(message)
 }
 
-Peer.prototype.setNodeUncompatiable = (ip, magic) => {
+Peer.prototype.setNodeIncompatible = (ip, magic) => {
   if (!priv.dht) return 
-  priv.nodeManager.setUncompatiable(ip, magic)
+  priv.nodeManager.setIncompatible(ip, magic)
 }
 
 Peer.prototype.request = (method, params, contact, cb) => {
@@ -630,8 +621,7 @@ Peer.prototype.request = (method, params, contact, cb) => {
         return cb(`Invalid status code: ${response.status}`)
       }
       return cb(null, result)
-    })
-    .catch(err=> cb(err.toString()))
+    }).catch(err=> cb(err.toString()))
 }
 
 Peer.prototype.randomRequest = (method, params, cb) => {
@@ -668,8 +658,8 @@ Peer.prototype.onBlockchainReady = () => {
   priv.initP2P({
     publicIp,
     peerPort,
-    seedPeers: list,
-    blackPeers: blackList,
+    seedList: list,
+    blackList: blackList,
     timeout,
     persistentPeers: persistent !== false,
     peersDbDir: global.Config.dataDir,
