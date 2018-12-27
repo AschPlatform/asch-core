@@ -59,7 +59,8 @@ module.exports = {
     if (!netEnergyLimit) {
       return false
     }
-    const currentDay = (blockHeight - netEnergyLimit.heightOffset) % constants.blocksPerDay
+    const actualHeight = blockHeight - netEnergyLimit.heightOffset
+    const currentDay = Number.parseInt(actualHeight % constants.blocksPerDay, 10)
     // if ((netEnergyLimit.lastBPUpdateHeight + constants.blocksPerDay) > blockHeight) {
     if (currentDay <= netEnergyLimit.lastBPUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
@@ -86,7 +87,8 @@ module.exports = {
       return false
     }
 
-    const currentDay = (blockHeight - netEnergyLimit.heightOffset) % constants.blocksPerDay
+    const actualHeight = blockHeight - netEnergyLimit.heightOffset
+    const currentDay = Number.parseInt(actualHeight % constants.blocksPerDay, 10)
     // if ((netEnergyLimit.lastEnergyUpdateHeight + constants.blocksPerDay) > blockHeight) {
     if (currentDay <= netEnergyLimit.lastEnergyUpdateDay) {
       totalUsed += netEnergyLimit.energyUsed
@@ -108,7 +110,7 @@ module.exports = {
       throw new Error('No pledge was found')
     }
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
-    const currentDay = actualHeight % constants.blocksPerDay
+    const currentDay = Number.parseInt(actualHeight % constants.blocksPerDay, 10)
     // if ((netEnergyLimit.lastBPUpdateHeight + constants.blocksPerDay) > blockHeight) {
     if (currentDay <= netEnergyLimit.lastBPUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
