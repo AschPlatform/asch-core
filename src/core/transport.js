@@ -31,6 +31,7 @@ priv.attachApi = () => {
 
     res.set(priv.headers)
     if (req.headers.magic !== library.config.magic) {
+      modules.peer.setNodeIncompatible(req.ip, req.headers.magic)
       return res.status(500).send({
         success: false,
         error: 'Request is made on the wrong network',
