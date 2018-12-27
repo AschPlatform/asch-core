@@ -21,9 +21,10 @@ module.exports = {
     const pledgeAmountForEnergy = pledgeAccount.pledgeAmountForEnergy
     const bpLockHeight = pledgeAccount.bpLockHeight
     const energyLockHeight = pledgeAccount.energyLockHeight
-    const lastFreeNetUpdateHeight = pledgeAccount.lastFreeNetUpdateHeight
-    const lastBPUpdateHeight = pledgeAccount.lastBPUpdateHeight
-    const lastEnergyUpdateHeight = pledgeAccount.lastEnergyUpdateHeight
+    const lastFreeNetUpdateDay = pledgeAccount.lastFreeNetUpdateDay
+    const lastBPUpdateDay = pledgeAccount.lastBPUpdateDay
+    const lastEnergyUpdateDay = pledgeAccount.lastEnergyUpdateDay
+    const heightOffset = pledgeAccount.heightOffset
     const totalPledgeForBP = totalPledge.totalPledgeForBP
     const totalPledgeForEnergy = totalPledge.totalPledgeForEnergy
     const totalNetLimit = totalPledge.totalNetLimit
@@ -39,9 +40,10 @@ module.exports = {
       pledgeAmountForEnergy,
       bpLockHeight,
       energyLockHeight,
-      lastFreeNetUpdateHeight,
-      lastBPUpdateHeight,
-      lastEnergyUpdateHeight,
+      lastFreeNetUpdateDay,
+      lastBPUpdateDay,
+      lastEnergyUpdateDay,
+      heightOffset,
       totalPledgeForBP,
       totalPledgeForEnergy,
       totalNetLimit,
@@ -57,19 +59,42 @@ module.exports = {
     if (!netEnergyLimit) {
       return false
     }
-    if ((netEnergyLimit.lastBPUpdateHeight + constants.blocksPerDay) > blockHeight) {
+    const currentDay = (blockHeight - netEnergyLimit.heightOffset) % constants.blocksPerDay
+    // if ((netEnergyLimit.lastBPUpdateHeight + constants.blocksPerDay) > blockHeight) {
+    if (currentDay <= netEnergyLimit.lastBPUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
     }
     if (totalUsed < netEnergyLimit.netLimit) {
       return true
     }
     totalUsed = netUsed
-    if ((netEnergyLimit.lastFreeNetUpdateHeight + constants.blocksPerDay) > blockHeight) {
+    // if ((netEnergyLimit.lastFreeNetUpdateHeight + constants.blocksPerDay) > blockHeight) {
+    if (currentDay <= netEnergyLimit.lastFreeNetUpdateDay) {
       totalUsed += netEnergyLimit.freeNetUsed
     }
     if (totalUsed < netEnergyLimit.freeNetLimit) {
       return true
     }
+    return false
+  },
+
+  async isEnergyCovered(gasLimit, address, blockHeight) {
+    const energyUsed = gasLimit * constants.energyPerGas
+    let totalUsed = energyUsed
+    const netEnergyLimit = await this.getNetEnergyLimit(address)
+    if (!netEnergyLimit) {
+      return false
+    }
+
+    const currentDay = (blockHeight - netEnergyLimit.heightOffset) % constants.blocksPerDay
+    // if ((netEnergyLimit.lastEnergyUpdateHeight + constants.blocksPerDay) > blockHeight) {
+    if (currentDay <= netEnergyLimit.lastEnergyUpdateDay) {
+      totalUsed += netEnergyLimit.energyUsed
+    }
+    if (totalUsed < netEnergyLimit.energyLimit) {
+      return true
+    }
+
     return false
   },
 
@@ -82,23 +107,31 @@ module.exports = {
     if (!netEnergyLimit) {
       throw new Error('No pledge was found')
     }
-    if ((netEnergyLimit.lastBPUpdateHeight + constants.blocksPerDay) > blockHeight) {
+    const actualHeight = blockHeight - netEnergyLimit.heightOffset
+    const currentDay = actualHeight % constants.blocksPerDay
+    // if ((netEnergyLimit.lastBPUpdateHeight + constants.blocksPerDay) > blockHeight) {
+    if (currentDay <= netEnergyLimit.lastBPUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
+    } else {
+      pledgeAccount.lastBPUpdateDay = currentDay
     }
     if (totalUsed < netEnergyLimit.netLimit) {
       pledgeAccount.netUsed = totalUsed
-      pledgeAccount.lastBPUpdateHeight = blockHeight
+      // pledgeAccount.lastBPUpdateHeight = blockHeight
       app.sdb.update('AccountPledge', pledgeAccount, { address })
       return null
     }
 
     totalUsed = netUsed
-    if ((netEnergyLimit.lastFreeNetUpdateHeight + constants.blocksPerDay) > blockHeight) {
+    // if ((netEnergyLimit.lastFreeNetUpdateHeight + constants.blocksPerDay) > blockHeight) {
+    if (currentDay <= netEnergyLimit.lastFreeNetUpdateDay) {
       totalUsed += netEnergyLimit.freeNetUsed
+    } else {
+      pledgeAccount.lastFreeNetUpdateDay = currentDay
     }
     if (totalUsed < netEnergyLimit.freeNetLimit) {
       pledgeAccount.freeNetUsed = totalUsed
-      pledgeAccount.lastFreeNetUpdateHeight = blockHeight
+      // pledgeAccount.lastFreeNetUpdateHeight = blockHeight
       app.sdb.update('AccountPledge', pledgeAccount, { address })
     }
 
