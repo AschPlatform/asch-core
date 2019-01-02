@@ -100,6 +100,38 @@ module.exports = {
     return false
   },
 
+  async updateEnergy(gas, address, blockHeight, tid) {
+    const pledgeAccount = await app.sdb.load('AccountPledge', address)
+    if (!pledgeAccount) throw new Error('Pledge account is not found')
+    const energyUsed = gas * constants.energyPerGas
+    let totalUsed = energyUsed
+    const netEnergyLimit = await this.getNetEnergyLimit(address)
+    if (!netEnergyLimit) {
+      throw new Error('No pledge was found')
+    }
+    const actualHeight = blockHeight - netEnergyLimit.heightOffset
+    const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
+
+    if (currentDay <= netEnergyLimit.lastEnergyUpdateDay) {
+      totalUsed += netEnergyLimit.energyUsed
+    } else {
+      pledgeAccount.lastEnergyUpdateDay = currentDay
+    }
+    if (totalUsed < netEnergyLimit.energyLimit) {
+      pledgeAccount.energyUsed = totalUsed
+      app.sdb.update('AccountPledge', pledgeAccount, { address })
+      app.sdb.create('Netenergyconsumption', {
+        tid,
+        height: blockHeight,
+        energyUsed,
+        isFeeDeduct: 0,
+      })
+      return null
+    }
+
+    return null
+  },
+
   async updateNet(fee, address, blockHeight, tid) {
     const pledgeAccount = await app.sdb.load('AccountPledge', address)
     if (!pledgeAccount) throw new Error('Pledge account is not found')
@@ -121,6 +153,12 @@ module.exports = {
       pledgeAccount.netUsed = totalUsed
       // pledgeAccount.lastBPUpdateHeight = blockHeight
       app.sdb.update('AccountPledge', pledgeAccount, { address })
+      app.sdb.create('Netenergyconsumption', {
+        tid,
+        height: blockHeight,
+        netUsed,
+        isFeeDeduct: 0,
+      })
       return null
     }
 
@@ -135,14 +173,13 @@ module.exports = {
       pledgeAccount.freeNetUsed = totalUsed
       // pledgeAccount.lastFreeNetUpdateHeight = blockHeight
       app.sdb.update('AccountPledge', pledgeAccount, { address })
+      app.sdb.create('Netenergyconsumption', {
+        tid,
+        height: blockHeight,
+        netUsed,
+        isFeeDeduct: 0,
+      })
     }
-
-    app.sdb.create('Netenergyconsumption', {
-      tid,
-      height: blockHeight,
-      netUsed,
-      isFeeDeduct: 0,
-    })
 
     return null
   },
