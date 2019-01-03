@@ -23,10 +23,10 @@ module.exports = {
   supplyCriteria: 1.5,
   netPerXAS: 10000,
   energyPerXAS: 10000,
+  netPerPledgedXAS: 1000,
+  energyPerPledgedXAS: 1000,
+  freeNetLimitPerDay: 5000,
   energyPerGas: 1,
   blocksPerDay: 24 * 60 * 6,
   pledageDays: 3,
-  freeNetLimitPerDay: 5000,
-  initialTotalNetLimit: 350000000000,
-  initialTotalEnergyLimit: 350000000000,
 }

@@ -7,28 +7,27 @@ module.exports = {
     const totalPledges = await app.sdb.loadMany('AccountTotalPledge', { })
     if (totalPledges.length === 0) return null
     const totalPledge = totalPledges[0]
-    const netLimit = parseInt(pledgeAccount.pledgeAmountForBP
-                    / totalPledge.totalPledgeForBP
-                    * totalPledge.totalNetLimit, 10)
-    const energyLimit = parseInt(pledgeAccount.pledgeAmountForEnergy
-                      / totalPledge.totalPledgeForEnergy
-                      * totalPledge.totalEnergyLimit, 10)
+    const netLimit = parseInt(pledgeAccount.pledgeAmountForNet * totalPledge.netPerPledgedXAS, 10)
+    const energyLimit = parseInt(pledgeAccount.pledgeAmountForEnergy * totalPledge.energyPerPledgedXAS, 10)
     const freeNetLimit = totalPledge.freeNetLimit
     const freeNetUsed = pledgeAccount.freeNetUsed
     const netUsed = pledgeAccount.netUsed
     const energyUsed = pledgeAccount.energyUsed
-    const pledgeAmountForBP = pledgeAccount.pledgeAmountForBP
+    const pledgeAmountForNet = pledgeAccount.pledgeAmountForNet
     const pledgeAmountForEnergy = pledgeAccount.pledgeAmountForEnergy
-    const bpLockHeight = pledgeAccount.bpLockHeight
+    const netLockHeight = pledgeAccount.netLockHeight
     const energyLockHeight = pledgeAccount.energyLockHeight
     const lastFreeNetUpdateDay = pledgeAccount.lastFreeNetUpdateDay
-    const lastBPUpdateDay = pledgeAccount.lastBPUpdateDay
+    const lastNetUpdateDay = pledgeAccount.lastNetUpdateDay
     const lastEnergyUpdateDay = pledgeAccount.lastEnergyUpdateDay
     const heightOffset = pledgeAccount.heightOffset
-    const totalPledgeForBP = totalPledge.totalPledgeForBP
+    const totalPledgeForNet = totalPledge.totalPledgeForNet
     const totalPledgeForEnergy = totalPledge.totalPledgeForEnergy
-    const totalNetLimit = totalPledge.totalNetLimit
-    const totalEnergyLimit = totalPledge.totalEnergyLimit
+    const netPerXAS = totalPledge.netPerXAS
+    const energyPerXAS = totalPledge.energyPerXAS
+    const netPerPledgedXAS = totalPledge.netPerPledgedXAS
+    const energyPerPledgedXAS = totalPledge.energyPerPledgedXAS
+    const gasprice = totalPledge.gasprice
     return {
       netLimit,
       energyLimit,
@@ -36,40 +35,102 @@ module.exports = {
       freeNetUsed,
       netUsed,
       energyUsed,
-      pledgeAmountForBP,
+      pledgeAmountForNet,
       pledgeAmountForEnergy,
-      bpLockHeight,
+      netLockHeight,
       energyLockHeight,
       lastFreeNetUpdateDay,
-      lastBPUpdateDay,
+      lastNetUpdateDay,
       lastEnergyUpdateDay,
       heightOffset,
-      totalPledgeForBP,
+      totalPledgeForNet,
       totalPledgeForEnergy,
-      totalNetLimit,
-      totalEnergyLimit,
+      netPerXAS,
+      energyPerXAS,
+      netPerPledgedXAS,
+      energyPerPledgedXAS,
+      gasprice,
     }
   },
 
-  async isNetCovered(fee, address, blockHeight) {
-    const netUsed = fee * constants.netPerXAS
-    let totalUsed = netUsed
+  async getPledgeConfig() {
+    const totalPledges = await app.sdb.loadMany('AccountTotalPledge', { })
+    if (totalPledges.length === 0) return null
+    const totalPledge = totalPledges[0]
+    const freeNetLimit = totalPledge.freeNetLimit
+    const totalPledgeForNet = totalPledge.totalPledgeForNet
+    const totalPledgeForEnergy = totalPledge.totalPledgeForEnergy
+    const netPerXAS = totalPledge.netPerXAS
+    const energyPerXAS = totalPledge.energyPerXAS
+    const netPerPledgedXAS = totalPledge.netPerPledgedXAS
+    const energyPerPledgedXAS = totalPledge.energyPerPledgedXAS
+    const gasprice = totalPledge.gasprice
+    return {
+      freeNetLimit,
+      totalPledgeForNet,
+      totalPledgeForEnergy,
+      netPerXAS,
+      energyPerXAS,
+      netPerPledgedXAS,
+      energyPerPledgedXAS,
+      gasprice,
+    }
+  },
 
+  async getAvailableEnergy(address) {
+    const pledgeAccount = await app.sdb.load('AccountPledge', address)
+    if (!pledgeAccount) return null
+    const totalPledges = await app.sdb.loadMany('AccountTotalPledge', { })
+    if (totalPledges.length === 0) return null
+    const totalPledge = totalPledges[0]
+
+    const energyLimit = parseInt(pledgeAccount.pledgeAmountForEnergy * totalPledge.energyPerPledgedXAS, 10)
+    const energyUsed = pledgeAccount.energyUsed
+    const availableEnergy = energyLimit - energyUsed
+
+    return availableEnergy
+  },
+
+  async getEnergyByGas(gas) {
+    const totalPledges = await app.sdb.loadMany('AccountTotalPledge', { })
+    if (totalPledges.length === 0) return null
+
+    const totalPledge = totalPledges[0]
+    const energy = parseInt(gas * totalPledge.gasprice, 10)
+
+    return energy
+  },
+
+  async getXASByGas(gas) {
+    const totalPledges = await app.sdb.loadMany('AccountTotalPledge', { })
+    if (totalPledges.length === 0) return null
+
+    const totalPledge = totalPledges[0]
+    const energy = gas * totalPledge.gasprice
+    const xas = parseInt(energy / totalPledge.energyPerXAS, 10)
+
+    return xas
+  },
+
+  async isNetCovered(fee, address, blockHeight) {
     const netEnergyLimit = await this.getNetEnergyLimit(address)
     if (!netEnergyLimit) {
       return false
     }
+
+    const netUsed = fee * netEnergyLimit.netPerXAS
+    let totalUsed = netUsed
+
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
     const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
-    // if ((netEnergyLimit.lastBPUpdateHeight + constants.blocksPerDay) > blockHeight) {
-    if (currentDay <= netEnergyLimit.lastBPUpdateDay) {
+    if (currentDay <= netEnergyLimit.lastNetUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
     }
     if (totalUsed < netEnergyLimit.netLimit) {
       return true
     }
+
     totalUsed = netUsed
-    // if ((netEnergyLimit.lastFreeNetUpdateHeight + constants.blocksPerDay) > blockHeight) {
     if (currentDay <= netEnergyLimit.lastFreeNetUpdateDay) {
       totalUsed += netEnergyLimit.freeNetUsed
     }
@@ -80,16 +141,16 @@ module.exports = {
   },
 
   async isEnergyCovered(gasLimit, address, blockHeight) {
-    const energyUsed = gasLimit * constants.energyPerGas
-    let totalUsed = energyUsed
     const netEnergyLimit = await this.getNetEnergyLimit(address)
     if (!netEnergyLimit) {
       return false
     }
 
+    const energyUsed = gasLimit * netEnergyLimit.gasprice
+    let totalUsed = energyUsed
+
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
     const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
-    // if ((netEnergyLimit.lastEnergyUpdateHeight + constants.blocksPerDay) > blockHeight) {
     if (currentDay <= netEnergyLimit.lastEnergyUpdateDay) {
       totalUsed += netEnergyLimit.energyUsed
     }
@@ -103,12 +164,14 @@ module.exports = {
   async updateEnergy(gas, address, blockHeight, tid) {
     const pledgeAccount = await app.sdb.load('AccountPledge', address)
     if (!pledgeAccount) throw new Error('Pledge account is not found')
-    const energyUsed = gas * constants.energyPerGas
-    let totalUsed = energyUsed
     const netEnergyLimit = await this.getNetEnergyLimit(address)
     if (!netEnergyLimit) {
       throw new Error('No pledge was found')
     }
+
+    const energyUsed = gas * netEnergyLimit.gasprice
+    let totalUsed = energyUsed
+
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
     const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
 
@@ -135,23 +198,24 @@ module.exports = {
   async updateNet(fee, address, blockHeight, tid) {
     const pledgeAccount = await app.sdb.load('AccountPledge', address)
     if (!pledgeAccount) throw new Error('Pledge account is not found')
-    const netUsed = fee * constants.netPerXAS
-    let totalUsed = netUsed
     const netEnergyLimit = await this.getNetEnergyLimit(address)
     if (!netEnergyLimit) {
       throw new Error('No pledge was found')
     }
+
+    const netUsed = fee * netEnergyLimit.netPerXAS
+    let totalUsed = netUsed
+
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
     const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
-    // if ((netEnergyLimit.lastBPUpdateHeight + constants.blocksPerDay) > blockHeight) {
-    if (currentDay <= netEnergyLimit.lastBPUpdateDay) {
+    if (currentDay <= netEnergyLimit.lastNetUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
     } else {
-      pledgeAccount.lastBPUpdateDay = currentDay
+      pledgeAccount.lastNetUpdateDay = currentDay
     }
+
     if (totalUsed < netEnergyLimit.netLimit) {
       pledgeAccount.netUsed = totalUsed
-      // pledgeAccount.lastBPUpdateHeight = blockHeight
       app.sdb.update('AccountPledge', pledgeAccount, { address })
       app.sdb.create('Netenergyconsumption', {
         tid,
@@ -163,7 +227,6 @@ module.exports = {
     }
 
     totalUsed = netUsed
-    // if ((netEnergyLimit.lastFreeNetUpdateHeight + constants.blocksPerDay) > blockHeight) {
     if (currentDay <= netEnergyLimit.lastFreeNetUpdateDay) {
       totalUsed += netEnergyLimit.freeNetUsed
     } else {
@@ -171,7 +234,6 @@ module.exports = {
     }
     if (totalUsed < netEnergyLimit.freeNetLimit) {
       pledgeAccount.freeNetUsed = totalUsed
-      // pledgeAccount.lastFreeNetUpdateHeight = blockHeight
       app.sdb.update('AccountPledge', pledgeAccount, { address })
       app.sdb.create('Netenergyconsumption', {
         tid,

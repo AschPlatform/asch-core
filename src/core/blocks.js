@@ -451,6 +451,7 @@ Blocks.prototype.applyRound = async (block) => {
         pledges.updateNet(t.fee / constants.fixedPoint, t.senderId, block.height, t.id)
       } else {
         transFee += t.fee
+        // TODO: handle fee for smart contract
       }
     }
   }
