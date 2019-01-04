@@ -77,20 +77,6 @@ module.exports = {
     }
   },
 
-  async getAvailableEnergy(address) {
-    const pledgeAccount = await app.sdb.load('AccountPledge', address)
-    if (!pledgeAccount) return null
-    const totalPledges = await app.sdb.loadMany('AccountTotalPledge', { })
-    if (totalPledges.length === 0) return null
-    const totalPledge = totalPledges[0]
-
-    const energyLimit = parseInt(pledgeAccount.pledgeAmountForEnergy * totalPledge.energyPerPledgedXAS, 10)
-    const energyUsed = pledgeAccount.energyUsed
-    const availableEnergy = energyLimit - energyUsed
-
-    return availableEnergy
-  },
-
   async getEnergyByGas(gas) {
     const totalPledges = await app.sdb.loadMany('AccountTotalPledge', { })
     if (totalPledges.length === 0) return null
@@ -113,6 +99,10 @@ module.exports = {
   },
 
   async isNetCovered(fee, address, blockHeight) {
+    if (fee <= 0) {
+      return true
+    }
+
     const netEnergyLimit = await this.getNetEnergyLimit(address)
     if (!netEnergyLimit) {
       return false
@@ -141,6 +131,10 @@ module.exports = {
   },
 
   async isEnergyCovered(gasLimit, address, blockHeight) {
+    if (gasLimit <= 0) {
+      return true
+    }
+
     const netEnergyLimit = await this.getNetEnergyLimit(address)
     if (!netEnergyLimit) {
       return false
@@ -161,7 +155,26 @@ module.exports = {
     return false
   },
 
-  async updateEnergy(gas, address, blockHeight, tid) {
+  async consumeGasFee(fee, address, height, tid) {
+    if (fee <= 0) return null
+    const account = await app.sdb.load('Account', address)
+    if (!account) throw new Error('Account is not found')
+    if (fee > account.xas) throw new Error('Insufficient balance')
+    app.sdb.increase('Account', { xas: -fee }, { address })
+    app.sdb.create('Netenergyconsumption', {
+      tid,
+      height,
+      fee,
+      isFeeDeduct: 1,
+      address,
+    })
+
+    return null
+  },
+
+  async consumeEnergy(energy, address, blockHeight, tid) {
+    if (energy <= 0) return null
+
     const pledgeAccount = await app.sdb.load('AccountPledge', address)
     if (!pledgeAccount) throw new Error('Pledge account is not found')
     const netEnergyLimit = await this.getNetEnergyLimit(address)
@@ -169,9 +182,8 @@ module.exports = {
       throw new Error('No pledge was found')
     }
 
-    const energyUsed = gas * netEnergyLimit.gasprice
+    const energyUsed = energy
     let totalUsed = energyUsed
-
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
     const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
 
@@ -188,6 +200,7 @@ module.exports = {
         height: blockHeight,
         energyUsed,
         isFeeDeduct: 0,
+        address,
       })
       return null
     }
@@ -195,17 +208,17 @@ module.exports = {
     return null
   },
 
-  async updateNet(fee, address, blockHeight, tid) {
+  async consumeNet(fee, address, blockHeight, tid) {
     const pledgeAccount = await app.sdb.load('AccountPledge', address)
     if (!pledgeAccount) throw new Error('Pledge account is not found')
     const netEnergyLimit = await this.getNetEnergyLimit(address)
     if (!netEnergyLimit) {
       throw new Error('No pledge was found')
     }
-
     const netUsed = fee * netEnergyLimit.netPerXAS
-    let totalUsed = netUsed
+    if (netUsed <= 0) return null
 
+    let totalUsed = netUsed
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
     const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
     if (currentDay <= netEnergyLimit.lastNetUpdateDay) {
@@ -222,6 +235,7 @@ module.exports = {
         height: blockHeight,
         netUsed,
         isFeeDeduct: 0,
+        address,
       })
       return null
     }
@@ -240,6 +254,7 @@ module.exports = {
         height: blockHeight,
         netUsed,
         isFeeDeduct: 0,
+        address,
       })
     }
 
