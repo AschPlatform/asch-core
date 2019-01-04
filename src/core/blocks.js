@@ -11,6 +11,7 @@ const sandboxHelper = require('../utils/sandbox.js')
 const addressHelper = require('../utils/address.js')
 const transactionMode = require('../utils/transaction-mode.js')
 const featureSwitch = require('../utils/feature-switch.js')
+const pledges = require('../utils/pledges.js')
 
 let genesisblock = null
 let modules
@@ -170,7 +171,7 @@ Blocks.prototype.setLastBlock = (block) => {
     }
     // FIXME: this height nees adjustment
     if (priv.lastBlock.height >= 6666666) {
-      featureSwitch.enable('enableBCH')
+      // featureSwitch.enable('enableBCH')
     }
   } else {
     // global.featureSwitch.enableLongId = true
@@ -188,7 +189,7 @@ Blocks.prototype.setLastBlock = (block) => {
 
     featureSwitch.enable('enableMoreLockTypes')
     featureSwitch.enable('enableLockReset')
-    featureSwitch.enable('enableBCH')
+    // featureSwitch.enable('enableBCH')
   }
   // global.featureSwitch.fixVoteNewAddressIssue = true
   featureSwitch.enable('fixVoteNewAddressIssue')
@@ -446,7 +447,12 @@ Blocks.prototype.applyRound = async (block) => {
   let transFee = 0
   for (const t of block.transactions) {
     if (transactionMode.isDirectMode(t.mode) && t.fee >= 0) {
-      transFee += t.fee
+      if (await pledges.isNetCovered(t.fee / constants.fixedPoint, t.senderId, block.height)) {
+        pledges.consumeNet(t.fee / constants.fixedPoint, t.senderId, block.height, t.id)
+      } else {
+        transFee += t.fee
+        // TODO: handle fee for smart contract
+      }
     }
   }
 
