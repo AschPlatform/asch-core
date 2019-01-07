@@ -7,8 +7,10 @@ module.exports = {
     const totalPledges = await app.sdb.loadMany('AccountTotalPledge', { })
     if (totalPledges.length === 0) return null
     const totalPledge = totalPledges[0]
-    const netLimit = parseInt(pledgeAccount.pledgeAmountForNet * totalPledge.netPerPledgedXAS, 10)
-    const energyLimit = parseInt(pledgeAccount.pledgeAmountForEnergy * totalPledge.energyPerPledgedXAS, 10)
+    const netLimit = parseInt(pledgeAccount.pledgeAmountForNet
+                              * totalPledge.netPerPledgedXAS / constants.fixedPoint, 10)
+    const energyLimit = parseInt(pledgeAccount.pledgeAmountForEnergy
+                              * totalPledge.energyPerPledgedXAS / constants.fixedPoint, 10)
     const freeNetLimit = totalPledge.freeNetLimit
     const freeNetUsed = pledgeAccount.freeNetUsed
     const netUsed = pledgeAccount.netUsed
@@ -93,7 +95,7 @@ module.exports = {
 
     const totalPledge = totalPledges[0]
     const energy = gas * totalPledge.gasprice
-    const xas = parseInt(energy / totalPledge.energyPerXAS, 10)
+    const xas = parseInt(energy / totalPledge.energyPerXAS * constants.fixedPoint, 10)
 
     return xas
   },
@@ -108,7 +110,7 @@ module.exports = {
       return false
     }
 
-    const netUsed = fee * netEnergyLimit.netPerXAS
+    const netUsed = fee * netEnergyLimit.netPerXAS / constants.fixedPoint
     let totalUsed = netUsed
 
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
@@ -215,7 +217,7 @@ module.exports = {
     if (!netEnergyLimit) {
       throw new Error('No pledge was found')
     }
-    const netUsed = fee * netEnergyLimit.netPerXAS
+    const netUsed = fee * netEnergyLimit.netPerXAS / constants.fixedPoint
     if (netUsed <= 0) return null
 
     let totalUsed = netUsed
