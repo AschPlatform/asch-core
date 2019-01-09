@@ -149,11 +149,6 @@ Blocks.prototype.getBlock = (filter, cb) => {
 Blocks.prototype.setLastBlock = (block) => {
   priv.lastBlock = block
   if (global.Config.netVersion === 'mainnet') {
-    // global.featureSwitch.enableLongId = priv.lastBlock.height >= 1700000
-    // global.featureSwitch.enable1_3_0 = priv.lastBlock.height >= 2920000
-    // global.featureSwitch.enableClubBonus = priv.lastBlock.height >= 3320000
-    // global.featureSwitch.enableMoreLockTypes = global.featureSwitch.enableClubBonus
-    // global.featureSwitch.enableLockReset = priv.lastBlock.height >= 4290000
     if (priv.lastBlock.height >= 1700000) {
       featureSwitch.enable('enableLongId')
     }
@@ -169,16 +164,7 @@ Blocks.prototype.setLastBlock = (block) => {
     if (priv.lastBlock.height >= 4290000) {
       featureSwitch.enable('enableLockReset')
     }
-    // FIXME: this height nees adjustment
-    if (priv.lastBlock.height >= 6666666) {
-      // featureSwitch.enable('enableBCH')
-    }
   } else {
-    // global.featureSwitch.enableLongId = true
-    // global.featureSwitch.enable1_3_0 = true
-    // global.featureSwitch.enableClubBonus = (!!global.state.clubInfo)
-    // global.featureSwitch.enableMoreLockTypes = true
-    // global.featureSwitch.enableLockReset = true
     featureSwitch.enable('enableLongId')
     featureSwitch.enable('enable1_3_0')
     if (global.state.clubInfo) {
@@ -189,16 +175,11 @@ Blocks.prototype.setLastBlock = (block) => {
 
     featureSwitch.enable('enableMoreLockTypes')
     featureSwitch.enable('enableLockReset')
-    // featureSwitch.enable('enableBCH')
   }
-  // global.featureSwitch.fixVoteNewAddressIssue = true
   featureSwitch.enable('fixVoteNewAddressIssue')
   if (global.Config.netVersion === 'mainnet' && priv.lastBlock.height < 1854000) {
-    // global.featureSwitch.fixVoteNewAddressIssue = false
     featureSwitch.disable('fixVoteNewAddressIssue')
   }
-  // global.featureSwitch.enableUIA = global.featureSwitch.enableLongId
-  // copyFeature: (srcFeature, targetFeature): srcFeature ---> targetFeature
   featureSwitch.copyFeature('enableLongId', 'enableUIA')
 }
 
