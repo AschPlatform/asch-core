@@ -34,7 +34,6 @@ class Application {
   run() {
     const options = this.options
     const pidFile = options.pidFile
-    global.featureSwitch = {}
     global.state = {}
     init(options, (error, scope) => {
       if (error) {

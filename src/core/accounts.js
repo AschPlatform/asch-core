@@ -92,7 +92,6 @@ priv.openAccount2 = (publicKey, cb) => {
 Accounts.prototype.generateAddressByPublicKey = publicKey => addressHelper.generateNormalAddress(publicKey)
 
 Accounts.prototype.generateAddressByPublicKey2 = (publicKey) => {
-  // if (!global.featureSwitch.enableUIA) {
   if (!featureSwitch.isEnabled('enableUIA')) {
     return self.generateAddressByPublicKey(publicKey)
   }

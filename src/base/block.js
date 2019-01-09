@@ -237,7 +237,6 @@ Block.prototype.objectNormalize = (block) => {
 Block.prototype.getId = block => self.getId2(block)
 
 Block.prototype.getId_old = (block) => {
-  // if (global.featureSwitch.enableLongId) {
   if (featureSwitch.isEnabled('enableLongId')) {
     return self.getId2(block)
   }

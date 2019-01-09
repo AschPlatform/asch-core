@@ -45,7 +45,6 @@ Consensus.prototype.verifyVote = (height, id, voteItem) => {
 Consensus.prototype.getVoteHash = (height, id) => {
   const bytes = new ByteBuffer()
   bytes.writeLong(height)
-  // if (global.featureSwitch.enableLongId) {
   if (featureSwitch.isEnabled('enableLongId')) {
     bytes.writeString(id)
   } else {
@@ -129,7 +128,6 @@ Consensus.prototype.getProposeHash = (propose) => {
   const bytes = new ByteBuffer()
   bytes.writeLong(propose.height)
 
-  // if (global.featureSwitch.enableLongId) {
   if (featureSwitch.isEnabled('enableLongId')) {
     bytes.writeString(propose.id)
   } else {
