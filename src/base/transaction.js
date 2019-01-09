@@ -299,7 +299,7 @@ Transaction.prototype.apply = async (context) => {
     if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
       const requestorFee = 20000000
       if (await pledges.isNetCovered(requestorFee / constants.fixedPoint, requestor.address, block.height)) {
-        pledges.consumeNet(requestorFee / constants.fixedPoint, requestor.address, block.height, trs.id)
+        await pledges.consumeNet(requestorFee / constants.fixedPoint, requestor.address, block.height, trs.id)
       } else {
         if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
         requestor.xas -= requestorFee
