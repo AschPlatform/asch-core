@@ -170,9 +170,9 @@ Blocks.prototype.setLastBlock = (block) => {
       featureSwitch.enable('enableLockReset')
     }
     // FIXME: this height nees adjustment
-    if (priv.lastBlock.height >= 6666666) {
-      // featureSwitch.enable('enableBCH')
-    }
+    // if (priv.lastBlock.height >= 6666666) {
+    //   featureSwitch.enable('enableBCH')
+    // }
   } else {
     // global.featureSwitch.enableLongId = true
     // global.featureSwitch.enable1_3_0 = true

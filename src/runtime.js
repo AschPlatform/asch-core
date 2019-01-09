@@ -186,10 +186,10 @@ module.exports = async function runtime(options) {
     hooks: {},
     custom: {},
     logger: options.logger,
-    repurchaseAddr: 'ARepurchaseAddr1234567890123456789',
-    buringPoolAddr: 'ABuringPoolAddr1234567890123456789',
-    storeClaimedAddr: 'AStoreClaimedAddr12345678901234567',
-    councilAddress: 'GADQ2bozmxjBfYHDQx3uwtpwXmdhafUdkN',
+    // repurchaseAddr: 'ARepurchaseAddr1234567890123456789',
+    // buringPoolAddr: 'ABuringPoolAddr1234567890123456789',
+    // storeClaimedAddr: 'AStoreClaimedAddr12345678901234567',
+    // councilAddress: 'GADQ2bozmxjBfYHDQx3uwtpwXmdhafUdkN',
   }
   app.validators = {
     amount: value => amountHelper.validate(value),
@@ -325,7 +325,7 @@ module.exports = async function runtime(options) {
     bigdecimal: require('./utils/bigdecimal'),
     transactionMode: require('./utils/transaction-mode.js'),
     lodash: require('lodash'),
-    bancor: require('./utils/bancor.js'),
+    // bancor: require('./utils/bancor.js'),
     slots: require('./utils/slots.js'),
     constants: require('./utils/constants.js'),
     gateway: require('./utils/gateway.js'),
@@ -381,9 +381,9 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[12] = 'basic.unvote'
   app.contractTypeMapping[13] = 'basic.pledge'
   app.contractTypeMapping[14] = 'basic.unpledge'
-  app.contractTypeMapping[20] = 'exchange.exchangeByTarget'
-  app.contractTypeMapping[21] = 'exchange.exchangeBySource'
-  app.contractTypeMapping[22] = 'exchange.burnXAS'
+  // app.contractTypeMapping[20] = 'exchange.exchangeByTarget'
+  // app.contractTypeMapping[21] = 'exchange.exchangeBySource'
+  // app.contractTypeMapping[22] = 'exchange.burnXAS'
 
   app.contractTypeMapping[100] = 'uia.registerIssuer'
   app.contractTypeMapping[101] = 'uia.registerAsset'
@@ -410,7 +410,7 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[406] = 'gateway.submitOutTransactionId'
   app.contractTypeMapping[407] = 'gateway.depositBail'
   app.contractTypeMapping[408] = 'gateway.withdrawalBail'
-  app.contractTypeMapping[409] = 'gateway.claim'
+  // app.contractTypeMapping[409] = 'gateway.claim'
 
   app.contractTypeMapping[500] = 'group.vote'
   app.contractTypeMapping[501] = 'group.activate'
