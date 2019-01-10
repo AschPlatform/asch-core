@@ -427,9 +427,9 @@ Blocks.prototype.applyRound = async (block) => {
 
   let transFee = 0
   for (const t of block.transactions) {
-    if (transactionMode.isDirectMode(t.mode) && t.fee >= 0) {
-      if (await pledges.isNetCovered(t.fee / constants.fixedPoint, t.senderId, block.height)) {
-        await pledges.consumeNet(t.fee / constants.fixedPoint, t.senderId, block.height, t.id)
+    if (transactionMode.isDirectMode(t.mode) && t.fee > 0) {
+      if (await pledges.isNetCovered(t.fee, t.senderId, block.height) && t.type !== constants.pledgeType) {
+        await pledges.consumeNet(t.fee, t.senderId, block.height, t.id)
       } else {
         transFee += t.fee
         // TODO: handle fee for smart contract

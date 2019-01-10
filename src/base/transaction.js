@@ -298,8 +298,8 @@ Transaction.prototype.apply = async (context) => {
   if (block.height !== 0) {
     if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
       const requestorFee = 20000000
-      if (await pledges.isNetCovered(requestorFee / constants.fixedPoint, requestor.address, block.height)) {
-        await pledges.consumeNet(requestorFee / constants.fixedPoint, requestor.address, block.height, trs.id)
+      if (await pledges.isNetCovered(requestorFee, requestor.address, block.height)) {
+        await pledges.consumeNet(requestorFee, requestor.address, block.height, trs.id)
       } else {
         if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
         requestor.xas -= requestorFee
@@ -309,7 +309,9 @@ Transaction.prototype.apply = async (context) => {
       app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
       return null
     }
-    if (!(await pledges.isNetCovered(trs.fee / constants.fixedPoint, sender.address, block.height))) {
+    if (trs.type === constants.pledgeType) {
+      sender.xas -= trs.fee
+    } else if (!(await pledges.isNetCovered(trs.fee, sender.address, block.height))) {
       if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
       sender.xas -= trs.fee
     }

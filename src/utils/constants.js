@@ -29,4 +29,5 @@ module.exports = {
   energyPerGas: 1,
   blocksPerDay: 24 * 60 * 6,
   pledageDays: 3,
+  pledgeType: 13,
 }
