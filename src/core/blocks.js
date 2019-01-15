@@ -28,6 +28,7 @@ priv.blockCache = {}
 priv.proposeCache = {}
 priv.lastPropose = null
 priv.isCollectingVotes = false
+priv.isApplyingBlock = false
 
 // Constructor
 function Blocks(cb, scope) {
@@ -297,6 +298,9 @@ Blocks.prototype.applyBlock = async (block) => {
   app.logger.trace('enter applyblock')
   const appliedTransactions = {}
 
+  let error = undefined
+  library.bus.message('preApplyBlock', block)
+  priv.isApplyingBlock = true
   try {
     for (const transaction of block.transactions) {
       if (appliedTransactions[transaction.id]) {
@@ -310,8 +314,16 @@ Blocks.prototype.applyBlock = async (block) => {
   } catch (e) {
     app.logger.error(e)
     await app.sdb.rollbackBlock()
+    error = e 
     throw new Error(`Failed to apply block: ${e}`)
+  } finally {
+    priv.isApplyingBlock = false
+    library.bus.message('postApplyBlock', error, block)
   }
+}
+
+Blocks.prototype.isApplyingBlock = () => {
+  return priv.isApplyingBlock
 }
 
 Blocks.prototype.processBlock = async (b, options) => {
@@ -428,7 +440,7 @@ Blocks.prototype.applyRound = async (block) => {
   let transFee = 0
   for (const t of block.transactions) {
     if (transactionMode.isDirectMode(t.mode) && t.fee > 0) {
-      if (await pledges.isNetCovered(t.fee, t.senderId, block.height) && t.type !== constants.pledgeType) {
+      if (await pledges.isNetCovered(t.fee, t.senderId, block.height)) {
         await pledges.consumeNet(t.fee, t.senderId, block.height, t.id)
       } else {
         transFee += t.fee

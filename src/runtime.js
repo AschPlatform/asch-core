@@ -331,6 +331,7 @@ module.exports = async function runtime(options) {
     entry: path.join(appDir, '../node_modules/asch-core/node_modules/asch-contract/sandbox-launcher.js'),
     dataDir: path.join(appDir, '../data/contracts'),
     logDir: path.join(__dirname, '../logs/contracts/'),
+    logLevelConfig: { defaultLogLevel: AschContract.LogLevel.all },
     debug: false,
   })
 
