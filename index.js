@@ -58,7 +58,7 @@ class Application {
           } else {
             scope.logger.info('Cleaned up successfully')
           }
-          if (global.app.contract) {
+          if (global.app.contract && global.app.contract.connected) {
             (async () => {
               try {
                 await global.app.contract.disconnect()
