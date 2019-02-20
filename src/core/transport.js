@@ -28,16 +28,10 @@ priv.attachApi = () => {
   const router = new Router()
 
   router.use((req, res, next) => {
-    if (modules.loader.syncing()) {
-      return res.status(500).send({
-        success: false,
-        error: 'Blockchain is syncing',
-      })
-    }
 
     res.set(priv.headers)
-
     if (req.headers.magic !== library.config.magic) {
+      modules.peer.setNodeIncompatible(req.ip, req.headers.magic)
       return res.status(500).send({
         success: false,
         error: 'Request is made on the wrong network',
@@ -55,7 +49,7 @@ priv.attachApi = () => {
     }
     const newBlock = priv.latestBlocksCache.get(body.id)
     if (!newBlock) {
-      return res.status(500).send({ error: 'New block not found' })
+      return res.status(500).send({ error: 'New block not found: '+ body.id })
     }
     return res.send({ success: true, block: newBlock.block, votes: newBlock.votes })
   })
@@ -120,6 +114,12 @@ priv.attachApi = () => {
   })
 
   router.post('/transactions', (req, res) => {
+    if (modules.loader.syncing()) {
+      return res.status(500).send({
+        success: false,
+        error: 'Blockchain is syncing',
+      })
+    }
     const lastBlock = modules.blocks.getLastBlock()
     const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
     if (slots.getNextSlot() - lastSlot >= 12) {
@@ -145,14 +145,16 @@ priv.attachApi = () => {
     return library.sequence.add((cb) => {
       library.logger.info(`Received transaction ${transaction.id} from http client`)
       modules.transactions.processUnconfirmedTransaction(transaction, cb)
-    }, (err) => {
+    }, (err, trans, ret) => {
       if (err) {
         library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
         const errMsg = err.message ? err.message : err.toString()
         res.status(200).json({ success: false, error: errMsg })
       } else {
         library.bus.message('unconfirmedTransaction', transaction)
-        res.status(200).json({ success: true, transactionId: transaction.id })
+        const result = (!ret) ? { success: true, transactionId: transaction.id } :
+          Object.assign({ transactionId: transaction.id }, ret) 
+        res.status(200).json(result)
       }
     })
   })

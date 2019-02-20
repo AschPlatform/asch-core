@@ -1,4 +1,4 @@
-const crypto = require('crypto')
+ const crypto = require('crypto')
 const isArray = require('util').isArray
 const jsonSql = require('json-sql')()
 
@@ -45,6 +45,7 @@ priv.attachApi = () => {
     'get /balances/:address/:currency': 'getBalance',
     'put /transfers': 'transferAsset',
     'get /transfers/:address/:currency': 'getTransfers',
+    'get /transactions/my/:address/:currency': 'getTransfers',
   })
 
   router.use((req, res) => {
@@ -375,14 +376,65 @@ function formatUiaTransfers(transactions) {
 }
 
 shared.getTransfers = (req, cb) => {
-  if (!req.params || !req.params.address || !req.params.currency) {
-    return cb(' Invalid parameters')
+  const query = req.params
+  let validateResult = library.scheme.validate(query, {
+    type: 'object',
+    properties: {
+      address: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 100,
+      },
+      currency: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 100,
+      },
+    },
+    required: ['address', 'currency'],
+  })
+  if (!validateResult) return cb( library.scheme.getLastError().details[0].message )
+
+  validateResult = library.scheme.validate(req.body, {
+    type: 'object',
+    properties: {
+      limit: {
+        type: 'integer',
+        minimum: 0,
+        maximum: 100,
+      },
+      offset: {
+        type: 'integer',
+        minimum: 0,
+      }
+    },
+  })
+  if (!validateResult) return cb( library.scheme.getLastError().details[0].message )
+
+  const limit = req.body.limit || 100
+  const offset = req.body.offset || 0
+
+  let orderBy = undefined
+  if (req.body.orderBy) {
+    let [orderField, sortOrder] = req.body.orderBy.split(':')
+    if (orderField && sortOrder !== undefined) {
+      orderField = orderField === 't_timestamp' ? 'timestamp' : orderField
+      sortOrder = sortOrder.toUpperCase()
+      orderBy = {}
+      orderBy[orderField] = sortOrder
+    } 
   }
 
-  const condition = { recipientId: req.params.address, currency: req.params.currency }
+  const condition = [
+    { $or : { 
+      senderId : query.address, 
+      recipientId: query.address }
+    }, 
+    { currency : query.currency }]
+
   return (async () => {
     try {
-      const transfers = await app.sdb.find('Transfer', condition)
+      const transfers = await app.sdb.find('Transfer', condition, { limit, offset }, orderBy)
 
       const transactions = formatUiaTransfers(await modules.transactions.tranfersToAPIV1Transactions(transfers))
       return cb(null, { transactions, count: transactions.length })

@@ -229,8 +229,7 @@ Transaction.prototype.verify = async (context) => {
     if (trs.senderPublicKey) {
       const error = self.verifyNormalSignature(trs, requestor, bytes)
       if (error) return error
-    }
-    if (!trs.senderPublicKey && trs.signatures && trs.signatures.length > 1) {
+    } else if (!trs.senderPublicKey && trs.signatures && trs.signatures.length > 1) {
       const ADDRESS_TYPE = app.util.address.TYPE
       const addrType = app.util.address.getType(trs.senderId)
       if (addrType === ADDRESS_TYPE.CHAIN) {
@@ -242,6 +241,8 @@ Transaction.prototype.verify = async (context) => {
       } else {
         return 'Invalid account type'
       }
+    } else {
+      return 'Faied to verify signature'
     }
   } catch (e) {
     library.logger.error('verify signature excpetion', e)
@@ -318,11 +319,11 @@ Transaction.prototype.apply = async (context) => {
     app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
   }
 
-  const error = await fn.apply(context, trs.args)
-  if (error) {
+  const ret = await fn.apply(context, trs.args)
+  if (typeof ret === 'string') {
     throw new Error(error)
   }
-  return null
+  return ret
 }
 
 Transaction.prototype.objectNormalize = (trs) => {
