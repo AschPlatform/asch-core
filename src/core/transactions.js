@@ -274,6 +274,10 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     throw new Error('Missing sender address')
   }
 
+  if (!transaction.signatures || transaction.signatures.length === 0) {
+    throw new Error('Signatures are not provided')
+  }
+
   const mode = transaction.mode
   if (transactionMode.isRequestMode(mode)) {
     if (!requestorId) throw new Error('No requestor provided')
