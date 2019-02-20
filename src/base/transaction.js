@@ -319,11 +319,11 @@ Transaction.prototype.apply = async (context) => {
     app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
   }
 
-  const error = await fn.apply(context, trs.args)
-  if (error) {
+  const ret = await fn.apply(context, trs.args)
+  if (typeof ret === 'string') {
     throw new Error(error)
   }
-  return null
+  return ret
 }
 
 Transaction.prototype.objectNormalize = (trs) => {

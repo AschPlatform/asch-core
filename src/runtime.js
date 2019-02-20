@@ -291,7 +291,8 @@ module.exports = async function runtime(options) {
 
   app.executeContract = async (context) => {
     context.activating = 1
-    const error = await library.base.transaction.apply(context)
+    const ret = await library.base.transaction.apply(context)
+    const error = (typeof ret === 'object' && ret.success === false) ? ret.error || 'failed' : ret
     if (!error) {
       const trs = await app.sdb.get('Transaction', { id: context.trs.id })
       if (!transactionMode.isRequestMode(context.trs.mode)) throw new Error('Transaction mode is not request mode')
@@ -327,8 +328,16 @@ module.exports = async function runtime(options) {
     pledges: require('./utils/pledges.js'),
   }
 
+  let sandboxLuncherPath = path.join(appDir, '../node_modules/asch-contract/sandbox-launcher.js')
+  sandboxLuncherPath = fs.existsSync(sandboxLuncherPath) ? 
+    sandboxLuncherPath : 
+    path.join(appDir, '../node_modules/asch-core/node_modules/asch-contract/sandbox-launcher.js')
+  if (!fs.existsSync(sandboxLuncherPath)) {
+    throw new Error(`Asch contract luncher not found`)
+  }
+  
   const contractSandbox = new AschContract.SandboxConnector({
-    entry: path.join(appDir, '../node_modules/asch-core/node_modules/asch-contract/sandbox-launcher.js'),
+    entry: sandboxLuncherPath,
     dataDir: path.join(appDir, '../data/contracts'),
     logDir: path.join(__dirname, '../logs/contracts/'),
     logLevelConfig: { defaultLogLevel: AschContract.LogLevel.all },

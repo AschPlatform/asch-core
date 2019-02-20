@@ -218,8 +218,8 @@ Transactions.prototype.processUnconfirmedTransactionsAsync = async (transactions
 Transactions.prototype.processUnconfirmedTransaction = (transaction, cb) => {
   (async () => {
     try {
-      await self.processUnconfirmedTransactionAsync(transaction)
-      cb(null, transaction)
+      const ret = await self.processUnconfirmedTransactionAsync(transaction)
+      cb(null, transaction, ret)
     } catch (e) {
       cb(e.toString(), transaction)
     }
@@ -251,9 +251,9 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
     if (exists) {
       throw new Error('Transaction already confirmed')
     }
-    await self.applyUnconfirmedTransactionAsync(transaction)
+    const ret = await self.applyUnconfirmedTransactionAsync(transaction)
     self.pool.add(transaction)
-    return transaction
+    return ret
   } catch (e) {
     self.failedTrsCache.set(transaction.id, true)
     throw e
@@ -339,8 +339,9 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
 
   app.sdb.beginContract()
   try {
-    await library.base.transaction.apply(context)
+    const ret = await library.base.transaction.apply(context)
     await app.sdb.commitContract()
+    return ret
   } catch (e) {
     await app.sdb.rollbackContract()
     library.logger.error(e)
@@ -758,9 +759,9 @@ shared.addTransactionUnsigned = (req, cb) => {
           keypair,
           mode: query.mode,
         })
-        await self.processUnconfirmedTransactionAsync(trs)
+        const result = await self.processUnconfirmedTransactionAsync(trs)
         library.bus.message('unconfirmedTransaction', trs)
-        callback(null, { transactionId: trs.id })
+        callback(null, Object.assign({ transactionId: trs.id }, result))
       } catch (e) {
         library.logger.warn('Failed to process unsigned transaction', e)
         callback(e.toString())
