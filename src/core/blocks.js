@@ -440,13 +440,16 @@ Blocks.prototype.applyRound = async (block) => {
   app.sdb.increase('Delegate', { producedBlocks: 1 }, { address })
 
   let transFee = 0
+  // const records = await app.sdb.load('Netenergyconsumption', { height: block.height })
   for (const t of block.transactions) {
     if (transactionMode.isDirectMode(t.mode) && t.fee > 0) {
-      if (await pledges.isNetCovered(t.fee, t.senderId, block.height)) {
-        await pledges.consumeNet(t.fee, t.senderId, block.height, t.id)
+      const record = await app.sdb.load('Netenergyconsumption', { tid: t.id })
+      if (t.type === constants.pledgeType) {
+        transFee += t.fee
+      } else if (record && record.isFeeDeduct === 1) {
+        transFee += record.fee
       } else {
         transFee += t.fee
-        // TODO: handle fee for smart contract
       }
     }
   }

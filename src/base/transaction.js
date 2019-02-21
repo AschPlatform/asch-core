@@ -312,9 +312,13 @@ Transaction.prototype.apply = async (context) => {
     }
     if (trs.type === constants.pledgeType) {
       sender.xas -= trs.fee
-    } else if (!(await pledges.isNetCovered(trs.fee, sender.address, block.height))) {
-      if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
-      sender.xas -= trs.fee
+    } else if (!constants.smartContractType.includes(trs.type)) {
+      if (!(await pledges.isNetCovered(trs.fee, sender.address, block.height))) {
+        if (sender.xas < trs.fee) throw new Error('Insufficient sender balance')
+        sender.xas -= trs.fee
+      } else {
+        await pledges.consumeNet(trs.fee, trs.senderId, block.height, trs.id)
+      }
     }
     app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
   }

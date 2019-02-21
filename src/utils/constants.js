@@ -30,4 +30,5 @@ module.exports = {
   blocksPerDay: 24 * 60 * 6,
   pledageDays: 3,
   pledgeType: 13,
+  smartContractType: [600, 601, 602],
 }
