@@ -321,7 +321,7 @@ Transaction.prototype.apply = async (context) => {
 
   const ret = await fn.apply(context, trs.args)
   if (typeof ret === 'string') {
-    throw new Error(error)
+    throw new Error(ret)
   }
   return ret
 }
