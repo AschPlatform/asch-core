@@ -32,4 +32,27 @@ module.exports = {
     }
     return m
   },
+
+  async getElectedGatewayMember(gatewayName) {
+    const members = await this.getAllGatewayMember(gatewayName)
+    if (!members) return null
+    return members.filter(m => m.elected === 1)
+  },
+
+  async getAllBailAmount(gatewayName) {
+    const members = await this.getElectedGatewayMember(gatewayName)
+    let amount = 0
+    members.forEach((member) => {
+      amount += member.bail
+    })
+    return amount
+  },
+
+  async getAmountByCurrency(gateway, symbol) {
+    const gwCurrency = await app.sdb.load('GatewayCurrency', { gateway, symbol })
+    if (gwCurrency) {
+      return gwCurrency.quantity
+    }
+    return 0
+  },
 }
