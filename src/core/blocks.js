@@ -165,6 +165,9 @@ Blocks.prototype.setLastBlock = (block) => {
     if (priv.lastBlock.height >= 4290000) {
       featureSwitch.enable('enableLockReset')
     }
+    if (priv.lastBlock.height >= 6880000) {
+      featureSwitch.enable('enableUpdateProduceRatio')
+    }
   } else {
     featureSwitch.enable('enableLongId')
     featureSwitch.enable('enable1_3_0')
@@ -176,6 +179,7 @@ Blocks.prototype.setLastBlock = (block) => {
 
     featureSwitch.enable('enableMoreLockTypes')
     featureSwitch.enable('enableLockReset')
+    featureSwitch.enable('enableUpdateProduceRatio')
   }
   featureSwitch.enable('fixVoteNewAddressIssue')
   if (global.Config.netVersion === 'mainnet' && priv.lastBlock.height < 1854000) {
@@ -298,7 +302,7 @@ Blocks.prototype.applyBlock = async (block) => {
   app.logger.trace('enter applyblock')
   const appliedTransactions = {}
 
-  let error = undefined
+  let error
   library.bus.message('preApplyBlock', block)
   priv.isApplyingBlock = true
   try {
@@ -314,7 +318,7 @@ Blocks.prototype.applyBlock = async (block) => {
   } catch (e) {
     app.logger.error(e)
     await app.sdb.rollbackBlock()
-    error = e 
+    error = e
     throw new Error(`Failed to apply block: ${e}`)
   } finally {
     priv.isApplyingBlock = false
@@ -322,9 +326,7 @@ Blocks.prototype.applyBlock = async (block) => {
   }
 }
 
-Blocks.prototype.isApplyingBlock = () => {
-  return priv.isApplyingBlock
-}
+Blocks.prototype.isApplyingBlock = () => priv.isApplyingBlock
 
 Blocks.prototype.processBlock = async (b, options) => {
   if (!priv.loaded) throw new Error('Blockchain is loading')
@@ -462,7 +464,14 @@ Blocks.prototype.applyRound = async (block) => {
   const forgedBlocks = await app.sdb.getBlocksByHeightRange(block.height - 100, block.height - 1)
   const forgedDelegates = [...forgedBlocks.map(b => b.delegate), block.delegate]
 
-  const missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
+  // const missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
+  let missedDelegates
+  if (featureSwitch.isEnabled('enableUpdateProduceRatio')) {
+    missedDelegates = delegates.filter(fd => !forgedDelegates.includes(fd))
+  } else {
+    missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
+  }
+
   missedDelegates.forEach((md) => {
     address = addressHelper.generateNormalAddress(md)
     app.sdb.increase('Delegate', { missedDelegate: 1 }, { address })
