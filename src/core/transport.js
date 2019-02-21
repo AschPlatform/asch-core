@@ -145,7 +145,7 @@ priv.attachApi = () => {
     return library.sequence.add((cb) => {
       library.logger.info(`Received transaction ${transaction.id} from http client`)
       modules.transactions.processUnconfirmedTransaction(transaction, cb)
-    }, (err, trans, ret) => {
+    }, (err, ret) => {
       if (err) {
         library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
         const errMsg = err.message ? err.message : err.toString()

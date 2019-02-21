@@ -219,9 +219,9 @@ Transactions.prototype.processUnconfirmedTransaction = (transaction, cb) => {
   (async () => {
     try {
       const ret = await self.processUnconfirmedTransactionAsync(transaction)
-      cb(null, transaction, ret)
+      cb(null, ret)
     } catch (e) {
-      cb(e.toString(), transaction)
+      cb(e.toString())
     }
   })()
 }
