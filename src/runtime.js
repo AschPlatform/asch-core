@@ -328,20 +328,12 @@ module.exports = async function runtime(options) {
     pledges: require('./utils/pledges.js'),
   }
 
-  let sandboxLuncherPath = path.join(appDir, '../node_modules/asch-contract/sandbox-launcher.js')
-  sandboxLuncherPath = fs.existsSync(sandboxLuncherPath) ? 
-    sandboxLuncherPath : 
-    path.join(appDir, '../node_modules/asch-core/node_modules/asch-contract/sandbox-launcher.js')
-  if (!fs.existsSync(sandboxLuncherPath)) {
-    throw new Error(`Asch contract luncher not found`)
-  }
   
   const contractSandbox = new AschContract.SandboxConnector({
-    entry: sandboxLuncherPath,
-    dataDir: path.join(appDir, '../data/contracts'),
-    logDir: path.join(__dirname, '../logs/contracts/'),
-    logLevelConfig: { defaultLogLevel: AschContract.LogLevel.all },
-    debug: false,
+    entry: require.resolve('asch-contract/sandbox-launcher.js'),
+    dataDir: path.join(dataDir, '/contracts'),
+    logDir: path.join(appDir, '../logs/contracts/'),
+    logLevelConfig: { defaultLogLevel: AschContract.LogLevel[options.appConfig.logLevel] },
   })
 
   await contractSandbox.connect()
