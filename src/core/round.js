@@ -24,7 +24,7 @@ function Round(cb, scope) {
 Round.prototype.loaded = () => priv.loaded
 
 Round.prototype.calc = (height) => {
-  const round = Math.floor(height / slots.delegates) + (height % slots.delegates > 0 ? 1 : 0)
+  const round = Math.floor(height / slots.getDelegates()) + (height % slots.getDelegates() > 0 ? 1 : 0)
   return round
 }
 

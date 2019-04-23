@@ -199,7 +199,7 @@ priv.getBlockSlotData = (slot, height, cb) => {
     const lastSlot = slots.getLastSlot(slot)
 
     for (let currentSlot = slot; currentSlot < lastSlot; currentSlot += 1) {
-      const delegatePos = currentSlot % slots.delegates
+      const delegatePos = currentSlot % slots.getDelegates()
 
       const delegateKey = activeDelegates[delegatePos]
 
@@ -236,7 +236,7 @@ priv.loop = (cb) => {
     return setImmediate(cb)
   }
 
-  if (Date.now() % 10000 > 5000) {
+  if (Date.now() % (slots.interval * 1000) > 5000) {
     library.logger.trace('Loop:', 'maybe too late to collect votes')
     return setImmediate(cb)
   }
@@ -321,7 +321,7 @@ Delegates.prototype.validateProposeSlot = (propose, cb) => {
       return cb(err)
     }
     const currentSlot = slots.getSlotNumber(propose.timestamp)
-    const delegateKey = activeDelegates[currentSlot % slots.delegates]
+    const delegateKey = activeDelegates[currentSlot % slots.getDelegates()]
 
     if (delegateKey && propose.generatorPublicKey === delegateKey) {
       return cb()
@@ -373,7 +373,7 @@ Delegates.prototype.validateBlockSlot = (block, cb) => {
       return cb(err)
     }
     const currentSlot = slots.getSlotNumber(block.timestamp)
-    const delegateKey = activeDelegates[currentSlot % 101]
+    const delegateKey = activeDelegates[currentSlot % slots.getDelegates()]
 
     if (delegateKey && block.delegate === delegateKey) {
       return cb()
@@ -455,7 +455,7 @@ Delegates.prototype.cleanup = (cb) => {
 
 Delegates.prototype.getTopDelegates = () => {
   const allDelegates = app.sdb.getAll('Delegate')
-  return allDelegates.sort(self.compare).map(d => d.publicKey).slice(0, 101)
+  return allDelegates.sort(self.compare).map(d => d.publicKey).slice(0, slots.getDelegates())
 }
 
 Delegates.prototype.getBookkeeperAddresses = () => {

@@ -58,7 +58,7 @@ Consensus.prototype.getVoteHash = (height, id) => {
 }
 
 Consensus.prototype.hasEnoughVotes = votes => votes && votes.signatures
-  && votes.signatures.length > slots.delegates * 2 / 3
+  && votes.signatures.length > slots.getDelegates() * 2 / 3
 
 Consensus.prototype.hasEnoughVotesRemote = votes => votes && votes.signatures
   && votes.signatures.length >= 6
@@ -166,7 +166,8 @@ Consensus.prototype.normalizeVotes = (votes) => {
       signatures: {
         type: 'array',
         minLength: 1,
-        maxLength: 101,
+        // maxLength: 101,
+        maxLength: slots.getDelegates(),
       },
     },
     required: ['height', 'id', 'signatures'],

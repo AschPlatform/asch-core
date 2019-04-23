@@ -31,4 +31,7 @@ module.exports = {
   pledageDays: 3,
   pledgeType: 13,
   smartContractType: [600, 601, 602],
+  superNodes: 21,
+  delegates: 101,
+  interval: 10,
 }

@@ -1,7 +1,8 @@
 const util = require('util')
 const async = require('async')
+const slots = require('./slots.js')
 
-const TASK_TIMEOUT_MS = 10 * 1000
+const TASK_TIMEOUT_MS = slots.interval * 1000
 
 function tick(task, cb) {
   let isCallbacked = false

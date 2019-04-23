@@ -1,4 +1,5 @@
 const constants = require('./constants.js')
+const slots = require('./slots.js')
 
 function BlockStatus() {
   const milestones = [
@@ -7,13 +8,13 @@ function BlockStatus() {
     200000000,
     100000000,
     50000000,
-  ];
+  ]
 
   const distance = 3000000 // Distance between each milestone
   let rewardOffset = 1 // Start rewards at block (n)
 
   if (global.Config.netVersion === 'mainnet') {
-    rewardOffset = 464500;
+    rewardOffset = 464500
   }
 
   function parseHeight(height) {
@@ -47,7 +48,7 @@ function BlockStatus() {
 
   this.calcSupply = (h) => {
     let height = parseHeight(h)
-    height -= height % 101
+    height -= height % slots.getDelegates()
     const milestone = this.calcMilestone(height)
     let supply = constants.totalAmount
     const rewards = []
@@ -60,14 +61,14 @@ function BlockStatus() {
     height = (height - rewardOffset) + 1
     for (let i = 0; i < milestones.length; i++) {
       if (milestone >= i) {
-        multiplier = milestones[i];
+        multiplier = milestones[i]
 
         if (height <= 0) {
           break // Rewards not started yet
         } else if (height < distance) {
-          amount = height % distance; // Measure distance thus far
+          amount = height % distance // Measure distance thus far
         } else {
-          amount = distance; // Assign completed milestone
+          amount = distance // Assign completed milestone
         }
         rewards.push([amount, multiplier])
         height -= distance // Deduct from total height
@@ -80,7 +81,7 @@ function BlockStatus() {
     }
 
     for (i = 0; i < rewards.length; i++) {
-      const reward = rewards[i];
+      const reward = rewards[i]
       supply += reward[0] * reward[1]
     }
 
