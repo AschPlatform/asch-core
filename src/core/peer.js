@@ -49,6 +49,7 @@ class NodeManager extends EventEmitter {
   constructor() {
     super()
     this._allNodes = new Map()
+    this._nodeAddress = new Set()
     this._shackingNodes = new Set()
     this._isChecking = false
     this._checkCompatibleTimer = undefined
@@ -56,15 +57,18 @@ class NodeManager extends EventEmitter {
   }
 
   get healthyNodes() {
-    return [...this._allNodes.values()].filter(n => n.status === NodeStatus.Healthy)
+    const isHealthyNode = n => n.status === NodeStatus.Health
+    return [...this._allNodes.values()].filter(isHealthyNode)
   }
 
   get compatibleNodes() {
-    return [...this._allNodes.values()].filter(n => n.status === NodeStatus.Healthy || n.status === NodeStatus.Unhealthy)
+    const isCompatiableNode = n => n.status === NodeStatus.Healthy || n.status === NodeStatus.Unhealthy
+    return [...this._allNodes.values()].filter(isCompatiableNode)
   }
 
   get incompatibleNodes() {
-    return [...this._allNodes.values()].filter(n => n.status === NodeStatus.Incompatible || n.status === NodeStatus.Unknow)
+    const isIncompatiableNode = n => n.status === NodeStatus.Incompatible || n.status === NodeStatus.Unknow
+    return [...this._allNodes.values()].filter(isIncompatiableNode)
   }
 
   isHealthy( height, blockId ) {
@@ -134,34 +138,47 @@ class NodeManager extends EventEmitter {
   }
 
   getNodeInfo(peer) {
-    return this._allNodes.get(this._makeId(peer))
+    const idString = this._makeId(peer).toString('hex')
+    return this._allNodes.get(idString)
   }
 
   addPeer(peer, id) {
-    id = id || this._makeId(peer)
-    if (this._allNodes.has(id) || this._shackingNodes.has(id)) return 
+    id = id || this._makeId(peer).toString('hex')
+    const idString = Buffer.isBuffer(id) ? id.toString('hex') : String(id)
+    if (this._allNodes.has(idString) || this._shackingNodes.has(idString)) return 
+    if (this._nodeAddress.has(`${peer.host}:${peer.port}`)) return
     if (peer.host === library.config.publicIp && peer.port === library.config.peerPort) return
 
-    this._shackingNodes.add(id)
+    this._shackingNodes.add(idString)
     this._shackhands(peer, (err, info) => {
-      this._shackingNodes.delete(id)
+      this._shackingNodes.delete(idString)
       const { host, port, isSeed, status } = peer
       const node = { host, port, isSeed } 
       if (err && status === NodeStatus.Incompatible) {
+        library.logger.debug(`incompatible peer ${host}:${port}@${idString}`)
         return
       }
       const updateInfo = info || { status: NodeStatus.Unknow }
       this._updateNode(node, updateInfo)
-      const nodes = [...this._allNodes.values()]
-      nodes.filter(node => node.host === peer.host && node.port === peer.port)
-        .forEach(node => this._allNodes.delete(node.id))
-
-      this._allNodes.set(id, node)
+      this._nodeAddress.add(`${host}:${port}`)
+      this._allNodes.set(idString, node)
+      library.logger.debug(`add peer ${host}:${port}@${idString}`)
     })
   }
 
   removePeer(id) {
-    this._allNodes.delete(id)
+    const idString = Buffer.isBuffer(id) ? id.toString('hex') : String(id)
+    const node = this._allNodes.get(idString)
+    if (node) {
+      this._removeNode(idString, node)
+      library.logger.debug(`remove peer ${node.host}:${node.port}@${idString}`)
+    }
+  }
+
+  _removeNode(idString, node) {
+    const { host, port } = node
+    this._allNodes.delete(idString)
+    this._nodeAddress.delete(`${host}:${port}`)
   }
 
   _updateNode(node, info) {
@@ -257,10 +274,10 @@ class NodeManager extends EventEmitter {
       }
 
       status = this.isHealthy( height, blockId ) ? NodeStatus.Healthy : NodeStatus.Unhealthy
-      return cb(undefined,{ net, version, status, magic, height, blockId }) 
+      return cb(undefined,　{ net, version, status, magic, height, blockId }) 
 
     }).catch(err => {
-      library.logger.debug(`shack hands error`, err)
+      library.logger.debug(`fail to shack hands`, err)
       cb(err)
     }) 
   }
