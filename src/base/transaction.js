@@ -139,7 +139,7 @@ Transaction.prototype.verifyNormalSignature = (trs, requestor, bytes) => {
   if (!self.verifyBytes(bytes, trs.senderPublicKey, trs.signatures[0])) {
     return 'Invalid signature'
   }
-  if (requestor.secondPublicKey) {
+  if (requestor && requestor.secondPublicKey) {
     if (!trs.secondSignature) return 'Second signature not provided'
     if (!self.verifyBytes(bytes, requestor.secondPublicKey, trs.secondSignature)) {
       return 'Invalid second signature'
@@ -320,7 +320,9 @@ Transaction.prototype.apply = async (context) => {
         await pledges.consumeNet(trs.fee, trs.senderId, block.height, trs.id)
       }
     }
-    app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
+    if (!constants.smartContractType.includes(trs.type)) {
+      app.sdb.update('Account', { xas: sender.xas }, { address: sender.address })
+    }
   }
 
   const ret = await fn.apply(context, trs.args)

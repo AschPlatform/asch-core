@@ -3,6 +3,7 @@ const LRU = require('lru-cache')
 const Router = require('../utils/router.js')
 const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
+const promisify = require('util').promisify
 
 let modules
 let library
@@ -20,6 +21,7 @@ function Transport(cb, scope) {
   priv.attachApi()
   priv.latestBlocksCache = new LRU(200)
   priv.blockHeaderMidCache = new LRU(1000)
+  priv.largeTransactionCache = new LRU(500)
 
   setImmediate(cb, null, self)
 }
@@ -151,12 +153,27 @@ priv.attachApi = () => {
         const errMsg = err.message ? err.message : err.toString()
         res.status(200).json({ success: false, error: errMsg })
       } else {
-        library.bus.message('unconfirmedTransaction', transaction)
+        modules.transactions.broadcastUnconfirmedTransaction(transaction)
         const result = (!ret) ? { success: true, transactionId: transaction.id } :
           Object.assign({ transactionId: transaction.id }, ret) 
         res.status(200).json(result)
       }
     })
+  })
+
+  router.post('/getLargeTransaction', (req, res) => {
+    if (!req.body || !req.body.id) {
+      res.send({ success: false, error: 'invalid transaction id'})
+    }
+
+    const id = req.body.id
+    const transaction = priv.largeTransactionCache.get(id)
+    if (!transaction) {
+      res.send({ success: false, error: `transaction not found, id =${id}`})
+    }
+
+    library.logger.debug('response large transaction, id = ${id}')
+    res.send({ success: true, transaction })
   })
 
   router.post('/votes', (req, res) => {
@@ -331,15 +348,82 @@ Transport.prototype.onPeerReady = () => {
       }
     })
   })
+
+  modules.peer.subscribe('largeTransaction', (message, peer) => {
+    if (modules.loader.syncing()) {
+      return
+    }
+    const lastBlock = modules.blocks.getLastBlock()
+    const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
+    if (slots.getNextSlot() - lastSlot >= 12) {
+      library.logger.error('Blockchain is not ready', { getNextSlot: slots.getNextSlot(), lastSlot, lastBlockHeight: lastBlock.height })
+      return
+    }
+
+    (async() => {
+      try{
+        const idBuffer = message.body.id
+        if (!Buffer.isBuffer(idBuffer)) {
+          library.logger.debug(`invalid transaction id, should be buffer`)
+          return 
+        }
+
+        const id = idBuffer.toString('hex')
+        library.logger.debug(`receive large transaction ${id}`)
+        if (priv.largeTransactionCache.get(id)) {
+          library.logger.debug(`transaction ${id} exists or processed`)
+          return 
+        }
+        
+        const exists = await modules.transactions.existsTransaction(id)
+        if (exists) {
+          library.logger.debug(`transaction ${id} exists or processed`)
+          return 
+        }
+        
+        const request = promisify(modules.peer.request)
+        const getTransResult = await request('getLargeTransaction', { id }, peer)
+        if (!getTransResult || !getTransResult.success) {
+          library.logger.debug(`failed to get transaction ${id},`, getTransResult.error)
+          return 
+        }
+    
+        const transaction = library.base.transaction.objectNormalize(getTransResult.transaction)
+        library.sequence.add((cb) => {
+          library.logger.info(`Received transaction ${transaction.id} from remote peer`)
+          modules.transactions.processUnconfirmedTransaction(transaction, cb)
+        }, (err) => {
+          if (err) {
+            library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
+          } else {
+            // library.bus.message('unconfirmedTransaction', transaction, true)
+          }
+        })
+      }
+      catch(err) {
+        library.logger.info(`failed to get large transaction `, err)
+      }
+    })()
+  })
 }
 
-Transport.prototype.onUnconfirmedTransaction = (transaction) => {
+Transport.prototype.onUnconfirmedNormalTransaction = (transaction) => {
   const message = {
     body: {
       transaction: JSON.stringify(transaction),
     },
   }
   self.broadcast('transaction', message)
+}
+
+Transport.prototype.onUnconfirmedLargeTransaction = (transaction) => {
+  priv.largeTransactionCache.set(transaction.id, transaction)
+  const message = {
+    body: {
+      id: Buffer.from(transaction.id, 'hex')
+    },
+  }
+  self.broadcast('largeTransaction', message, 0)
 }
 
 Transport.prototype.onNewBlock = (block, votes) => {

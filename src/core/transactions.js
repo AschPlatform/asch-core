@@ -226,6 +226,24 @@ Transactions.prototype.processUnconfirmedTransaction = (transaction, cb) => {
   })()
 }
 
+Transactions.prototype.existsTransaction = async id => {
+  if (self.failedTrsCache.has(id)) return true
+  if (self.pool.has(id)) return true
+  if (!!app.sdb.get('Transaction', id)) return true
+
+  return await app.sdb.exists('Transaction', { id })
+}
+
+Transactions.prototype.broadcastUnconfirmedTransaction = transaction => {
+  const isLargeTransaction = transaction.type === 600
+
+  const messageName = isLargeTransaction ? 
+    'unconfirmedLargeTransaction' :
+    'unconfirmedNormalTransaction'
+  library.bus.message(messageName, transaction)
+}
+
+
 Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) => {
   try {
     if (!transaction.id) {
@@ -297,13 +315,20 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
 
   let requestor = null
   let sender = await app.sdb.load('Account', senderId)
+  const contractCallOrPay = transaction.type === 601 || transaction.type === 602
   if (!sender) {
-    if (height > 0) throw new Error('Sender account not found')
-    sender = app.sdb.create('Account', {
-      address: senderId,
-      name: null,
-      xas: 0,
-    })
+    if (height > 0 && !contractCallOrPay) {
+      throw new Error('Sender account not found')
+    } else if (height > 0 && contractCallOrPay) {
+      //call contract or pay contract
+
+    } else { // height <= 0
+      sender = app.sdb.create('Account', {
+        address: senderId,
+        name: null,
+        xas: 0,
+      })
+    }
   }
 
   if (requestorId) {
@@ -760,7 +785,7 @@ shared.addTransactionUnsigned = (req, cb) => {
           mode: query.mode,
         })
         const result = await self.processUnconfirmedTransactionAsync(trs)
-        library.bus.message('unconfirmedTransaction', trs)
+        self.broadcastUnconfirmedTransaction(trs)
         callback(null, Object.assign({ transactionId: trs.id }, result))
       } catch (e) {
         library.logger.warn('Failed to process unsigned transaction', e)
