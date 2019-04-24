@@ -48,7 +48,7 @@ function BlockStatus() {
 
   this.calcSupply = (h) => {
     let height = parseHeight(h)
-    height -= height % slots.getDelegates()
+    height -= height % slots.delegates
     const milestone = this.calcMilestone(height)
     let supply = constants.totalAmount
     const rewards = []

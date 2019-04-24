@@ -168,9 +168,6 @@ Blocks.prototype.setLastBlock = (block) => {
     if (priv.lastBlock.height >= 6880000) {
       featureSwitch.enable('enableUpdateProduceRatio')
     }
-    if (priv.lastBlock.height >= 8880000) {
-      featureSwitch.enable('enableSuperNode')
-    }
   } else {
     featureSwitch.enable('enableLongId')
     featureSwitch.enable('enable1_3_0')
@@ -183,7 +180,6 @@ Blocks.prototype.setLastBlock = (block) => {
     featureSwitch.enable('enableMoreLockTypes')
     featureSwitch.enable('enableLockReset')
     featureSwitch.enable('enableUpdateProduceRatio')
-    featureSwitch.enable('enableSuperNode')
   }
   featureSwitch.enable('fixVoteNewAddressIssue')
   if (global.Config.netVersion === 'mainnet' && priv.lastBlock.height < 1854000) {
@@ -461,14 +457,14 @@ Blocks.prototype.applyRound = async (block) => {
   const roundNumber = modules.round.calc(block.height)
   const { fees, rewards } = self.increaseRoundData({ fees: transFee, rewards: block.reward }, roundNumber)
 
-  if (block.height % slots.getDelegates() !== 0) return
+  if (block.height % slots.delegates !== 0) return
 
   app.logger.debug(`----------------------on round ${roundNumber} end-----------------------`)
 
   const delegates = await PIFY(modules.delegates.generateDelegateList)(block.height)
   app.logger.debug('delegate length', delegates.length)
 
-  const forgedBlocks = await app.sdb.getBlocksByHeightRange(block.height - slots.getDelegates() + 1, block.height - 1)
+  const forgedBlocks = await app.sdb.getBlocksByHeightRange(block.height - slots.delegates + 1, block.height - 1)
   const forgedDelegates = [...forgedBlocks.map(b => b.delegate), block.delegate]
 
   // const missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
@@ -485,25 +481,9 @@ Blocks.prototype.applyRound = async (block) => {
   })
 
   const groupName = 'asch_council'
-  if (featureSwitch.isEnabled('dfs')) {
-    // const groupName = 'asch_council'
-    const fee = Math.floor(fees / 100)
-    const reward = Math.floor(rewards / 100)
+  await benefits.assignIncentive(groupName, forgedDelegates, fees, rewards)
 
-    await benefits.allocateToGroup(groupName, fees + rewards - fee * 40 - reward * 40)
-    // await benefits.allocateToGroupMembersEqually(groupName, fee * 10 + reward * 10)
-    await benefits.allocateToDelegatesEqually(forgedDelegates, fee * 20, reward * 20)
-    await benefits.allocateToDelegatesByVotes(forgedDelegates, fee * 20, reward * 20)
-  } else {
-    const councilControl = 1
-    if (councilControl) {
-      await benefits.allocateToGroup(groupName, fees + rewards)
-    } else {
-      await benefits.allocateToDelegatesEqually(forgedDelegates, fees, rewards)
-    }
-  }
-
-  if (block.height % slots.getDelegates() === 0) {
+  if (block.height % slots.delegates === 0) {
     modules.delegates.updateBookkeeper()
   }
 }

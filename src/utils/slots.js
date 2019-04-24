@@ -1,5 +1,4 @@
 const constants = require('./constants.js')
-const featureSwitch = require('../utils/feature-switch.js')
 
 function beginEpochTime() {
   return new Date(Date.UTC(2016, 5, 27, 20, 0, 0, 0))
@@ -16,11 +15,7 @@ function getEpochTime(time) {
 
 module.exports = {
   interval: constants.interval,
-  delegates: constants.delegates,
-
-  getDelegates() {
-    return featureSwitch.isEnabled('enableSuperNode') ? constants.superNodes : constants.delegates
-  },
+  delegates: constants.superNodes,
 
   getTime(time) {
     return getEpochTime(time)

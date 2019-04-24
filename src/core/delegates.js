@@ -199,7 +199,7 @@ priv.getBlockSlotData = (slot, height, cb) => {
     const lastSlot = slots.getLastSlot(slot)
 
     for (let currentSlot = slot; currentSlot < lastSlot; currentSlot += 1) {
-      const delegatePos = currentSlot % slots.getDelegates()
+      const delegatePos = currentSlot % slots.delegates
 
       const delegateKey = activeDelegates[delegatePos]
 
@@ -321,7 +321,7 @@ Delegates.prototype.validateProposeSlot = (propose, cb) => {
       return cb(err)
     }
     const currentSlot = slots.getSlotNumber(propose.timestamp)
-    const delegateKey = activeDelegates[currentSlot % slots.getDelegates()]
+    const delegateKey = activeDelegates[currentSlot % slots.delegates]
 
     if (delegateKey && propose.generatorPublicKey === delegateKey) {
       return cb()
@@ -373,7 +373,7 @@ Delegates.prototype.validateBlockSlot = (block, cb) => {
       return cb(err)
     }
     const currentSlot = slots.getSlotNumber(block.timestamp)
-    const delegateKey = activeDelegates[currentSlot % slots.getDelegates()]
+    const delegateKey = activeDelegates[currentSlot % slots.delegates]
 
     if (delegateKey && block.delegate === delegateKey) {
       return cb()
@@ -455,7 +455,7 @@ Delegates.prototype.cleanup = (cb) => {
 
 Delegates.prototype.getTopDelegates = () => {
   const allDelegates = app.sdb.getAll('Delegate')
-  return allDelegates.sort(self.compare).map(d => d.publicKey).slice(0, slots.getDelegates())
+  return allDelegates.sort(self.compare).map(d => d.publicKey).slice(0, slots.delegates)
 }
 
 Delegates.prototype.getBookkeeperAddresses = () => {
