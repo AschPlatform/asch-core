@@ -374,6 +374,11 @@ Blocks.prototype.processBlock = async (b, options) => {
 
     app.logger.trace('before applyBlock')
     try {
+      priv.lastBlockGenerationInfo = { 
+        height: block.height, 
+        delegate: block.delegate,
+        timestamp: block.timestamp
+      }
       await self.applyBlock(block, options)
     } catch (e) {
       app.logger.error(`Failed to apply block: ${e}`)
@@ -598,6 +603,23 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
       setImmediate(cb, err, lastValidBlock)
     },
   )
+}
+
+Blocks.prototype.getBlockGenerationInfo = async function () {
+  const lastInfo = priv.lastBlockGenerationInfo || { height: 0, delegate: '', timestamp: 0 }
+  const height = priv.lastBlock.height + 1
+  if (lastInfo.height === height) return lastInfo
+
+  let delegate = ''
+  try {
+    const keypair = await PIFY(modules.delegates.getActiveDelegateKeypairs)(height)
+    delegate = keypair.publicKey.toString('hex')
+  } catch (e) { }
+
+  const timestamp = slots.getSlotTime(slots.getSlotNumber())
+  const result = { height, delegate, timestamp }
+  priv.lastBlockGenerationInfo = result
+  return result
 }
 
 Blocks.prototype.generateBlock = async (keypair, timestamp) => {
