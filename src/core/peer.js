@@ -46,8 +46,9 @@ const NodeStatus = {
 }
 
 class NodeManager extends EventEmitter {
-  constructor() {
+  constructor(localNode) {
     super()
+    this._localNode = localNode
     this._allNodes = new Map()
     this._nodeAddress = new Set()
     this._shackingNodes = new Set()
@@ -147,7 +148,7 @@ class NodeManager extends EventEmitter {
     const idString = Buffer.isBuffer(id) ? id.toString('hex') : String(id)
     if (this._allNodes.has(idString) || this._shackingNodes.has(idString)) return 
     if (this._nodeAddress.has(`${peer.host}:${peer.port}`)) return
-    if (peer.host === library.config.publicIp && peer.port === library.config.peerPort) return
+    if (peer.host === this._localNode.host && peer.port === this._localNode.port) return
 
     this._shackingNodes.add(idString)
     this._shackhands(peer, (err, info) => {
@@ -192,7 +193,11 @@ class NodeManager extends EventEmitter {
     this.emit('change', origin, modifier)
   }
 
-  _makeId(peer) { return priv.getNodeIdentity(peer) }
+  _makeId(peer) { 
+    return (peer.host === this._localNode.host && peer.port === this._localNode.port) ?
+      this._localNode.id : 
+      priv.getNodeIdentity(peer) 
+  }
 
   async _sleep( ms ) {
     return new Promise((resolve, reject) => {
@@ -312,8 +317,9 @@ class NodeManager extends EventEmitter {
 const priv = {
   handlers: {},
   dht: null,
+  localNodeId: null,
   peerTimeout: DEFAULT_PEER_TIMEOUT,
-  nodeManager: new NodeManager(),
+  nodeManager: null,
 
   getNodeIdentity: (node) => {
     const address = `${node.host}:${node.port}`
@@ -339,16 +345,22 @@ const priv = {
       }
     }
     const bootstrapNodes = [...priv.getSeedPeerNodes(p2pOptions.seedList)]
-    const [host, port] = [p2pOptions.publicIp, p2pOptions.peerPort]
+
+    let [host, port] = [p2pOptions.publicIp, p2pOptions.peerPort]
+    host = String(host || '').trim()
+    port = Number(port)
+    const isPublicHost = host !== '0.0.0.0' && host !== '127.0.0.1'
     const dht = new DHT({
       timeBucketOutdated: CHECK_BUCKET_OUTDATE,
       bootstrap: bootstrapNodes,
-      nodeId: priv.getNodeIdentity({ host, port }),
+      nodeId: isPublicHost ? priv.getNodeIdentity({ host, port }): undefined,
     })
-    
+
     priv.dht = dht
+    priv.localNodeId = dht.nodeId.toString('hex')
     priv.peerTimeout = p2pOptions.timeout || DEFAULT_PEER_TIMEOUT
     priv.bootstrapNodes = bootstrapNodes
+    priv.nodeManager = new NodeManager({ host, port, id: dht.nodeId })
   
     bootstrapNodes.forEach(node => {
       priv.nodeManager.addPeer({ host: node.host, port: node.port, isSeed: true })
@@ -363,8 +375,7 @@ const priv = {
       }
     })
 
-    
-    dht.ban(...(p2pOptions.blackList || []).map(p=>p.id))
+    dht.ban(...(p2pOptions.blackList || []).map(p => p.ip))
     dht.listen(port, () => library.logger.info(`p2p server listen on ${port}`))
 
     dht.on('node', (node) => {
@@ -398,14 +409,11 @@ const priv = {
         dht.on(eventName, p2pOptions.eventHandlers[eventName]))
     }
 
-    lastNodes.forEach(n => dht.addNode(n))
+    lastNodes.forEach(n => priv.nodeManager.addPeer(n))
    
     setInterval(() => {
-      const allNodes = dht.nodes.toArray()
-      const isInDht = n => allNodes.some(dn => dn.host === n.host && dn.port === n.port)
-      bootstrapNodes.filter(node => !isInDht(node))
-        .filter(n => n.host !== host && n.port !== port)
-        .forEach(n => dht.addNode(n))
+      bootstrapNodes.filter(n => n.host !== host && n.port !== port)
+        .forEach(n => priv.nodeManager.addPeer(n))
     }, RECONNECT_SEED_INTERVAL)
 
     priv.nodeManager.startCheckNodes()
