@@ -37,11 +37,10 @@ async function allocateToDelegatesEqually(delegates, fees, rewards) {
   }
 }
 
-async function allocateToDelegatesByVotes(delegates, fees, rewards) {
+async function allocateToDelegatesByVotes(delegates, rewards) {
   let votes = 0
   let count = 0
-  let usedFee = 0
-  let usedReward = 0
+  let allocatedReward = 0
   for (const pk of delegates) {
     const address = addressHelper.generateNormalAddress(pk)
     const delegate = await app.sdb.findOne('Delegate', { condition: { address } })
@@ -52,27 +51,27 @@ async function allocateToDelegatesByVotes(delegates, fees, rewards) {
     const address = addressHelper.generateNormalAddress(pk)
     const delegate = await app.sdb.findOne('Delegate', { condition: { address } })
     if (count === delegates.length) {
-      const remainFee = fees - usedFee
-      const remainReward = rewards - usedReward
-      await updateDelegate(address, remainFee, remainReward)
-      await updateAccount(address, remainFee + remainReward)
+      const remainReward = rewards - allocatedReward
+      await updateDelegate(address, 0, remainReward)
+      await updateAccount(address, remainReward)
     } else {
-      const ratioFee = Math.floor(fees * delegate.votes / votes)
-      const ratioReward = Math.floor(rewards * delegate.votes / votes)
-      await updateDelegate(address, ratioFee, ratioReward)
-      await updateAccount(address, ratioFee + ratioReward)
-      usedFee += ratioFee
-      usedReward += ratioReward
+      const ratioReward = Math.floor((rewards * delegate.votes) / votes)
+      await updateDelegate(address, 0, ratioReward)
+      await updateAccount(address, ratioReward)
+      allocatedReward += ratioReward
     }
   }
 }
 
 module.exports = {
   async assignIncentive(groupName, forgedDelegates, fees, rewards) {
-    const fee = Math.floor(fees / 100)
-    const reward = Math.floor(rewards / 100)
-    await allocateToGroup(groupName, fees + rewards - fee * 40 - reward * 40)
-    await allocateToDelegatesEqually(forgedDelegates, fee * 20, reward * 20)
-    await allocateToDelegatesByVotes(forgedDelegates, fee * 20, reward * 20)
+    const BASIC_BLOCK_REWARD_RATIO = 0.2
+    const VOTING_REWARD_RATIO = 0.2
+    const blockRewards = rewards * BASIC_BLOCK_REWARD_RATIO
+    const votingRewards = rewards * VOTING_REWARD_RATIO
+    const councilFound = rewards - blockRewards - votingRewards
+    await allocateToGroup(groupName, councilFound)
+    await allocateToDelegatesEqually(forgedDelegates, fees, blockRewards)
+    await allocateToDelegatesByVotes(forgedDelegates, votingRewards)
   },
 }
