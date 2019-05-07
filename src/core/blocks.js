@@ -482,7 +482,7 @@ Blocks.prototype.applyRound = async (block) => {
 
   missedDelegates.forEach((md) => {
     address = addressHelper.generateNormalAddress(md)
-    app.sdb.increase('Delegate', { missedDelegate: 1 }, { address })
+    app.sdb.increase('Delegate', { missedBlocks: 1 }, { address })
   })
 
   await benefits.assignIncentive(forgedDelegates, fees, rewards)
