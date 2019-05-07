@@ -1,3 +1,5 @@
+const constants = require('./constants.js')
+
 function beginEpochTime() {
   return new Date(Date.UTC(2016, 5, 27, 20, 0, 0, 0))
 }
@@ -12,10 +14,8 @@ function getEpochTime(time) {
 }
 
 module.exports = {
-
-  interval: 10,
-
-  delegates: 101,
+  interval: constants.interval,
+  delegates: constants.superNodes,
 
   getTime(time) {
     return getEpochTime(time)

@@ -261,7 +261,7 @@ Loader.prototype.onPeerReady = () => {
     if (slots.getNextSlot() - lastSlot >= 3) {
       self.startSyncBlocks()
     }
-    setTimeout(nextSync, 10 * 1000)
+    setTimeout(nextSync, slots.interval * 1000)
   })
 
   setImmediate(() => {

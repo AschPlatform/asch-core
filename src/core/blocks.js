@@ -11,7 +11,7 @@ const sandboxHelper = require('../utils/sandbox.js')
 const addressHelper = require('../utils/address.js')
 const transactionMode = require('../utils/transaction-mode.js')
 const featureSwitch = require('../utils/feature-switch.js')
-const pledges = require('../utils/pledges.js')
+const benefits = require('../utils/benefits.js')
 
 let genesisblock = null
 let modules
@@ -462,14 +462,14 @@ Blocks.prototype.applyRound = async (block) => {
   const roundNumber = modules.round.calc(block.height)
   const { fees, rewards } = self.increaseRoundData({ fees: transFee, rewards: block.reward }, roundNumber)
 
-  if (block.height % 101 !== 0) return
+  if (block.height % slots.delegates !== 0) return
 
   app.logger.debug(`----------------------on round ${roundNumber} end-----------------------`)
 
   const delegates = await PIFY(modules.delegates.generateDelegateList)(block.height)
   app.logger.debug('delegate length', delegates.length)
 
-  const forgedBlocks = await app.sdb.getBlocksByHeightRange(block.height - 100, block.height - 1)
+  const forgedBlocks = await app.sdb.getBlocksByHeightRange(block.height - slots.delegates + 1, block.height - 1)
   const forgedDelegates = [...forgedBlocks.map(b => b.delegate), block.delegate]
 
   // const missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
@@ -485,38 +485,10 @@ Blocks.prototype.applyRound = async (block) => {
     app.sdb.increase('Delegate', { missedDelegate: 1 }, { address })
   })
 
-  async function updateDelegate(pk, fee, reward) {
-    address = addressHelper.generateNormalAddress(pk)
-    app.sdb.increase('Delegate', { fees: fee, rewards: reward }, { address })
-    // TODO should account be all cached?
-    app.sdb.increase('Account', { xas: fee + reward }, { address })
-  }
+  const groupName = 'asch_council'
+  await benefits.assignIncentive(groupName, forgedDelegates, fees, rewards)
 
-  const councilControl = 1
-  if (councilControl) {
-    const councilAddress = 'GADQ2bozmxjBfYHDQx3uwtpwXmdhafUdkN'
-    app.sdb.createOrLoad('Account', { xas: 0, address: councilAddress, name: null })
-    app.sdb.increase('Account', { xas: fees + rewards }, { address: councilAddress })
-  } else {
-    const ratio = 1
-
-    const actualFees = Math.floor(fees * ratio)
-    const feeAverage = Math.floor(actualFees / delegates.length)
-    const feeRemainder = actualFees - (feeAverage * delegates.length)
-    // let feeFounds = fees - actualFees
-
-    const actualRewards = Math.floor(rewards * ratio)
-    const rewardAverage = Math.floor(actualRewards / delegates.length)
-    const rewardRemainder = actualRewards - (rewardAverage * delegates.length)
-    // let rewardFounds = rewards - actualRewards
-
-    for (const fd of forgedDelegates) {
-      await updateDelegate(fd, feeAverage, rewardAverage)
-    }
-    await updateDelegate(block.delegate, feeRemainder, rewardRemainder)
-  }
-
-  if (block.height % 101 === 0) {
+  if (block.height % slots.delegates === 0) {
     modules.delegates.updateBookkeeper()
   }
 }
