@@ -374,8 +374,8 @@ Blocks.prototype.processBlock = async (b, options) => {
 
     app.logger.trace('before applyBlock')
     try {
-      priv.lastBlockGenerationInfo = { 
-        height: block.height, 
+      priv.lastBlockGenerationInfo = {
+        height: block.height,
         delegate: block.delegate,
         timestamp: block.timestamp
       }
@@ -485,8 +485,7 @@ Blocks.prototype.applyRound = async (block) => {
     app.sdb.increase('Delegate', { missedDelegate: 1 }, { address })
   })
 
-  const groupName = 'asch_council'
-  await benefits.assignIncentive(groupName, forgedDelegates, fees, rewards)
+  await benefits.assignIncentive(forgedDelegates, fees, rewards)
 
   if (block.height % slots.delegates === 0) {
     modules.delegates.updateBookkeeper()

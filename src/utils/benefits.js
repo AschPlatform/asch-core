@@ -9,6 +9,10 @@ async function updateDelegate(address, fee, reward) {
   app.sdb.increase('Delegate', { fees: fee, rewards: reward }, { address })
 }
 
+async function updateDelegateReward(address, reward) {
+  app.sdb.increase('Delegate', { rewards: reward }, { address })
+}
+
 async function allocateToGroup(groupName, amount) {
   const address = addressHelper.generateGroupAddress(groupName)
   await updateAccount(address, amount)
@@ -37,41 +41,50 @@ async function allocateToDelegatesEqually(delegates, fees, rewards) {
   }
 }
 
-async function allocateToDelegatesByVotes(delegates, rewards) {
-  let votes = 0
-  let count = 0
-  let allocatedReward = 0
-  for (const pk of delegates) {
+async function allocateToDelegatesByVotes(delegatesMap, totalVotes, delegates, rewards) {
+  let allocatedRewards = 0
+  for (let i = 0; i < delegates.length; i++) {
+    const pk = delegates[i]
     const address = addressHelper.generateNormalAddress(pk)
-    const delegate = await app.sdb.findOne('Delegate', { condition: { address } })
-    votes += delegate.votes
-  }
-  for (const pk of delegates) {
-    count++
-    const address = addressHelper.generateNormalAddress(pk)
-    const delegate = await app.sdb.findOne('Delegate', { condition: { address } })
-    if (count === delegates.length) {
-      const remainReward = rewards - allocatedReward
-      await updateDelegate(address, 0, remainReward)
-      await updateAccount(address, remainReward)
+    const delegate = delegatesMap.get(address)
+    if (i < delegates.length) {
+      const ratioRewards = rewards * (delegate.votes / totalVotes)
+      await updateDelegateReward(address, ratioRewards)
+      await updateAccount(address, ratioRewards)
+      allocatedRewards += ratioRewards
     } else {
-      const ratioReward = Math.floor((rewards * delegate.votes) / votes)
-      await updateDelegate(address, 0, ratioReward)
-      await updateAccount(address, ratioReward)
-      allocatedReward += ratioReward
+      const remainedRewards = rewards - allocatedRewards
+      await updateDelegateReward(address, remainedRewards)
+      await updateAccount(address, remainedRewards)
     }
   }
 }
 
 module.exports = {
-  async assignIncentive(groupName, forgedDelegates, fees, rewards) {
+  async assignIncentive(forgedDelegates, fees, rewards) {
+    const COUNCIL_NAME = 'asch_council'
     const BASIC_BLOCK_REWARD_RATIO = 0.2
     const VOTING_REWARD_RATIO = 0.2
     const blockRewards = rewards * BASIC_BLOCK_REWARD_RATIO
     const votingRewards = rewards * VOTING_REWARD_RATIO
     const councilFound = rewards - blockRewards - votingRewards
-    await allocateToGroup(groupName, councilFound)
-    await allocateToDelegatesEqually(forgedDelegates, fees, blockRewards)
-    await allocateToDelegatesByVotes(forgedDelegates, votingRewards)
+    await allocateToGroup(COUNCIL_NAME, councilFound)
+
+    const allDelegates = app.sdb.getAll('Delegate')
+    const delegatesMap = new Map()
+    let totalVotes = 0
+    for (const d of allDelegates) {
+      delegatesMap.set(d.address, d)
+    }
+    for (const pk of forgedDelegates) {
+      const address = addressHelper.generateNormalAddress(pk)
+      totalVotes += delegatesMap.get(address).votes
+    }
+    if (totalVotes > 0) {
+      await allocateToDelegatesEqually(forgedDelegates, fees, blockRewards)
+      await allocateToDelegatesByVotes(delegatesMap, totalVotes, forgedDelegates, votingRewards)
+    } else {
+      await allocateToDelegatesEqually(forgedDelegates, fees, blockRewards + votingRewards)
+    }
   },
 }
