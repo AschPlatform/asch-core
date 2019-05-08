@@ -118,7 +118,7 @@ module.exports = {
     if (currentDay <= netEnergyLimit.lastNetUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
     }
-    if (totalUsed < netEnergyLimit.netLimit) {
+    if (totalUsed <= netEnergyLimit.netLimit) {
       return true
     }
 
@@ -126,7 +126,7 @@ module.exports = {
     if (currentDay <= netEnergyLimit.lastFreeNetUpdateDay) {
       totalUsed += netEnergyLimit.freeNetUsed
     }
-    if (totalUsed < netEnergyLimit.freeNetLimit) {
+    if (totalUsed <= netEnergyLimit.freeNetLimit) {
       return true
     }
     return false
@@ -150,7 +150,7 @@ module.exports = {
     if (currentDay <= netEnergyLimit.lastEnergyUpdateDay) {
       totalUsed += netEnergyLimit.energyUsed
     }
-    if (totalUsed < netEnergyLimit.energyLimit) {
+    if (totalUsed <= netEnergyLimit.energyLimit) {
       return true
     }
 
@@ -194,7 +194,7 @@ module.exports = {
     } else {
       pledgeAccount.lastEnergyUpdateDay = currentDay
     }
-    if (totalUsed < netEnergyLimit.energyLimit) {
+    if (totalUsed <= netEnergyLimit.energyLimit) {
       pledgeAccount.energyUsed = totalUsed
       app.sdb.update('AccountPledge', pledgeAccount, { address })
       app.sdb.create('Netenergyconsumption', {
@@ -229,7 +229,7 @@ module.exports = {
       pledgeAccount.lastNetUpdateDay = currentDay
     }
 
-    if (totalUsed < netEnergyLimit.netLimit) {
+    if (totalUsed <= netEnergyLimit.netLimit) {
       pledgeAccount.netUsed = totalUsed
       app.sdb.update('AccountPledge', pledgeAccount, { address })
       app.sdb.create('Netenergyconsumption', {
@@ -248,7 +248,7 @@ module.exports = {
     } else {
       pledgeAccount.lastFreeNetUpdateDay = currentDay
     }
-    if (totalUsed < netEnergyLimit.freeNetLimit) {
+    if (totalUsed <= netEnergyLimit.freeNetLimit) {
       pledgeAccount.freeNetUsed = totalUsed
       app.sdb.update('AccountPledge', pledgeAccount, { address })
       app.sdb.create('Netenergyconsumption', {
