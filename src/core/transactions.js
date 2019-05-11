@@ -5,7 +5,6 @@ const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const LimitCache = require('../utils/limit-cache.js')
 const addressHelper = require('../utils/address.js')
-const transactionMode = require('../utils/transaction-mode.js')
 
 // let genesisblock = null
 // Private fields
@@ -237,7 +236,7 @@ Transactions.prototype.existsTransaction = async id => {
 Transactions.prototype.broadcastUnconfirmedTransaction = transaction => {
   const isLargeTransaction = transaction.type === 600
 
-  const messageName = isLargeTransaction ? 
+  const messageName = isLargeTransaction ?
     'unconfirmedLargeTransaction' :
     'unconfirmedNormalTransaction'
   library.bus.message(messageName, transaction)
@@ -298,9 +297,7 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
 
   const mode = transaction.mode
   if (transactionMode.isRequestMode(mode)) {
-    if (!requestorId) throw new Error('No requestor provided')
-    if (requestorId === senderId) throw new Error('Sender should not be equal to requestor')
-    if (!transaction.senderPublicKey) throw new Error('Requestor public key not provided')
+    throw new Error('Request mode not supported')
   } else if (transactionMode.isDirectMode(mode)) {
     if (requestorId) throw new Error('RequestId should not be provided')
     // HARDCODE_HOT_FIX_BLOCK_6119128
@@ -313,7 +310,6 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     throw new Error('Unexpected transaction mode')
   }
 
-  let requestor = null
   let sender = await app.sdb.load('Account', senderId)
   const contractCallOrPay = transaction.type === 601 || transaction.type === 602
   if (!sender) {
@@ -331,21 +327,8 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     }
   }
 
-  if (requestorId) {
-    if (!app.util.address.isNormalAddress(requestorId)) {
-      throw new Error('Invalid requestor address')
-    }
-
-    requestor = await app.sdb.load('Account', requestorId)
-    if (!requestor) {
-      throw new Error('Requestor account not found')
-    }
-  } else {
-    requestor = sender
-  }
-
   if (transaction.senderPublicKey) {
-    const signerId = transaction.requestorId || transaction.senderId
+    const signerId = transaction.senderId
     if (addressHelper.generateNormalAddress(transaction.senderPublicKey) !== signerId) {
       throw new Error('Invalid senderPublicKey')
     }
@@ -355,7 +338,6 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     trs: transaction,
     block,
     sender,
-    requestor,
   }
   if (height > 0) {
     const error = await library.base.transaction.verify(context)

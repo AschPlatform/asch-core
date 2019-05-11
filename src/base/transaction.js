@@ -5,7 +5,6 @@ const constants = require('../utils/constants.js')
 const slots = require('../utils/slots.js')
 const addressHelper = require('../utils/address.js')
 const feeCalculators = require('../utils/calculate-fee.js')
-const transactionMode = require('../utils/transaction-mode.js')
 const pledges = require('../utils/pledges.js')
 
 let self
@@ -36,14 +35,7 @@ Transaction.prototype.create = (data) => {
     mode: data.mode,
   }
   const signerId = addressHelper.generateNormalAddress(trs.senderPublicKey)
-  if (transactionMode.isDirectMode(trs.mode)) {
-    trs.senderId = signerId
-  } else if (transactionMode.isRequestMode(trs.mode)) {
-    if (!trs.senderId) throw new Error('No senderId was provided in request mode')
-    trs.requestorId = signerId
-  } else {
-    throw new Error('Unexpected transaction mode')
-  }
+  trs.senderId = signerId
 
   trs.signatures = [self.sign(data.keypair, trs)]
 
@@ -208,7 +200,7 @@ Transaction.prototype.verifyChainSignature = async (trs, sender, bytes) => {
 }
 
 Transaction.prototype.verify = async (context) => {
-  const { trs, sender, requestor } = context
+  const { trs, sender } = context
   if (slots.getSlotNumber(trs.timestamp) > slots.getSlotNumber()) {
     return 'Invalid transaction timestamp'
   }
@@ -227,7 +219,7 @@ Transaction.prototype.verify = async (context) => {
   try {
     const bytes = self.getBytes(trs, true, true)
     if (trs.senderPublicKey) {
-      const error = self.verifyNormalSignature(trs, requestor, bytes)
+      const error = self.verifyNormalSignature(trs, sender, bytes)
       if (error) return error
     } else if (!trs.senderPublicKey && trs.signatures && trs.signatures.length > 1) {
       const ADDRESS_TYPE = app.util.address.TYPE
@@ -281,7 +273,7 @@ Transaction.prototype.verifyBytes = (bytes, publicKey, signature) => {
 
 Transaction.prototype.apply = async (context) => {
   const {
-    block, trs, sender, requestor,
+    block, trs, sender,
   } = context
   const name = app.getContractName(trs.type)
   if (!name) {
@@ -297,19 +289,6 @@ Transaction.prototype.apply = async (context) => {
   }
 
   if (block.height !== 0) {
-    if (transactionMode.isRequestMode(trs.mode) && !context.activating) {
-      const requestorFee = 20000000
-      if (await pledges.isNetCovered(requestorFee, requestor.address, block.height)) {
-        await pledges.consumeNet(requestorFee, requestor.address, block.height, trs.id)
-      } else {
-        if (requestor.xas < requestorFee) throw new Error('Insufficient requestor balance')
-        requestor.xas -= requestorFee
-        app.addRoundFee(requestorFee, modules.round.calc(block.height))
-        app.sdb.update('Account', { xas: requestor.xas }, { address: requestor.address })
-      }
-      app.sdb.create('TransactionStatu', { tid: trs.id, executed: 0 })
-      return null
-    }
     if (trs.type === constants.pledgeType) {
       sender.xas -= trs.fee
     } else if (!constants.smartContractType.includes(trs.type)) {
