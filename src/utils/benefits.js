@@ -21,22 +21,20 @@ async function allocateToGroup(groupName, amount) {
 async function allocateToDelegatesEqually(delegates, fees, rewards) {
   const averageFee = Math.floor(fees / delegates.length)
   const averageReward = Math.floor(rewards / delegates.length)
-  let count = 0
-  let usedFee = 0
-  let usedReward = 0
-  for (const pk of delegates) {
-    const address = addressHelper.generateNormalAddress(pk)
-    count++
-    if (count === delegates.length) {
-      const remainFee = fees - usedFee
-      const remainReward = rewards - usedReward
-      await updateDelegate(address, remainFee, remainReward)
-      await updateAccount(address, remainFee + remainReward)
-    } else {
+  let allocatedFees = 0
+  let allocatedRewards = 0
+  for (let i = 0; i < delegates.length; i++) {
+    const address = addressHelper.generateNormalAddress(delegates[i])
+    if (i < delegates.length - 1) {
       await updateDelegate(address, averageFee, averageReward)
       await updateAccount(address, averageFee + averageReward)
-      usedFee += averageFee
-      usedReward += averageReward
+      allocatedFees += averageFee
+      allocatedRewards += averageReward
+    } else {
+      const remainFee = fees - allocatedFees
+      const remainReward = rewards - allocatedRewards
+      await updateDelegate(address, remainFee, remainReward)
+      await updateAccount(address, remainFee + remainReward)
     }
   }
 }
@@ -47,8 +45,8 @@ async function allocateToDelegatesByVotes(delegatesMap, totalVotes, delegates, r
     const pk = delegates[i]
     const address = addressHelper.generateNormalAddress(pk)
     const delegate = delegatesMap.get(address)
-    if (i < delegates.length) {
-      const ratioRewards = rewards * (delegate.votes / totalVotes)
+    if (i < delegates.length - 1) {
+      const ratioRewards = Math.floor(rewards * (delegate.votes / totalVotes))
       await updateDelegateReward(address, ratioRewards)
       await updateAccount(address, ratioRewards)
       allocatedRewards += ratioRewards
@@ -65,8 +63,8 @@ module.exports = {
     const COUNCIL_NAME = 'asch_council'
     const BASIC_BLOCK_REWARD_RATIO = 0.2
     const VOTING_REWARD_RATIO = 0.2
-    const blockRewards = rewards * BASIC_BLOCK_REWARD_RATIO
-    const votingRewards = rewards * VOTING_REWARD_RATIO
+    const blockRewards = Math.floor(rewards * BASIC_BLOCK_REWARD_RATIO)
+    const votingRewards = Math.floor(rewards * VOTING_REWARD_RATIO)
     const councilFound = rewards - blockRewards - votingRewards
     await allocateToGroup(COUNCIL_NAME, councilFound)
 
