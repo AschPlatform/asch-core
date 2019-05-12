@@ -9,7 +9,6 @@ const Router = require('../utils/router.js')
 const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const addressHelper = require('../utils/address.js')
-const transactionMode = require('../utils/transaction-mode.js')
 const featureSwitch = require('../utils/feature-switch.js')
 const benefits = require('../utils/benefits.js')
 
@@ -444,23 +443,21 @@ Blocks.prototype.applyRound = async (block) => {
   let address = addressHelper.generateNormalAddress(block.delegate)
   app.sdb.increase('Delegate', { producedBlocks: 1 }, { address })
 
-  let transFee = 0
+  let blockFees = 0
   // const records = await app.sdb.load('Netenergyconsumption', { height: block.height })
   for (const t of block.transactions) {
-    if (transactionMode.isDirectMode(t.mode) && t.fee > 0) {
-      const record = await app.sdb.load('Netenergyconsumption', { tid: t.id })
-      if (t.type === constants.pledgeType) {
-        transFee += t.fee
-      } else if (record && record.isFeeDeduct === 1) {
-        transFee += record.fee
-      } else {
-        transFee += t.fee
-      }
+    const record = await app.sdb.load('Netenergyconsumption', { tid: t.id })
+    if (!record) {
+      blockFees += t.fee
+    } else if (record.isFeeDeduct === 1) {
+      blockFees += record.fee
+    } else {
+      assert(record.netUsed || record.energyUsed, 'net or energy must be consumed instead of fee')
     }
   }
 
   const roundNumber = modules.round.calc(block.height)
-  const { fees, rewards } = self.increaseRoundData({ fees: transFee, rewards: block.reward }, roundNumber)
+  const { fees, rewards } = self.increaseRoundData({ fees: blockFees, rewards: block.reward }, roundNumber)
 
   if (block.height % slots.delegates !== 0) return
 
