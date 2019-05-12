@@ -295,19 +295,12 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     throw new Error('Signatures are not provided')
   }
 
-  const mode = transaction.mode
-  if (transactionMode.isRequestMode(mode)) {
-    throw new Error('Request mode not supported')
-  } else if (transactionMode.isDirectMode(mode)) {
-    if (requestorId) throw new Error('RequestId should not be provided')
-    // HARDCODE_HOT_FIX_BLOCK_6119128
-    if (height > 6119128
-        && app.util.address.isNormalAddress(senderId)
-        && !transaction.senderPublicKey) {
-      throw new Error('Sender public key not provided')
-    }
-  } else {
-    throw new Error('Unexpected transaction mode')
+  if (requestorId) throw new Error('RequestId should not be provided')
+  // HARDCODE_HOT_FIX_BLOCK_6119128
+  if (height > 6119128
+    && app.util.address.isNormalAddress(senderId)
+    && !transaction.senderPublicKey) {
+    throw new Error('Sender public key not provided')
   }
 
   let sender = await app.sdb.load('Account', senderId)
