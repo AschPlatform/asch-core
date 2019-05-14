@@ -307,11 +307,11 @@ module.exports = async function runtime(options) {
 
   const { appDir, dataDir } = options.appConfig
 
-  const BLOCK_HEADER_DIR = path.resolve(dataDir, 'blocks')
-  const BLOCK_DB_PATH = path.resolve(dataDir, 'blockchain.db')
+  const BLOCK_DB_DIR = path.resolve(dataDir)
+  const BLOCK_HEADER_DIR = path.join(BLOCK_DB_DIR, 'blocks')
 
   adaptSmartDBLogger(options.appConfig)
-  app.sdb = new AschCore.SmartDB(BLOCK_DB_PATH, BLOCK_HEADER_DIR)
+  app.sdb = new AschCore.SmartDB(BLOCK_DB_DIR, BLOCK_HEADER_DIR)
   app.balances = new BalanceManager(app.sdb)
   app.autoID = new AutoIncrement(app.sdb)
   app.events = new EventEmitter()

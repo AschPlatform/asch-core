@@ -11,7 +11,7 @@
     "asch-gateway": "https://github.com/AschPlatform/asch-gateway-dist/tarball/v1.0.0",
     "asch-js": "https://github.com/AschPlatform/asch-js/tarball/v1.4.1",
     "asch-sandbox": "https://github.com/AschPlatform/asch-sandbox-dist/tarball/v1.4.0",
-    "asch-smartdb": "https://github.com/AschPlatform/asch-smartdb-dist/tarball/v1.1.4",
+    "asch-smartdb": "https://github.com/AschPlatform/asch-smartdb-dist/tarball/v1.1.5",
     "async": "=1.5.2",
     "axios": "=0.18.0",
     "bignumber": "https://github.com/AschPlatform/bignumber/tarball/v1.3.0-2+asch.1",
