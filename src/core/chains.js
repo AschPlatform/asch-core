@@ -492,7 +492,7 @@ shared.getDeposits = (req, cb) => (async () => {
   }
 })()
 
-shared.submitOutTransfer = (req, cb) => {
+shared.submitOutTransfer = (req) => {
   const transaction = req.body
 
   library.sequence.add((done) => {
@@ -500,8 +500,8 @@ shared.submitOutTransfer = (req, cb) => {
     return modules.transactions.processUnconfirmedTransaction(transaction, done)
   }, (err) => {
     if (err) {
-      library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
       const errMsg = err.message ? err.message : err.toString()
+      library.logger.warn(`Receive invalid transaction ${transaction.id}`, errMsg)
     } else {
       library.bus.message('unconfirmedTransaction', transaction)
     }
@@ -535,7 +535,7 @@ shared.registerInterface = (options, cb) => {
     if (err) return cb(err)
     priv.routes[chainObj.tid][method](uriPath, handler)
     console.log('------registerInterface', chainObj, method, uriPath)
-    cb(null)
+    return cb(null)
   })
 }
 

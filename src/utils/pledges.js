@@ -114,8 +114,8 @@ module.exports = {
     let totalUsed = netUsed
 
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
-    const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
-    if (currentDay <= netEnergyLimit.lastNetUpdateDay) {
+    const now = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
+    if (now <= netEnergyLimit.lastNetUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
     }
     if (totalUsed <= netEnergyLimit.netLimit) {
@@ -123,7 +123,7 @@ module.exports = {
     }
 
     totalUsed = netUsed
-    if (currentDay <= netEnergyLimit.lastFreeNetUpdateDay) {
+    if (now <= netEnergyLimit.lastFreeNetUpdateDay) {
       totalUsed += netEnergyLimit.freeNetUsed
     }
     if (totalUsed <= netEnergyLimit.freeNetLimit) {
@@ -146,8 +146,8 @@ module.exports = {
     let totalUsed = energyUsed
 
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
-    const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
-    if (currentDay <= netEnergyLimit.lastEnergyUpdateDay) {
+    const now = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
+    if (now <= netEnergyLimit.lastEnergyUpdateDay) {
       totalUsed += netEnergyLimit.energyUsed
     }
     if (totalUsed <= netEnergyLimit.energyLimit) {
@@ -187,12 +187,12 @@ module.exports = {
     const energyUsed = energy
     let totalUsed = energyUsed
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
-    const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
+    const now = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
 
-    if (currentDay <= netEnergyLimit.lastEnergyUpdateDay) {
+    if (now <= netEnergyLimit.lastEnergyUpdateDay) {
       totalUsed += netEnergyLimit.energyUsed
     } else {
-      pledgeAccount.lastEnergyUpdateDay = currentDay
+      pledgeAccount.lastEnergyUpdateDay = now
     }
     if (totalUsed <= netEnergyLimit.energyLimit) {
       pledgeAccount.energyUsed = totalUsed
@@ -222,11 +222,11 @@ module.exports = {
 
     let totalUsed = netUsed
     const actualHeight = blockHeight - netEnergyLimit.heightOffset
-    const currentDay = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
-    if (currentDay <= netEnergyLimit.lastNetUpdateDay) {
+    const now = Number.parseInt(actualHeight / constants.blocksPerDay, 10)
+    if (now <= netEnergyLimit.lastNetUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
     } else {
-      pledgeAccount.lastNetUpdateDay = currentDay
+      pledgeAccount.lastNetUpdateDay = now
     }
 
     if (totalUsed <= netEnergyLimit.netLimit) {
@@ -243,10 +243,10 @@ module.exports = {
     }
 
     totalUsed = netUsed
-    if (currentDay <= netEnergyLimit.lastFreeNetUpdateDay) {
+    if (now <= netEnergyLimit.lastFreeNetUpdateDay) {
       totalUsed += netEnergyLimit.freeNetUsed
     } else {
-      pledgeAccount.lastFreeNetUpdateDay = currentDay
+      pledgeAccount.lastFreeNetUpdateDay = now
     }
     if (totalUsed <= netEnergyLimit.freeNetLimit) {
       pledgeAccount.freeNetUsed = totalUsed

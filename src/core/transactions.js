@@ -225,15 +225,16 @@ Transactions.prototype.processUnconfirmedTransaction = (transaction, cb) => {
   })()
 }
 
-Transactions.prototype.existsTransaction = async id => {
+Transactions.prototype.existsTransaction = async (id) => {
   if (self.failedTrsCache.has(id)) return true
   if (self.pool.has(id)) return true
-  if (!!app.sdb.get('Transaction', id)) return true
+  if (app.sdb.get('Transaction', id)) return true
 
-  return await app.sdb.exists('Transaction', { id })
+  const exists = await app.sdb.exists('Transaction', { id })
+  return exists
 }
 
-Transactions.prototype.broadcastUnconfirmedTransaction = transaction => {
+Transactions.prototype.broadcastUnconfirmedTransaction = (transaction) => {
   const isLargeTransaction = transaction.type === 600
 
   const messageName = isLargeTransaction ?
@@ -309,7 +310,7 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     if (height > 0 && !contractCallOrPay) {
       throw new Error('Sender account not found')
     } else if (height > 0 && contractCallOrPay) {
-      //call contract or pay contract
+      // call contract or pay contract
 
     } else { // height <= 0
       sender = app.sdb.create('Account', {

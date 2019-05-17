@@ -94,7 +94,7 @@ Blocks.prototype.toAPIV1Blocks = (blocks) => {
 
 Blocks.prototype.toAPIV1Block = (block) => {
   if (!block) return undefined
-  return {
+  const result = {
     id: block.id,
     version: block.version,
     timestamp: block.timestamp,
@@ -106,14 +106,16 @@ Blocks.prototype.toAPIV1Block = (block) => {
     generatorPublicKey: block.delegate,
     blockSignature: block.signature,
     confirmations: self.getLastBlock().height - block.height,
-    transactions: !block.transactions ? undefined : modules.transactions.toAPIV1Transactions(block.transactions.filter(t => t.executed), block),
-
     // "generatorId":  => missing
     // "totalAmount" => missing
     // "reward" => missing
     // "payloadLength" => missing
     // "totalForged" => missing
   }
+  if (block.transactions) {
+    result.transactions = modules.transactions.toAPIV1Transactions(block.transactions, block)
+  }
+  return result
 }
 
 Blocks.prototype.getCommonBlock = (peer, height, cb) => {
@@ -376,7 +378,7 @@ Blocks.prototype.processBlock = async (b, options) => {
       priv.lastBlockGenerationInfo = {
         height: block.height,
         delegate: block.delegate,
-        timestamp: block.timestamp
+        timestamp: block.timestamp,
       }
       await self.applyBlock(block, options)
     } catch (e) {
@@ -457,7 +459,8 @@ Blocks.prototype.applyRound = async (block) => {
   }
 
   const roundNumber = modules.round.calc(block.height)
-  const { fees, rewards } = self.increaseRoundData({ fees: blockFees, rewards: block.reward }, roundNumber)
+  const modifier = { fees: blockFees, rewards: block.reward }
+  const { fees, rewards } = self.increaseRoundData(modifier, roundNumber)
 
   if (block.height % slots.delegates !== 0) return
 
@@ -466,7 +469,10 @@ Blocks.prototype.applyRound = async (block) => {
   const delegates = await PIFY(modules.delegates.generateDelegateList)(block.height)
   app.logger.debug('delegate length', delegates.length)
 
-  const forgedBlocks = await app.sdb.getBlocksByHeightRange(block.height - slots.delegates + 1, block.height - 1)
+  const forgedBlocks = await app.sdb.getBlocksByHeightRange(
+    block.height - slots.delegates + 1,
+    block.height - 1,
+  )
   const forgedDelegates = [...forgedBlocks.map(b => b.delegate), block.delegate]
 
   // const missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
@@ -573,16 +579,13 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
   )
 }
 
-Blocks.prototype.getBlockGenerationInfo = async function () {
+Blocks.prototype.getBlockGenerationInfo = async () => {
   const lastInfo = priv.lastBlockGenerationInfo || { height: 0, delegate: '', timestamp: 0 }
   const height = priv.lastBlock.height + 1
   if (lastInfo.height === height) return lastInfo
 
-  let delegate = ''
-  try {
-    const keypair = await PIFY(modules.delegates.getActiveDelegateKeypairs)(height)
-    delegate = keypair.publicKey.toString('hex')
-  } catch (e) { }
+  const keypair = await PIFY(modules.delegates.getActiveDelegateKeypairs)(height)
+  const delegate = keypair.publicKey.toString('hex')
 
   const timestamp = slots.getSlotTime(slots.getSlotNumber())
   const result = { height, delegate, timestamp }
