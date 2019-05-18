@@ -390,6 +390,14 @@ Blocks.prototype.processBlock = async (b, options) => {
   try {
     self.saveBlockTransactions(block)
     await self.applyRound(block)
+  } catch (e) {
+    app.logger.error(block)
+    app.logger.error('save block error: ', e)
+    await app.sdb.rollbackBlock()
+    throw new Error(`Failed to save block: ${e}`)
+  }
+
+  try {
     await app.sdb.commitBlock()
     const trsCount = block.transactions.length
     app.logger.info(`Block applied correctly with ${trsCount} transactions`)
@@ -400,17 +408,15 @@ Blocks.prototype.processBlock = async (b, options) => {
       library.bus.message('newBlock', block, options.votes)
     }
     library.bus.message('processBlock', block)
-  } catch (e) {
-    app.logger.error(block)
-    app.logger.error('save block error: ', e)
-    await app.sdb.rollbackBlock()
-    throw new Error(`Failed to save block: ${e}`)
-  } finally {
+
     priv.blockCache = {}
     priv.proposeCache = {}
     priv.lastVoteTime = null
     priv.isCollectingVotes = false
     library.base.consensus.clearState()
+  } catch (e) {
+    app.logger.error(block)
+    app.logger.error('failed to commit block', e)
   }
 }
 
