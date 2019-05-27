@@ -53,7 +53,7 @@ priv.attachApi = () => {
     if (!newBlock) {
       return res.status(500).send({ error: 'New block not found: '+ body.id })
     }
-    return res.send({ success: true, block: newBlock.block, votes: newBlock.votes })
+    return res.send({ success: true, ...newBlock })
   })
 
   router.post('/commonBlock', (req, res) => {
@@ -107,16 +107,18 @@ priv.attachApi = () => {
         const minHeight = lastBlock.height + 1
         const maxHeight = (minHeight + blocksLimit) - 1
         const blocks = await modules.blocks.getBlocks(minHeight, maxHeight, true)
-        return res.send({ blocks })
+        const failedTransactions = await modules.blocks.getFailedTransactions(minHeight, maxHeight)
+        return res.send({ blocks, failedTransactions })
       } catch (e) {
         app.logger.error('Failed to get blocks or transactions', e)
-        return res.send({ blocks: [] })
+        return res.send({ blocks: [], failedTransactions: [] })
       }
     })()
   })
 
   router.post('/transactions', (req, res) => {
-    if (modules.loader.syncing()) {
+    const verifyOnly = !!req.body.verifyOnly
+    if (modules.loader.syncing() && !verifyOnly) {
       return res.status(500).send({
         success: false,
         error: 'Blockchain is syncing',
@@ -146,7 +148,7 @@ priv.attachApi = () => {
 
     return library.sequence.add((cb) => {
       library.logger.info(`Received transaction ${transaction.id} from http client`)
-      modules.transactions.processUnconfirmedTransaction(transaction, cb)
+      modules.transactions.processUnconfirmedTransaction(transaction, verifyOnly, cb)
     }, (err, ret) => {
       if (err) {
         library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
@@ -182,7 +184,15 @@ priv.attachApi = () => {
   })
 
   router.post('/getUnconfirmedTransactions', (req, res) => {
-    res.send({ transactions: modules.transactions.getUnconfirmedTransactionList() })
+    const { ids = [] } = req.body
+    const idSet = new Set()
+    ids.forEach(id => {
+      if (!idSet.has(id)) idSet.add(id)
+    })
+
+    const transactions = modules.transactions.getUnconfirmedTransactionList()
+      .filter(t => !idSet.has(t.id))
+    res.send({ transactions })
   })
 
   router.post('/getHeight', (req, res) => {
@@ -314,9 +324,9 @@ Transport.prototype.onPeerReady = () => {
   })
 
   modules.peer.subscribe('transaction', (message) => {
-    if (modules.loader.syncing()) {
-      return
-    }
+    // if (modules.loader.syncing()) {
+    //   return
+    // }
     const lastBlock = modules.blocks.getLastBlock()
     const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
     if (slots.getNextSlot() - lastSlot >= 12) {
@@ -339,7 +349,7 @@ Transport.prototype.onPeerReady = () => {
 
     library.sequence.add((cb) => {
       library.logger.info(`Received transaction ${transaction.id} from remote peer`)
-      modules.transactions.processUnconfirmedTransaction(transaction, cb)
+      modules.transactions.processUnconfirmedTransaction(transaction, true/* verify only */, cb)
     }, (err) => {
       if (err) {
         library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
@@ -350,9 +360,9 @@ Transport.prototype.onPeerReady = () => {
   })
 
   modules.peer.subscribe('largeTransaction', (message, peer) => {
-    if (modules.loader.syncing()) {
-      return
-    }
+    // if (modules.loader.syncing()) {
+    //   return
+    // }
     const lastBlock = modules.blocks.getLastBlock()
     const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
     if (slots.getNextSlot() - lastSlot >= 12) {
@@ -391,7 +401,7 @@ Transport.prototype.onPeerReady = () => {
         const transaction = library.base.transaction.objectNormalize(getTransResult.transaction)
         library.sequence.add((cb) => {
           library.logger.info(`Received transaction ${transaction.id} from remote peer`)
-          modules.transactions.processUnconfirmedTransaction(transaction, cb)
+          modules.transactions.processUnconfirmedTransaction(transaction, true/* verify only */, cb)
         }, (err) => {
           if (err) {
             library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
@@ -426,11 +436,12 @@ Transport.prototype.onUnconfirmedLargeTransaction = (transaction) => {
   self.broadcast('largeTransaction', message, 0)
 }
 
-Transport.prototype.onNewBlock = (block, votes) => {
+Transport.prototype.onNewBlock = (block, votes, failedTransactions) => {
   priv.latestBlocksCache.set(block.id,
     {
       block,
       votes: library.protobuf.encodeBlockVotes(votes).toString('base64'),
+      failedTransactions
     }
   )
   const message = priv.blockHeaderMidCache.get(block.id) || {

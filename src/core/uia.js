@@ -487,6 +487,9 @@ shared.transferAsset = (req, cb) => {
         type: 'integer',
         minimum: 10000000,
       },
+      verifyOnly: {
+        type: 'boolean'
+      }
     },
     required: ['secret', 'amount', 'recipientId', 'currency'],
   })
@@ -515,7 +518,8 @@ shared.transferAsset = (req, cb) => {
           secondKeypair,
           keypair,
         })
-        await modules.transactions.processUnconfirmedTransactionAsync(trs)
+        const verifyOnly = !!query.verifyOnly
+        await modules.transactions.processUnconfirmedTransactionAsync(trs, verifyOnly)
         library.bus.message('unconfirmedTransaction', trs)
         callback(null, { transactionId: trs.id })
       } catch (e) {

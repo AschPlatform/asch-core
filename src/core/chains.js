@@ -359,7 +359,6 @@ Chains.prototype.getInstalledIds = (cb) => {
   priv.getInstalledIds(cb)
 }
 
-
 Chains.prototype.request = (chain, method, uriPath, query, cb) => {
   if (!priv.sandboxes[chain]) {
     return cb('Chain not found')
@@ -497,7 +496,7 @@ shared.submitOutTransfer = (req) => {
 
   library.sequence.add((done) => {
     library.logger.info(`Received transaction ${transaction.id} from http client`)
-    return modules.transactions.processUnconfirmedTransaction(transaction, done)
+    return modules.transactions.processUnconfirmedTransaction(transaction, true/* verify only */, done)
   }, (err) => {
     if (err) {
       const errMsg = err.message ? err.message : err.toString()

@@ -63,7 +63,7 @@ Consensus.prototype.hasEnoughVotes = votes => votes && votes.signatures
 Consensus.prototype.hasEnoughVotesRemote = votes => votes && votes.signatures
   && votes.signatures.length >= 6
 
-Consensus.prototype.getPendingBlock = () => self.pendingBlock
+Consensus.prototype.getPendingBlock = () => ({ block: self.pendingBlock, failedTransactions: self.failedTransactions})
 
 Consensus.prototype.hasPendingBlock = (timestamp) => {
   if (!self.pendingBlock) {
@@ -72,16 +72,18 @@ Consensus.prototype.hasPendingBlock = (timestamp) => {
   return slots.getSlotNumber(self.pendingBlock.timestamp) === slots.getSlotNumber(timestamp)
 }
 
-Consensus.prototype.setPendingBlock = (block) => {
+Consensus.prototype.setPendingBlock = (block, failedTransactions) => {
   self.pendingVotes = null
   self.votesKeySet = {}
   self.pendingBlock = block
+  self.failedTransactions = failedTransactions
 }
 
 Consensus.prototype.clearState = () => {
   self.pendingVotes = null
   self.votesKeySet = {}
   self.pendingBlock = null
+  self.failedTransactions = null
 }
 
 Consensus.prototype.addPendingVotes = (votes) => {

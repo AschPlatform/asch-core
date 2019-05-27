@@ -138,9 +138,15 @@ Transactions.prototype.getUnconfirmedTransactionList = () => self.pool.getUnconf
 
 Transactions.prototype.removeUnconfirmedTransaction = id => self.pool.remove(id)
 
+Transactions.prototype.removeUnconfirmedTransactions = ids => ids.forEach(id => self.pool.remove(id))
+
 Transactions.prototype.hasUnconfirmed = id => self.pool.has(id)
 
 Transactions.prototype.clearUnconfirmed = () => self.pool.clear()
+
+Transactions.prototype.clearFailedTrsCache = () => self.failedTrsCache = new LimitCache()
+
+Transactions.prototype.cacheFailedTrsId = (id) => self.failedTrsCache.set(id, true)
 
 Transactions.prototype.getUnconfirmedTransactions = (_, cb) => setImmediate(
   cb, null,
@@ -195,11 +201,11 @@ Transactions.prototype.applyTransactionsAsync = async (transactions) => {
   }
 }
 
-Transactions.prototype.processUnconfirmedTransactions = (transactions, cb) => {
+Transactions.prototype.processUnconfirmedTransactions = (transactions, verifyOnly, cb) => {
   (async () => {
     try {
       for (const transaction of transactions) {
-        await self.processUnconfirmedTransactionAsync(transaction)
+        await self.processUnconfirmedTransactionAsync(transaction, verifyOnly)
       }
       cb(null, transactions)
     } catch (e) {
@@ -208,16 +214,16 @@ Transactions.prototype.processUnconfirmedTransactions = (transactions, cb) => {
   })()
 }
 
-Transactions.prototype.processUnconfirmedTransactionsAsync = async (transactions) => {
+Transactions.prototype.processUnconfirmedTransactionsAsync = async (transactions, verifyOnly) => {
   for (const transaction of transactions) {
-    await self.processUnconfirmedTransactionAsync(transaction)
+    await self.processUnconfirmedTransactionAsync(transaction, verifyOnly)
   }
 }
 
-Transactions.prototype.processUnconfirmedTransaction = (transaction, cb) => {
+Transactions.prototype.processUnconfirmedTransaction = (transaction, verifyOnly, cb) => {
   (async () => {
     try {
-      const ret = await self.processUnconfirmedTransactionAsync(transaction)
+      const ret = await self.processUnconfirmedTransactionAsync(transaction, verifyOnly)
       cb(null, ret)
     } catch (e) {
       cb(e.toString())
@@ -244,7 +250,7 @@ Transactions.prototype.broadcastUnconfirmedTransaction = (transaction) => {
 }
 
 
-Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) => {
+Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction, verifyOnly) => {
   try {
     if (!transaction.id) {
       transaction.id = library.base.transaction.getId(transaction)
@@ -255,7 +261,7 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
       }
     }
 
-    if (modules.blocks.isCollectingVotes()) {
+    if (modules.blocks.isCollectingVotes() && !verifyOnly) {
       throw new Error('Block consensus in processing')
     }
 
@@ -269,17 +275,25 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
     if (exists) {
       throw new Error('Transaction already confirmed')
     }
-    const ret = await self.applyUnconfirmedTransactionAsync(transaction)
+    
+    let ret
+    if (verifyOnly) {
+      await self.verifyUnconfirmedTransactionAsync(transaction) 
+      ret = undefined
+    } else {
+      ret = await self.applyUnconfirmedTransactionAsync(transaction) //FIXME: check if predict block info
+    }
     self.pool.add(transaction)
     return ret
+
   } catch (e) {
-    self.failedTrsCache.set(transaction.id, true)
+    self.cacheFailedTrsId(transaction.id)
     throw e
   }
 }
 
-Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) => {
-  library.logger.debug('apply unconfirmed trs', transaction)
+Transactions.prototype.verifyUnconfirmedTransactionAsync = async (transaction) => {
+  library.logger.debug('verify unconfirmed trs', transaction)
 
   const height = modules.blocks.getLastBlock().height
   const block = {
@@ -337,6 +351,16 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     const error = await library.base.transaction.verify(context)
     if (error) throw new Error(error)
   }
+  return context
+}
+
+Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction, block) => {
+  library.logger.debug('apply unconfirmed transaction', transaction.id)
+
+  const context = await self.verifyUnconfirmedTransactionAsync(transaction)
+  if (block) {
+    context.block = block
+  }
 
   app.sdb.beginContract()
   try {
@@ -345,6 +369,7 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     return ret
   } catch (e) {
     await app.sdb.rollbackContract()
+    self.cacheFailedTrsId(transaction.id)
     library.logger.error(e)
     throw e
   }
@@ -732,6 +757,7 @@ shared.addTransactionUnsigned = (req, cb) => {
       message: { type: 'string', maxLength: 50 },
       senderId: { type: 'string', maxLength: 50 },
       mode: { type: 'integer', min: 0, max: 1 },
+      verifyOnly: { type: 'boolean' }
     },
     required: ['secret', 'fee', 'type'],
   })
@@ -760,7 +786,8 @@ shared.addTransactionUnsigned = (req, cb) => {
           keypair,
           mode: query.mode,
         })
-        const result = await self.processUnconfirmedTransactionAsync(trs)
+        const verifyOnly = !!query.verifyOnly
+        const result = await self.processUnconfirmedTransactionAsync(trs, verifyOnly)
         self.broadcastUnconfirmedTransaction(trs)
         callback(null, Object.assign({ transactionId: trs.id }, result))
       } catch (e) {
@@ -777,6 +804,7 @@ shared.addTransactions = (req, cb) => {
     return cb('Invalid params')
   }
   const trs = req.body.transactions
+  const verifyOnly = !!req.body.verifyOnly
   try {
     for (const t of trs) {
       library.base.transaction.objectNormalize(t)
@@ -785,7 +813,7 @@ shared.addTransactions = (req, cb) => {
     return cb(`Invalid transaction body: ${e.toString()}`)
   }
   return library.sequence.add((callback) => {
-    self.processUnconfirmedTransactions(trs, callback)
+    self.processUnconfirmedTransactions(trs, verifyOnly, callback)
   }, cb)
 }
 
