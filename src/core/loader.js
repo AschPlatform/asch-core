@@ -3,6 +3,7 @@ const sandboxHelper = require('../utils/sandbox.js')
 const slots = require('../utils/slots.js')
 require('colors')
 
+
 let modules
 let library
 let self
@@ -16,6 +17,7 @@ priv.genesisBlock = null
 priv.total = 0
 priv.blocksToSync = 0
 priv.syncIntervalId = null
+priv.lastCheckUnconfirmedAt = 0
 
 function Loader(cb, scope) {
   library = scope
@@ -96,7 +98,7 @@ priv.findUpdate = (lastBlock, peer, cb) => {
           modules.transactions.clearFailedTrsCache()
           
           await app.sdb.rollbackBlock(commonBlock.height)
-          await modules.block.rollbackFailedTransactionsUntil(commonBlock.height)
+          modules.block.evitCachedFailedTransactionsUntil(commonBlock.height)
           modules.blocks.setLastBlock(app.sdb.lastBlock)
           library.logger.debug('set new last block', app.sdb.lastBlock)
         } else {
@@ -157,10 +159,8 @@ priv.loadBlocks = (lastBlock, cb) => {
   })
 }
 
-priv.loadUnconfirmedTransactions = (cb) => { //FIXME: sync unconfirmed transactions 
-  const ids = modules.transactions.getUnconfirmedTransactionList().map(t => t.id)
-  app.logger.debug(`try to get transactions from random peer, transaction pool`, ids)
-  modules.peer.randomRequest('getUnconfirmedTransactions', { ids }, (err, data, peer) => {
+priv.loadUnconfirmedTransactions = (cb) => { 
+  modules.peer.randomRequest('getUnconfirmedTransactions', { }, (err, data, peer) => {
     if (err) {
       return cb()
     }

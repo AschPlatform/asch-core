@@ -17,35 +17,67 @@ const shared = {}
 priv.unconfirmedNumber = 0
 priv.unconfirmedTransactions = []
 priv.unconfirmedTransactionsIdIndex = {}
+priv.lastCheckUnconfirmedAt = 0
+
+const MAX_EMPTY_COUNT = 500
+const CHECK_TRANACTION_INTERVAL = 30 * 1000
+const MAX_CHECK_TIMES = 3 // (1 + 4 + 9) * 30s = 7min
 
 class TransactionPool {
   constructor() {
     this.index = new Map()
-    this.unConfirmed = []
+    this.unconfirmed = []
+    this.nullCount = 0
+  }
+
+  getNextCheckDelay(times) {
+    return ((times + 1) ** 2) * CHECK_TRANACTION_INTERVAL
   }
 
   add(trs) {
-    this.unConfirmed.push(trs)
-    this.index.set(trs.id, this.unConfirmed.length - 1)
+    const now = Date.now()
+    const ext = { 
+      nextCheckAt: this.getNextCheckDelay(0) + now, 
+      checkTimes: 0 
+    }
+
+    this.unconfirmed.push({ trs, ext })
+    this.index.set(trs.id, this.unconfirmed.length - 1)
   }
 
-  remove(id) {
-    const pos = this.index.get(id)
-    delete this.index[id]
-    this.unConfirmed[pos] = null
+  remove(...ids) {
+    for(let txId of [...ids]) {
+      const pos = this.index.get(txId)
+      if (pos === undefined) continue
+
+      this.index.delete(txId)
+      this.unconfirmed[pos] = null
+      this.nullCount++
+    }
+
+    if (this.nullCount >= MAX_EMPTY_COUNT) {
+      this.evitEmptyItems()
+    }
+  }
+
+  evitEmptyItems() {
+    this.unconfirmed = this.unconfirmed.filter(item => !item)
+    this.index.clear()
+    this.unconfirmed.forEach((item, idx) => this.index.set(item.trs.id, idx))
+    this.nullCount = 0
   }
 
   has(id) {
     const pos = this.index.get(id)
-    return pos !== undefined && !!this.unConfirmed[pos]
+    return pos !== undefined && !!this.unconfirmed[pos]
   }
 
   getUnconfirmed() {
     const a = []
 
-    for (let i = 0; i < this.unConfirmed.length; i++) {
-      if (this.unConfirmed[i]) {
-        a.push(this.unConfirmed[i])
+    for (let i = 0; i < this.unconfirmed.length; i++) {
+      if (this.unconfirmed[i]) {
+        a.push(this.unconfirmed[i].trs)
       }
     }
     return a
@@ -53,12 +85,37 @@ class TransactionPool {
 
   clear() {
     this.index = new Map()
-    this.unConfirmed = []
+    this.unconfirmed = []
+    this.nullCount = 0
   }
 
-  get(id) {
+  get(id, ext) {
     const pos = this.index.get(id)
-    return this.unConfirmed[pos]
+    if (pos === undefined) return undefined
+      
+    return !!ext ? 
+      this.unconfirmed[pos] : 
+      this.unconfirmed[pos].trs
+  }
+
+  checkTimeout() {
+    const timeoutItems = []
+    const retryItems = []
+    
+    const now = Date.now()
+    for(let { trs, ext } of this.unconfirmed) {
+      if (ext.nextCheckAt > now) continue
+
+      if (ext.checkTimes >= MAX_CHECK_TIMES) {
+        timeoutItems.push(trs)
+      } else {
+        retryItems.push(trs)
+        ext.checkTimes++
+        ext.nextCheckAt = now + this.getNextCheckDelay(ext.checkTimes) 
+      }
+    }
+    this.remove(...timeoutItems.map(trs => trs.id))
+    return { retryItems, timeoutItems }
   }
 }
 
@@ -519,6 +576,24 @@ Transactions.prototype.getById = (id, cb) => priv.getById(id, cb)
 // Events
 Transactions.prototype.onBind = (scope) => {
   modules = scope
+}
+
+Transactions.prototype.onProcessBlock = (block) => {
+  const now = Date.now()
+  if ((now - priv.lastCheckUnconfirmedAt) < CHECK_TRANACTION_INTERVAL) {
+    return 
+  }
+  
+  try {
+    const { retryItems, timeoutItems } = self.pool.checkTimeout()
+    app.logger.debug(`Check timeout, retry =`, retryItems, 'timeout =', timeoutItems)
+
+    retryItems.forEach(tx => self.broadcastUnconfirmedTransaction(tx))
+    
+    priv.lastCheckUnconfirmedAt = now
+  } catch(err) {
+    app.logger.error(`Fail to check timeout for pool, height is `, block.height)
+  }
 }
 
 Transactions.prototype.getBlockTransactionsForV1 = (v1Block, cb) => {

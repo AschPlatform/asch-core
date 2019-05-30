@@ -107,11 +107,11 @@ priv.attachApi = () => {
         const minHeight = lastBlock.height + 1
         const maxHeight = (minHeight + blocksLimit) - 1
         const blocks = await modules.blocks.getBlocks(minHeight, maxHeight, true)
-        const failedTransactions = await modules.blocks.getFailedTransactions(minHeight, maxHeight)
+        const failedTransactions = modules.blocks.getCachedFailedTransactions(minHeight, maxHeight)
         return res.send({ blocks, failedTransactions })
       } catch (e) {
         app.logger.error('Failed to get blocks or transactions', e)
-        return res.send({ blocks: [], failedTransactions: [] })
+        return res.send({ blocks: [], failedTransactions: {} })
       }
     })()
   })

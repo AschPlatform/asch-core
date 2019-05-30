@@ -5,6 +5,7 @@ const PIFY = require('util').promisify
 const isArray = require('util').isArray
 const constants = require('../utils/constants.js')
 const BlockStatus = require('../utils/block-status.js')
+const FIFOCache = require('../utils/fifo-cache.js')
 const Router = require('../utils/router.js')
 const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
@@ -25,6 +26,7 @@ priv.loaded = false
 priv.isActive = false
 priv.blockCache = {}
 priv.proposeCache = {}
+priv.failedTransactionsCache = new FIFOCache()
 priv.lastPropose = null
 priv.isCollectingVotes = false
 priv.isApplyingBlock = false
@@ -385,12 +387,12 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
   try {
     self.saveBlockTransactions(block)
     await self.applyRound(block)
-    await self.commitFailedTransactions(block.height, failedTransactions)
+    self.cacheFailedTransactions(block.height, failedTransactions)
   } catch (e) {
     app.logger.error(block, failedTransactions)
     app.logger.error('save block error: ', e)
     await app.sdb.rollbackBlock()
-    await self.rollbackFailedTransactionsUntil(block.height - 1)
+    self.evitCachedFailedTransactionsUntil(block.height - 1)
     throw new Error(`Failed to save block: ${e}`)
   }
 
@@ -398,7 +400,7 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
     await app.sdb.commitBlock()
     const trsCount = block.transactions.length
     app.logger.info(`Block applied correctly with ${trsCount} transactions`)
-    
+
     self.setLastBlock(block)
     modules.transactions.removeUnconfirmedTransactions([
       ...failedTransactions.map(item => item.transaction.id),
@@ -422,35 +424,31 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
   }
 }
 
-Blocks.prototype.commitFailedTransactions = async (height, failedTransactions) => {
-  library.logger.debug(`commit failed transactions of height ${height}`, failedTransactions)
+Blocks.prototype.cacheFailedTransactions = (height, failedTransactions) => {
+  library.logger.debug(`cache failed transactions of height ${height}`, failedTransactions)
 
-  for(const { transaction, error } of failedTransactions) {
-    transaction.height = height
-    app.sdb.create('FailedTransaction', {...transaction, error })
-  }
-  await app.sdb.saveLocalChanges()
+  priv.failedTransactionsCache.put(height, failedTransactions)
 }
 
-Blocks.prototype.getFailedTransactions = async (minHeight, maxHeight) => {
-  const condition = { height: { $gte: minHeight, $lte: maxHeight } }
-  const trans = await app.sdb.find('FailedTransaction', condition)
-  return trans.map( t => {
-    const error = t.error
-    delete t.error
-    return { transaction: t, error }
-  })
+Blocks.prototype.getCachedFailedTransactions = (minHeight, maxHeight) => {
+  const result = {}
+  for(let height = minHeight; height <= maxHeight; height++) {
+    const failedItems = priv.failedTransactionsCache.get(height)
+    if (failedItems) {
+      result[height] = failedItems
+    }
+  }
+  return result
 } 
 
-Blocks.prototype.rollbackFailedTransactionsUntil = async (height) => {
-  library.logger.debug('rollback failed transactions to height', height)
+Blocks.prototype.evitCachedFailedTransactionsUntil = (height) => {
+  library.logger.debug('evit cached failed transactions to height', height)
 
-  const condition = { height: { $gt: height } }
-  const transIds = await app.sdb.find('FailedTransaction', condition, undefined, undefined, ['id'])
-  library.logger.debug('rollback failed transactions', transIds)
-
-  transIds.forEach(id => { app.sdb.del('FailedTransaction', { id })})
-  await app.sdb.saveLocalChanges()
+  let currentHeight = priv.lastBlock.height
+  while(currentHeight > height) {
+    priv.failedTransactionsCache.evit(currentHeight)
+    currentHeight--
+  }
 }
 
 Blocks.prototype.saveBlockTransactions = (block) => {
@@ -585,7 +583,7 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
         if (!body) {
           return next('Invalid response for blocks request')
         }
-        const { blocks, failedTransactions = [] } = body
+        const { blocks, failedTransactions = {} } = body
         if (!isArray(blocks) || blocks.length === 0) {
           loaded = true
           return next()
@@ -596,7 +594,7 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
         return (async () => {
           try {
             for (const block of blocks) {
-              const blockFailedTransactions = failedTransactions.filter(item => item.transaction.height === block.height)
+              const blockFailedTransactions = failedTransactions[block.height] || []
               await self.processBlock(block, blockFailedTransactions, { syncing: true })
               lastCommonBlockId = block.id
               lastValidBlock = block
@@ -630,7 +628,7 @@ Blocks.prototype.packTransactions = async (block) => {
     const bytes = library.base.transaction.getBytes(trans)
     // TODO check payload length when process remote block
     if ((payloadLength + bytes.length) > constants.maxPayloadLength) {
-      app.logger.debug(`finish to pack transactions due to payload size exceed 8M`)
+      app.logger.debug(`finish packing transactions due to payload size exceed 8M`)
       break
     }
 
@@ -638,9 +636,9 @@ Blocks.prototype.packTransactions = async (block) => {
       await modules.transactions.applyUnconfirmedTransactionAsync(trans, block)
     } catch (err) {
       const error = err.message || String(err)
-      failedTransactions.push({ transaction: trans, error })
-      app.logger.info(`faild to pack transaction '${trans.id}' to block '${block.height}' `, error )
-      app.logger.debug('transaction:', trans, err)
+      failedTransactions.push({ id: trans.id, error })
+      app.logger.info(`fail to pack transaction '${trans.id}' to block '${block.height}' `, error )
+      app.logger.debug('failed transaction', trans, err)
       continue
     }
 
@@ -650,7 +648,7 @@ Blocks.prototype.packTransactions = async (block) => {
     payloadLength += bytes.length
     
     if (process.uptime() - startTime >= constants.buildBlockTimeoutSeconds) {
-      app.logger.debug(`finish to pack transactions due to timeout`)
+      app.logger.debug(`finish packing transactions due to timeout`)
       break
     }
   }
