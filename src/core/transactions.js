@@ -103,7 +103,7 @@ class TransactionPool {
     const retryItems = []
     
     const now = Date.now()
-    for(let { trs, ext } of this.unconfirmed) {
+    for(let { trs, ext } of this.getUnconfirmed()) {
       if (ext.nextCheckAt > now) continue
 
       if (ext.checkTimes >= MAX_CHECK_TIMES) {
@@ -187,6 +187,10 @@ priv.attachStorageApi = () => {
     library.logger.error(req.url, err.toString())
     return res.status(500).send({ success: false, error: err.toString() })
   })
+}
+
+priv.broadcastUnconfirmedTransaction = (transaction) => {
+  library.bus.message('unconfirmedTransaction', transaction)
 }
 
 Transactions.prototype.getUnconfirmedTransaction = id => self.pool.get(id)
@@ -297,16 +301,6 @@ Transactions.prototype.existsTransaction = async (id) => {
   return exists
 }
 
-Transactions.prototype.broadcastUnconfirmedTransaction = (transaction) => {
-  const isLargeTransaction = transaction.type === 600
-
-  const messageName = isLargeTransaction ?
-    'unconfirmedLargeTransaction' :
-    'unconfirmedNormalTransaction'
-  library.bus.message(messageName, transaction)
-}
-
-
 Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction, verifyOnly) => {
   try {
     if (!transaction.id) {
@@ -338,7 +332,8 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction, 
       await self.verifyUnconfirmedTransactionAsync(transaction) 
       ret = undefined
     } else {
-      ret = await self.applyUnconfirmedTransactionAsync(transaction) //FIXME: check if predict block info
+      //FIXME: predict block info for context ???
+      ret = await self.applyUnconfirmedTransactionAsync(transaction) 
     }
     self.pool.add(transaction)
     return ret
@@ -350,7 +345,7 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction, 
 }
 
 Transactions.prototype.verifyUnconfirmedTransactionAsync = async (transaction) => {
-  library.logger.debug('verify unconfirmed trs', transaction)
+  library.logger.debug('verify unconfirmed transaction', transaction)
 
   const height = modules.blocks.getLastBlock().height
   const block = {
@@ -580,6 +575,7 @@ Transactions.prototype.onBind = (scope) => {
 
 Transactions.prototype.onProcessBlock = (block) => {
   const now = Date.now()
+  // Prevent excessive checking
   if ((now - priv.lastCheckUnconfirmedAt) < CHECK_TRANACTION_INTERVAL) {
     return 
   }
@@ -587,12 +583,12 @@ Transactions.prototype.onProcessBlock = (block) => {
   try {
     const { retryItems, timeoutItems } = self.pool.checkTimeout()
     app.logger.debug(`Check timeout, retry =`, retryItems, 'timeout =', timeoutItems)
-
-    retryItems.forEach(tx => self.broadcastUnconfirmedTransaction(tx))
     
+    retryItems.forEach(tx => priv.broadcastUnconfirmedTransaction(tx))
     priv.lastCheckUnconfirmedAt = now
+    
   } catch(err) {
-    app.logger.error(`Fail to check timeout for pool, height is `, block.height)
+    app.logger.error(`Fail to check timeout for pool, height = ${block.height} `, err)
   }
 }
 
@@ -863,7 +859,7 @@ shared.addTransactionUnsigned = (req, cb) => {
         })
         const verifyOnly = !!query.verifyOnly
         const result = await self.processUnconfirmedTransactionAsync(trs, verifyOnly)
-        self.broadcastUnconfirmedTransaction(trs)
+        priv.broadcastUnconfirmedTransaction(trs)
         callback(null, Object.assign({ transactionId: trs.id }, result))
       } catch (e) {
         library.logger.warn('Failed to process unsigned transaction', e)

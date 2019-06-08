@@ -111,14 +111,14 @@ Consensus.prototype.addPendingVotes = (votes) => {
   return self.pendingVotes
 }
 
-Consensus.prototype.createPropose = (keypair, block, address) => {
+Consensus.prototype.createPropose = (keypair, block, peerId) => {
   assert(keypair.publicKey.toString('hex') === block.delegate)
   const propose = {
     height: block.height,
     id: block.id,
     timestamp: block.timestamp,
     generatorPublicKey: block.delegate,
-    address,
+    peerId,
   }
   const hash = self.getProposeHash(propose)
   propose.hash = hash.toString('hex')
@@ -145,11 +145,8 @@ Consensus.prototype.getProposeHash = (propose) => {
   }
 
   bytes.writeInt(propose.timestamp)
-
-  const parts = propose.address.split(':')
-  assert(parts.length === 2)
-  bytes.writeInt(ip.toLong(parts[0]))
-  bytes.writeInt(Number(parts[1]))
+  
+  bytes.writeString(propose.peerId)
 
   bytes.flip()
   return crypto.createHash('sha256').update(bytes.toBuffer()).digest()

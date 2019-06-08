@@ -18,22 +18,20 @@ priv.loaded = false
 function Transport(cb, scope) {
   library = scope
   self = this
-  priv.attachApi()
+  priv.attachRESTAPI()
   priv.latestBlocksCache = new LRU(200)
   priv.blockHeaderMidCache = new LRU(1000)
-  priv.largeTransactionCache = new LRU(500)
 
   setImmediate(cb, null, self)
 }
 
-priv.attachApi = () => {
+priv.attachRESTAPI = () => {
   const router = new Router()
 
   router.use((req, res, next) => {
 
     res.set(priv.headers)
     if (req.headers.magic !== library.config.magic) {
-      modules.peer.setNodeIncompatible(req.ip, req.headers.magic)
       return res.status(500).send({
         success: false,
         error: 'Request is made on the wrong network',
@@ -44,79 +42,7 @@ priv.attachApi = () => {
     return next()
   })
 
-  router.post('/newBlock', (req, res) => {
-    const { body } = req
-    if (!body.id) {
-      return res.status(500).send({ error: 'Invalid params' })
-    }
-    const newBlock = priv.latestBlocksCache.get(body.id)
-    if (!newBlock) {
-      return res.status(500).send({ error: 'New block not found: '+ body.id })
-    }
-    return res.send({ success: true, ...newBlock })
-  })
-
-  router.post('/commonBlock', (req, res) => {
-    const { body } = req
-    if (!Number.isInteger(body.max)) return res.send({ error: 'Field max must be integer' })
-    if (!Number.isInteger(body.min)) return res.send({ error: 'Field min must be integer' })
-    const max = body.max
-    const min = body.min
-    const ids = body.ids
-    return (async () => {
-      try {
-        let blocks = await app.sdb.getBlocksByHeightRange(min, max)
-        // app.logger.trace('find common blocks in database', blocks)
-        if (!blocks || !blocks.length) {
-          return res.status(500).send({ success: false, error: 'Blocks not found' })
-        }
-        blocks = blocks.reverse()
-        let commonBlock = null
-        for (const i in ids) {
-          if (blocks[i].id === ids[i]) {
-            commonBlock = blocks[i]
-            break
-          }
-        }
-        if (!commonBlock) {
-          return res.status(500).send({ success: false, error: 'Common block not found' })
-        }
-        return res.send({ success: true, common: commonBlock })
-      } catch (e) {
-        app.logger.error(`Failed to find common block: ${e}`)
-        return res.send({ success: false, error: 'Failed to find common block' })
-      }
-    })()
-  })
-
-  router.post('/blocks', (req, res) => {
-    const { body } = req
-    let blocksLimit = 200
-    if (body.limit) {
-      blocksLimit = Math.min(blocksLimit, Number(body.limit))
-    }
-    const lastBlockId = body.lastBlockId
-    if (!lastBlockId) {
-      return res.status(500).send({ error: 'Invalid params' })
-    }
-    return (async () => {
-      try {
-        const lastBlock = await app.sdb.getBlockById(lastBlockId)
-        if (!lastBlock) throw new Error(`Last block not found: ${lastBlockId}`)
-
-        const minHeight = lastBlock.height + 1
-        const maxHeight = (minHeight + blocksLimit) - 1
-        const blocks = await modules.blocks.getBlocks(minHeight, maxHeight, true)
-        const failedTransactions = modules.blocks.getCachedFailedTransactions(minHeight, maxHeight)
-        return res.send({ blocks, failedTransactions })
-      } catch (e) {
-        app.logger.error('Failed to get blocks or transactions', e)
-        return res.send({ blocks: [], failedTransactions: {} })
-      }
-    })()
-  })
-
-  router.post('/transactions', (req, res) => {
+  router.post('transactions', (req, res) => {
     const verifyOnly = !!req.body.verifyOnly
     if (modules.loader.syncing() && !verifyOnly) {
       return res.status(500).send({
@@ -155,49 +81,11 @@ priv.attachApi = () => {
         const errMsg = err.message ? err.message : err.toString()
         res.status(200).json({ success: false, error: errMsg })
       } else {
-        modules.transactions.broadcastUnconfirmedTransaction(transaction)
+        library.bus.message('unconfirmedTransaction', transaction)
         const result = (!ret) ? { success: true, transactionId: transaction.id } :
           Object.assign({ transactionId: transaction.id }, ret) 
         res.status(200).json(result)
       }
-    })
-  })
-
-  router.post('/getLargeTransaction', (req, res) => {
-    if (!req.body || !req.body.id) {
-      res.send({ success: false, error: 'invalid transaction id'})
-    }
-
-    const id = req.body.id
-    const transaction = priv.largeTransactionCache.get(id)
-    if (!transaction) {
-      res.send({ success: false, error: `transaction not found, id =${id}`})
-    }
-
-    library.logger.debug('response large transaction, id = ${id}')
-    res.send({ success: true, transaction })
-  })
-
-  router.post('/votes', (req, res) => {
-    library.bus.message('receiveVotes', req.body.votes)
-    res.send({})
-  })
-
-  router.post('/getUnconfirmedTransactions', (req, res) => {
-    const { ids = [] } = req.body
-    const idSet = new Set()
-    ids.forEach(id => {
-      if (!idSet.has(id)) idSet.add(id)
-    })
-
-    const transactions = modules.transactions.getUnconfirmedTransactionList()
-      .filter(t => !idSet.has(t.id))
-    res.send({ transactions })
-  })
-
-  router.post('/getHeight', (req, res) => {
-    res.send({
-      height: modules.blocks.getLastBlock().height,
     })
   })
 
@@ -239,8 +127,123 @@ priv.attachApi = () => {
   library.network.app.use('/peer', router)
 }
 
-Transport.prototype.broadcast = (topic, message, recursive) => {
-  modules.peer.publish(topic, message, recursive)
+priv.attachP2PAPI = () => {
+  const handleRPC = modules.peer.handleRPC
+
+  handleRPC('newBlock', (req, cb) => {
+    const { params } = req
+    if (!params.id) {
+      return cb('Invalid params')
+    }
+    const newBlock = priv.latestBlocksCache.get(params.id)
+    if (!newBlock) {
+      return cb('New block not found: '+ params.id )
+    }
+    return cb(null, newBlock)
+  })
+
+  handleRPC('commonBlock', (req, cb) => {
+    const { params } = req
+    if (!Number.isInteger(params.max)) return cb('Field max must be integer')
+    if (!Number.isInteger(params.min)) return cb('Field min must be integer')
+    const max = params.max
+    const min = params.min
+    const ids = params.ids
+    return (async () => {
+      try {
+        let blocks = await app.sdb.getBlocksByHeightRange(min, max)
+        // app.logger.trace('find common blocks in database', blocks)
+        if (!blocks || !blocks.length) {
+          return cb('Blocks not found')
+        }
+        blocks = blocks.reverse()
+        let commonBlock = null
+        for (const i in ids) {
+          if (blocks[i].id === ids[i]) {
+            commonBlock = blocks[i]
+            break
+          }
+        }
+        if (!commonBlock) {
+          return cb('Common block not found')
+        }
+        return cb(null, { common: commonBlock })
+      } catch (e) {
+        app.logger.error(`Failed to find common block: ${e}`)
+        return cb('Failed to find common block')
+      }
+    })()
+  })
+
+  handleRPC('blocks', (req, cb) => {
+    const { params } = req
+    let blocksLimit = 200
+    if (params.limit) {
+      blocksLimit = Math.min(blocksLimit, Number(params.limit))
+    }
+    const lastBlockId = params.lastBlockId
+    if (!lastBlockId) {
+      return cb('Invalid params')
+    }
+    return (async () => {
+      try {
+        const lastBlock = await app.sdb.getBlockById(lastBlockId)
+        if (!lastBlock) throw new Error(`Last block not found: ${lastBlockId}`)
+
+        const minHeight = lastBlock.height + 1
+        const maxHeight = (minHeight + blocksLimit) - 1
+        const blocks = await modules.blocks.getBlocks(minHeight, maxHeight, true)
+        const failedTransactions = modules.blocks.getCachedFailedTransactions(minHeight, maxHeight)
+        return cb(null, { blocks, failedTransactions })
+      } catch (e) {
+        app.logger.error('Failed to get blocks or transactions', e)
+        return cb(null, { blocks: [], failedTransactions: {} })
+      }
+    })()
+  })
+
+  handleRPC('getUnconfirmedTransaction', (req, cb) => {
+    if (!req.params || !req.params.id) {
+      return cb('Invalid transaction id')
+    }
+
+    const id = req.params.id
+    const transaction = modules.transactions.getUnconfirmedTransaction(id)
+    if (!transaction) {
+      return cb(`Transaction not found, id = ${id}`)
+    }
+
+    library.logger.debug(`response transaction, id = ${id}`)
+    return cb(null, { transaction })
+  })
+
+  handleRPC('votes', (req, cb) => {
+    library.bus.message('receiveVotes', req.params.votes)
+    return cb(null, {})
+  })
+
+  handleRPC('getUnconfirmedTransactions', (req, cb) => {
+    const { ids = [] } = req.params
+    const idSet = new Set()
+    ids.forEach(id => {
+      if (!idSet.has(id)) idSet.add(id)
+    })
+
+    const transactions = modules.transactions.getUnconfirmedTransactionList()
+      .filter(t => !idSet.has(t.id))
+    return cb(null, { transactions })
+  })
+
+  handleRPC('getHeight', (req, cb) => {
+    return cb(null, {
+      height: modules.blocks.getLastBlock().height,
+    })
+  })
+}
+
+Transport.prototype.broadcast = (topic, data) => {
+  library.logger.debug(`broadcast topic '${topic}'`, data)
+  modules.peer.publish(topic, data)
 }
 
 Transport.prototype.sandboxApi = (call, args, cb) => {
@@ -263,7 +266,9 @@ Transport.prototype.onBlockchainReady = () => {
 }
 
 Transport.prototype.onPeerReady = () => {
-  modules.peer.subscribe('newBlockHeader', (message, peer) => {
+  priv.attachP2PAPI()
+
+  modules.peer.subscribe('newBlockHeader', (data, peerId, callbackForward) => {
     if (modules.loader.syncing()) {
       return
     }
@@ -273,25 +278,31 @@ Transport.prototype.onPeerReady = () => {
       return
     }
 
-    const body = message.body
-    if (!body || !body.id || !body.height || !body.prevBlockId) {
-      library.logger.error('Invalid message body')
+    if (!data || !data.id || !data.height || !data.prevBlockId) {
+      library.logger.error('Invalid message data')
       return
     }
-    const height = body.height
-    const id = body.id.toString('hex')
-    const prevBlockId = body.prevBlockId.toString('hex')
+    
+    const height = data.height
+    const id = data.id.toString('hex')
+    const prevBlockId = data.prevBlockId.toString('hex')
+    if (height === lastBlock.height && id === lastBlock.id) {
+      library.logger.debug('Receive processed block', { height, id, prevBlockId })
+      return 
+    }
+
     if (height !== lastBlock.height + 1 || prevBlockId !== lastBlock.id) {
-      library.logger.warn('New block donnot match with last block', message)
+      library.logger.warn('New block donnot match with last block', data)
       if (height > lastBlock.height + 5) {
         library.logger.warn('Receive new block header from long fork')
       } else {
-        modules.loader.syncBlocksFromPeer(peer)
+        modules.loader.syncBlocksFromPeer(peerId)
       }
       return
     }
+
     library.logger.info('Receive new block header', { height, id })
-    modules.peer.request('newBlock', { id }, peer, (err, result) => {
+    modules.peer.request('newBlock', { id }, peerId, (err, result) => {
       if (err) {
         library.logger.error('Failed to get latest block data', err)
         return
@@ -300,69 +311,40 @@ Transport.prototype.onPeerReady = () => {
         library.logger.error('Invalid block data', result)
         return
       }
+      library.logger.debug('Got new block', result)
       try {
         let block = result.block
         let votes = library.protobuf.decodeBlockVotes(Buffer.from(result.votes, 'base64'))
         block = library.base.block.objectNormalize(block)
         votes = library.base.consensus.normalizeVotes(votes)
         priv.latestBlocksCache.set(block.id, result)
-        priv.blockHeaderMidCache.set(block.id, message)
-        library.bus.message('receiveBlock', block, votes)
+        priv.blockHeaderMidCache.set(block.id, data)
+        library.bus.message('receiveBlock', block, votes, result.failedTransactions)
+        //forward newBlockHeader message
+        //callbackForward(null, true)
       } catch (e) {
         library.logger.error(`normalize block or votes object error: ${e.toString()}`, result)
       }
     })
   })
 
-  modules.peer.subscribe('propose', (message) => {
+  modules.peer.subscribe('propose', (data, peerId, callbackForward) => {
     try {
-      const propose = library.protobuf.decodeBlockPropose(message.body.propose)
+      const propose = library.protobuf.decodeBlockPropose(data.propose)
       library.bus.message('receivePropose', propose)
+      // forward propose message
+      callbackForward(null, true)
     } catch (e) {
       library.logger.error('Receive invalid propose', e)
     }
   })
 
-  modules.peer.subscribe('transaction', (message) => {
-    // if (modules.loader.syncing()) {
-    //   return
-    // }
-    const lastBlock = modules.blocks.getLastBlock()
-    const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
-    if (slots.getNextSlot() - lastSlot >= 12) {
-      library.logger.error('Blockchain is not ready', { getNextSlot: slots.getNextSlot(), lastSlot, lastBlockHeight: lastBlock.height })
-      return
-    }
-    let transaction
-    try {
-      transaction = message.body.transaction
-      if (Buffer.isBuffer(transaction)) transaction = transaction.toString()
-      transaction = JSON.parse(transaction)
-      transaction = library.base.transaction.objectNormalize(transaction)
-    } catch (e) {
-      library.logger.error('Received transaction parse error', {
-        message,
-        error: e.toString(),
-      })
-      return
-    }
-
-    library.sequence.add((cb) => {
-      library.logger.info(`Received transaction ${transaction.id} from remote peer`)
-      modules.transactions.processUnconfirmedTransaction(transaction, true/* verify only */, cb)
-    }, (err) => {
-      if (err) {
-        library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
-      } else {
-        // library.bus.message('unconfirmedTransaction', transaction, true)
-      }
-    })
+  modules.peer.subscribe('votes', (data, peerId, callbackForward) => {
+    library.bus.message('receiveVotes', data.votes)
+    return callbackForward(null, true)
   })
 
-  modules.peer.subscribe('largeTransaction', (message, peer) => {
-    // if (modules.loader.syncing()) {
-    //   return
-    // }
+  modules.peer.subscribe('transaction', (data, peerId, callbackForward) => {
     const lastBlock = modules.blocks.getLastBlock()
     const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
     if (slots.getNextSlot() - lastSlot >= 12) {
@@ -372,18 +354,8 @@ Transport.prototype.onPeerReady = () => {
 
     (async() => {
       try{
-        const idBuffer = message.body.id
-        if (!Buffer.isBuffer(idBuffer)) {
-          library.logger.debug(`invalid transaction id, should be buffer`)
-          return 
-        }
-
-        const id = idBuffer.toString('hex')
-        library.logger.debug(`receive large transaction ${id}`)
-        if (priv.largeTransactionCache.get(id)) {
-          library.logger.debug(`transaction ${id} exists or processed`)
-          return 
-        }
+        const id = data.id.toString('hex')
+        library.logger.debug(`receive transaction ${id}`)
         
         const exists = await modules.transactions.existsTransaction(id)
         if (exists) {
@@ -392,48 +364,39 @@ Transport.prototype.onPeerReady = () => {
         }
         
         const request = promisify(modules.peer.request)
-        const getTransResult = await request('getLargeTransaction', { id }, peer)
-        if (!getTransResult || !getTransResult.success) {
-          library.logger.debug(`failed to get transaction ${id},`, getTransResult.error)
+        const getResult = await request('getUnconfirmedTransaction', { id }, peerId)
+        library.logger.debug(`get transaction from remote peer ${peerId}, result`, getResult)
+        //TODO: check result error
+        if (!getResult || getResult.error) {
+          library.logger.info(`fail to get transaction ${id} from peer ${peerId},`, getResult.error)
           return 
         }
-    
-        const transaction = library.base.transaction.objectNormalize(getTransResult.transaction)
+
+        const transaction = library.base.transaction.objectNormalize(getResult.transaction)
         library.sequence.add((cb) => {
-          library.logger.info(`Received transaction ${transaction.id} from remote peer`)
-          modules.transactions.processUnconfirmedTransaction(transaction, true/* verify only */, cb)
+          modules.transactions.processUnconfirmedTransaction(transaction, true/* verify only */, (err, ret) => {
+            cb(err, ret)
+            //forward transaction message if process OK
+            callbackForward(err, !err)
+          })
         }, (err) => {
           if (err) {
             library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
-          } else {
-            // library.bus.message('unconfirmedTransaction', transaction, true)
           }
         })
       }
       catch(err) {
-        library.logger.info(`failed to get large transaction `, err)
+        library.logger.info(`failed to get / verify transaction`, err)
       }
     })()
   })
 }
 
-Transport.prototype.onUnconfirmedNormalTransaction = (transaction) => {
-  const message = {
-    body: {
-      transaction: JSON.stringify(transaction),
-    },
+Transport.prototype.onUnconfirmedTransaction = (transaction) => {
+  const data = {
+    id: Buffer.from(transaction.id, 'hex')
   }
-  self.broadcast('transaction', message)
-}
-
-Transport.prototype.onUnconfirmedLargeTransaction = (transaction) => {
-  priv.largeTransactionCache.set(transaction.id, transaction)
-  const message = {
-    body: {
-      id: Buffer.from(transaction.id, 'hex')
-    },
-  }
-  self.broadcast('largeTransaction', message, 0)
+  self.broadcast('transaction', data)
 }
 
 Transport.prototype.onNewBlock = (block, votes, failedTransactions) => {
@@ -444,36 +407,33 @@ Transport.prototype.onNewBlock = (block, votes, failedTransactions) => {
       failedTransactions
     }
   )
-  const message = priv.blockHeaderMidCache.get(block.id) || {
-    body: {
-      id: Buffer.from(block.id, 'hex'),
-      height: block.height,
-      prevBlockId: Buffer.from(block.prevBlockId, 'hex'),
-    },
+  const data = priv.blockHeaderMidCache.get(block.id) || {
+    id: Buffer.from(block.id, 'hex'),
+    height: block.height,
+    prevBlockId: Buffer.from(block.prevBlockId, 'hex'),
   }
-  self.broadcast('newBlockHeader', message, 0)
+  self.broadcast('newBlockHeader', data)
 }
 
 Transport.prototype.onNewPropose = (propose) => {
-  const message = {
-    body: {
-      propose: library.protobuf.encodeBlockPropose(propose),
-    },
+  const data = {
+    propose: library.protobuf.encodeBlockPropose(propose),
   }
-  self.broadcast('propose', message)
+  self.broadcast('propose', data)
 }
 
-Transport.prototype.sendVotes = (votes, address) => {
-  const parts = address.split(':')
-  const contact = {
-    host: parts[0],
-    port: parts[1],
+Transport.prototype.sendVotes = (votes, peerId) => {
+  const data = { votes, peerId }
+  if (!modules.peer.isConnected(peerId)) {
+    self.broadcast('votes', data)
+    return 
   }
-  modules.peer.request('votes', { votes }, contact, (err) => {
+
+  modules.peer.request('votes', data, peerId, (err, ret) => {
     if (err) {
-      library.logger.error('send votes error', err)
+      self.broadcast('votes', data)
     }
-  })
+  })  
 }
 
 Transport.prototype.cleanup = (cb) => {
@@ -490,10 +450,11 @@ shared.message = (msg, cb) => {
 }
 
 shared.request = (req, cb) => {
-  if (req.body.peer) {
-    modules.peer.request('chainRequest', req, req.body.peer, (err, res) => {
+  //TODO: check it !!!
+  if (req.params.peer) {
+    modules.peer.request('chainRequest', req, req.params.peer, (err, res) => {
       if (res) {
-        res.peer = req.body.peer
+        res.peer = req.peer.peer
       }
       cb(err, res)
     })

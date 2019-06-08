@@ -120,7 +120,7 @@ Blocks.prototype.toAPIV1Block = (block) => {
   return result
 }
 
-Blocks.prototype.getCommonBlock = (peer, height, cb) => {
+Blocks.prototype.getCommonBlock = (peerId, height, cb) => {
   const lastBlockHeight = height
 
   priv.getIdSequence2(lastBlockHeight, (err, data) => {
@@ -133,7 +133,7 @@ Blocks.prototype.getCommonBlock = (peer, height, cb) => {
       min: data.firstHeight,
       ids: data.ids,
     }
-    return modules.peer.request('commonBlock', params, peer, (err2, ret) => {
+    return modules.peer.request('commonBlock', params, peerId, (err2, ret) => {
       if (err2 || ret.error) {
         return cb(err2 || ret.error.toString())
       }
@@ -387,7 +387,9 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
   try {
     self.saveBlockTransactions(block)
     await self.applyRound(block)
-    self.cacheFailedTransactions(block.height, failedTransactions)
+    if (failedTransactions && failedTransactions.length > 0) {
+      self.cacheFailedTransactions(block.height, failedTransactions)
+    } 
   } catch (e) {
     app.logger.error(block, failedTransactions)
     app.logger.error('save block error: ', e)
@@ -403,7 +405,7 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
 
     self.setLastBlock(block)
     modules.transactions.removeUnconfirmedTransactions([
-      ...failedTransactions.map(item => item.transaction.id),
+      ...(failedTransactions || []),
       ...block.transactions.map(t => t.id)
     ])
 
@@ -562,7 +564,7 @@ Blocks.prototype.getBlocks = async (minHeight, maxHeight, withTransaction) => {
   return blocks
 }
 
-Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
+Blocks.prototype.loadBlocksFromPeer = (peerId, id, cb) => {
   let loaded = false
   let count = 0
   let lastValidBlock = null
@@ -576,21 +578,20 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
         limit,
         lastBlockId: lastCommonBlockId,
       }
-      modules.peer.request('blocks', params, peer, (err, body) => {
+      modules.peer.request('blocks', params, peerId, (err, ret) => {
         if (err) {
           return next(`Failed to request remote peer: ${err}`)
         }
-        if (!body) {
+        if (!ret) {
           return next('Invalid response for blocks request')
         }
-        const { blocks, failedTransactions = {} } = body
+        const { blocks, failedTransactions = {} } = ret
         if (!isArray(blocks) || blocks.length === 0) {
           loaded = true
           return next()
         }
         const num = isArray(blocks) ? blocks.length : 0
-        const address = `${peer.host}:${peer.port - 1}`
-        library.logger.info(`Loading ${num} blocks from ${address}`)
+        library.logger.info(`Loading ${num} blocks from ${peerId}`)
         return (async () => {
           try {
             for (const block of blocks) {
@@ -598,7 +599,7 @@ Blocks.prototype.loadBlocksFromPeer = (peer, id, cb) => {
               await self.processBlock(block, blockFailedTransactions, { syncing: true })
               lastCommonBlockId = block.id
               lastValidBlock = block
-              library.logger.info(`Block ${block.id} loaded from ${address} at`, block.height)
+              library.logger.info(`Block ${block.id} loaded from ${peerId} at`, block.height)
             }
             return next()
           } catch (e) {
@@ -636,9 +637,8 @@ Blocks.prototype.packTransactions = async (block) => {
       await modules.transactions.applyUnconfirmedTransactionAsync(trans, block)
     } catch (err) {
       const error = err.message || String(err)
-      failedTransactions.push({ id: trans.id, error })
-      app.logger.info(`fail to pack transaction '${trans.id}' to block '${block.height}' `, error )
-      app.logger.debug('failed transaction', trans, err)
+      failedTransactions.push(trans.id)
+      app.logger.info(`fail to pack transaction ${trans.id} to block ${block.height},`, error )
       continue
     }
 
@@ -703,15 +703,10 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
     library.logger.info(`Forged new block id: ${block.id}, height: ${block.height}, round: ${modules.round.calc(block.height)}, slot: ${slots.getSlotNumber(block.timestamp)}, reward: ${block.reward}`)
     return null
   }
-  // FIXME: Although without public IP, we should broadcast propose
-  if (!library.config.publicIp) {
-    library.logger.error('No public ip')
-    return null
-  }
-  const serverAddr = `${library.config.publicIp}:${library.config.peerPort}`
   let propose
   try {
-    propose = library.base.consensus.createPropose(keypair, block, serverAddr)
+    const peerId = modules.peer.getPeerId()
+    propose = library.base.consensus.createPropose(keypair, block, peerId)
   } catch (e) {
     library.logger.error('Failed to create propose', e)
     return null
@@ -746,27 +741,12 @@ Blocks.prototype.onReceiveBlock = (block, votes, failedTransactions) => {
         + ` round: ${modules.round.calc(modules.blocks.getLastBlock().height)}`
         + ` slot: ${slots.getSlotNumber(block.timestamp)}`)
       return (async () => {
-        //const pendingTrsMap = new Map()
         try {
-          // const pendingTrs = modules.transactions.getUnconfirmedTransactionList()
-          // for (const t of pendingTrs) {
-          //   pendingTrsMap.set(t.id, t)
-          // }
-          //modules.transactions.clearUnconfirmed()
           await app.sdb.rollbackBlock()
           await self.processBlock(block, failedTransactions, { votes, broadcast: true })
         } catch (e) {
           library.logger.error('Failed to process received block', e)
         } finally {
-          // for (const t of block.transactions) {
-          //   pendingTrsMap.delete(t.id)
-          // }
-          // try {
-          //   const redoTransactions = [...pendingTrsMap.values()]
-          //   await modules.transactions.processUnconfirmedTransactionsAsync(redoTransactions, false/* verify and apply */)
-          // } catch (e) {
-          //   library.logger.error('Failed to redo unconfirmed transactions', e)
-          // }
           cb()
         }
       })()
@@ -849,7 +829,7 @@ Blocks.prototype.onReceivePropose = (propose) => {
         if (activeKeypairs && activeKeypairs.length > 0) {
           const votes = library.base.consensus.createVotes(activeKeypairs, propose)
           library.logger.debug(`send votes height ${votes.height} id ${votes.id} sigatures ${votes.signatures.length}`)
-          modules.transport.sendVotes(votes, propose.address)
+          modules.transport.sendVotes(votes, propose.peerId)
           priv.lastVoteTime = Date.now()
           priv.lastPropose = propose
         }
