@@ -144,13 +144,13 @@ async function loadInterfaces(dir, routes) {
 function adaptSmartDBLogger(config) {
   const { LogLevel } = AschCore
   const levelMap = {
-    trace: LogLevel.Trace,
-    debug: LogLevel.Debug,
-    log: LogLevel.Log,
-    info: LogLevel.Info,
-    warn: LogLevel.Warn,
-    error: LogLevel.Error,
-    fatal: LogLevel.Fatal,
+    log: LogLevel.log,
+    trace: LogLevel.trace,
+    debug: LogLevel.debug,
+    info: LogLevel.info,
+    warn: LogLevel.warn,
+    error: LogLevel.error,
+    fatal: LogLevel.fatal,
   }
 
   AschCore.LogManager.logFactory = {
@@ -158,7 +158,7 @@ function adaptSmartDBLogger(config) {
     format: false,
     getLevel: () => {
       const appLogLevel = String(config.logLevel).toLocaleLowerCase()
-      return levelMap[appLogLevel] || LogLevel.Info
+      return levelMap[appLogLevel] || LogLevel.info
     },
   }
 }
@@ -169,6 +169,34 @@ async function loadSmartContracts() {
     const loadResult = await app.contract.loadContract(c.name)
     app.logger.debug(`Load contract '${c.name}' `, loadResult)
   })
+}
+
+async function checkAndRecover() {
+  const sdb = app.sdb
+  const contractSandbox = app.contract
+
+  const dbHeight = sdb.lastBlockHeight
+  const contractHeight = await contractSandbox.getLastCommittedHeight()
+
+  if (dbHeight === contractHeight) return 
+  
+  app.logger.warn(`Inconsistent SmartDB and contract DB detected, try to recover`)
+  if (dbHeight !== contractHeight - 1) {
+    const error = 'Cannot recover contract DB, please check it manually'
+    app.logger.error(error, { dbHeight, contractHeight })
+    throw new Error(error)
+  }
+  
+  try {
+    const ret = await contractSandbox.rollback(dbHeight)
+    if (!ret.success) throw new Error(ret.error)
+    const currentContractHeight = await contractSandbox.getLastCommittedHeight()
+    app.logger.info(`Success recover contract DB, height ${contractHeight} -> ${currentContractHeight}`)
+  } catch (err) {
+    const error = `Fail to recover contract DB, ${err}`
+    app.logger.error(error)
+    throw new Error(error)
+  }
 }
 
 module.exports = async function runtime(options) {
@@ -363,6 +391,7 @@ module.exports = async function runtime(options) {
   await loadContracts(path.join(appDir, 'contract'))
   await loadInterfaces(path.join(appDir, 'interface'), options.library.network.app)
   await loadSmartContracts()
+  await checkAndRecover()
 
   app.contractTypeMapping[1] = 'basic.transfer'
   app.contractTypeMapping[2] = 'basic.setName'

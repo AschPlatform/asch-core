@@ -19,20 +19,16 @@ message Transaction {
   required int32 type = 1;
   required int32 timestamp = 2;
   required bytes senderPublicKey = 3;
-  required bytes signature = 4;
-  optional string recipientId = 5;
-  optional string senderId = 6;
-  optional int64 amount = 7;
-  optional int64 fee = 8;
-  optional bytes requesterPublicKey = 9;
-  optional bytes signSignature = 10;
-  repeated string signatures = 11;
-  optional string id = 12;
-  optional int64 height = 13;
-  optional string blockId = 14;
-  required Asset asset = 15;
-  repeated string args = 16;
-  optional string message = 17;
+  optional string senderId = 4;
+  optional int64 fee = 5;
+  optional bytes requesterPublicKey = 6;
+  optional bytes signSignature = 7;
+  repeated string signatures = 8;
+  optional string id = 9;
+  optional int64 height = 10;
+  optional string blockId = 11;
+  required string args = 12;
+  optional string message = 13;
 }
 
 message Asset {
@@ -150,7 +146,7 @@ message BlockPropose {
   required string id = 2;
   required int32 timestamp = 3;
   required bytes generatorPublicKey = 4;
-  required string address = 5;
+  required string peerId = 5;
   required bytes hash = 6;
   required bytes signature = 7;
 }

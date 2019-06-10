@@ -3,6 +3,7 @@ const sandboxHelper = require('../utils/sandbox.js')
 const slots = require('../utils/slots.js')
 require('colors')
 
+
 let modules
 let library
 let self
@@ -16,6 +17,7 @@ priv.genesisBlock = null
 priv.total = 0
 priv.blocksToSync = 0
 priv.syncIntervalId = null
+priv.lastCheckUnconfirmedAt = 0
 
 function Loader(cb, scope) {
   library = scope
@@ -59,41 +61,40 @@ priv.syncTrigger = (turnOn) => {
   }
 }
 
-priv.loadFullDb = (peer, cb) => {
-  const peerStr = `${peer.host}:${peer.port - 1}`
-
+priv.loadFullDb = (peerId, cb) => {
   const commonBlockId = priv.genesisBlock.block.id
 
-  library.logger.debug(`Loading blocks from genesis from ${peerStr}`)
+  library.logger.debug(`Loading blocks from genesis from ${peerId}`)
 
-  modules.blocks.loadBlocksFromPeer(peer, commonBlockId, cb)
+  modules.blocks.loadBlocksFromPeer(peerId, commonBlockId, cb)
 }
 
-priv.findUpdate = (lastBlock, peer, cb) => {
-  const peerStr = `${peer.host}:${peer.port - 1}`
+priv.findUpdate = (lastBlock, peerId, cb) => {
+  library.logger.info(`Looking for common block with ${[peerId]}`)
 
-  library.logger.info(`Looking for common block with ${peerStr}`)
-
-  modules.blocks.getCommonBlock(peer, lastBlock.height, (err, commonBlock) => {
+  modules.blocks.getCommonBlock(peerId, lastBlock.height, (err, commonBlock) => {
     if (err || !commonBlock) {
       library.logger.error('Failed to get common block:', err)
       return cb()
     }
 
     library.logger.info(`Found common block ${commonBlock.id} (at ${commonBlock.height})
-      with peer ${peerStr}, last block height is ${lastBlock.height}`)
+      with peer ${peerId}, last block height is ${lastBlock.height}`)
     const toRemove = lastBlock.height - commonBlock.height
 
     if (toRemove >= 5) {
-      library.logger.error(`long fork with peer ${peerStr}`)
+      library.logger.error(`long fork with peer ${peerId}`)
       return cb()
     }
 
     return (async () => {
       try {
-        modules.transactions.clearUnconfirmed()
         if (toRemove > 0) {
+          modules.transactions.clearUnconfirmed()
+          modules.transactions.clearFailedTrsCache()
+          
           await app.sdb.rollbackBlock(commonBlock.height)
+          modules.block.evitCachedFailedTransactionsUntil(commonBlock.height)
           modules.blocks.setLastBlock(app.sdb.lastBlock)
           library.logger.debug('set new last block', app.sdb.lastBlock)
         } else {
@@ -103,10 +104,10 @@ priv.findUpdate = (lastBlock, peer, cb) => {
         library.logger.error('Failed to rollback block', e)
         return cb()
       }
-      library.logger.debug(`Loading blocks from peer ${peerStr}`)
-      return modules.blocks.loadBlocksFromPeer(peer, commonBlock.id, (err2) => {
+      library.logger.debug(`Loading blocks from peer ${peerId}`)
+      return modules.blocks.loadBlocksFromPeer(peerId, commonBlock.id, (err2) => {
         if (err) {
-          library.logger.error(`Failed to load blocks, ban 60 min: ${peerStr}`, err2)
+          library.logger.error(`Failed to load blocks, ban 60 min: ${peerId}`, err2)
         }
         cb()
       })
@@ -115,14 +116,13 @@ priv.findUpdate = (lastBlock, peer, cb) => {
 }
 
 priv.loadBlocks = (lastBlock, cb) => {
-  modules.peer.randomRequest('getHeight', {}, (err, ret, peer) => {
+  modules.peer.randomRequest('getHeight', {}, (err, ret, peerId) => {
     if (err) {
-      library.logger.error('Failed to request form random peer', err)
+      library.logger.error('Failed to request from random peer, ', err)
       return cb()
     }
 
-    const peerStr = `${peer.host}:${peer.port - 1}`
-    library.logger.info(`Check blockchain on ${peerStr}`)
+    library.logger.info(`Check blockchain on ${peerId}`)
 
     ret.height = Number.parseInt(ret.height, 10)
 
@@ -138,7 +138,7 @@ priv.loadBlocks = (lastBlock, cb) => {
     })
 
     if (!report) {
-      library.logger.info(`Failed to parse blockchain height: ${peerStr}\n${library.scheme.getLastError()}`)
+      library.logger.info(`Failed to parse blockchain height: ${peerId}\n${library.scheme.getLastError()}`)
       return cb()
     }
 
@@ -146,21 +146,21 @@ priv.loadBlocks = (lastBlock, cb) => {
       priv.blocksToSync = ret.height
 
       if (lastBlock.id !== priv.genesisBlock.block.id) {
-        return priv.findUpdate(lastBlock, peer, cb)
+        return priv.findUpdate(lastBlock, peerId, cb)
       }
-      return priv.loadFullDb(peer, cb)
+      return priv.loadFullDb(peerId, cb)
     }
     return cb()
   })
 }
 
-priv.loadUnconfirmedTransactions = (cb) => {
-  modules.peer.randomRequest('getUnconfirmedTransactions', {}, (err, data, peer) => {
+priv.loadUnconfirmedTransactions = (cb) => { 
+  modules.peer.randomRequest('getUnconfirmedTransactions', { }, (err, ret, peerId) => {
     if (err) {
-      return cb()
+      return cb(err)
     }
 
-    const report = library.scheme.validate(data.body, {
+    const report = library.scheme.validate(ret, {
       type: 'object',
       properties: {
         transactions: {
@@ -172,30 +172,25 @@ priv.loadUnconfirmedTransactions = (cb) => {
     })
 
     if (!report) {
-      return cb()
+      return cb(err)
     }
 
-    const transactions = data.body.transactions
-    const peerStr = `${peer.host}:${peer.port - 1}`
-
+    const transactions = ret.transactions
     for (let i = 0; i < transactions.length; i++) {
       try {
         transactions[i] = library.base.transaction.objectNormalize(transactions[i])
       } catch (e) {
-        library.logger.info(`Transaction ${transactions[i] ? transactions[i].id : 'null'} is not valid, ban 60 min`, peerStr)
-        return cb()
+        library.logger.info(`Transaction ${transactions[i] ? transactions[i].id : 'null'} is invalid, ban 60 min`, peerId)
+        // TODO: ban peer...
+        return cb(e)
       }
     }
-
-    const trs = []
-    for (let i = 0; i < transactions.length; ++i) {
-      if (!modules.transactions.hasUnconfirmed(transactions[i])) {
-        trs.push(transactions[i])
-      }
-    }
-    library.logger.info(`Loading ${transactions.length} unconfirmed transaction from peer ${peerStr}`)
+    
+    library.logger.info(`Loading ${transactions.length} unconfirmed transactions from peer ${peerId}`)
+    
+    const trs = transactions.filter(t => !modules.transactions.existsTransaction(t.id))
     return library.sequence.add((done) => {
-      modules.transactions.processUnconfirmedTransactions(trs, done)
+      modules.transactions.processUnconfirmedTransactions(trs, true/* verify only */, done)
     }, cb)
   })
 }
@@ -229,7 +224,7 @@ Loader.prototype.startSyncBlocks = () => {
   })
 }
 
-Loader.prototype.syncBlocksFromPeer = (peer) => {
+Loader.prototype.syncBlocksFromPeer = (peerId) => {
   library.logger.debug('syncBlocksFromPeer enter')
   if (!priv.loaded || self.syncing()) {
     library.logger.debug('blockchain is already syncing')
@@ -239,9 +234,9 @@ Loader.prototype.syncBlocksFromPeer = (peer) => {
     library.logger.debug('syncBlocksFromPeer enter sequence')
     priv.syncing = true
     const lastBlock = modules.blocks.getLastBlock()
-    modules.transactions.clearUnconfirmed()
+    //modules.transactions.clearUnconfirmed()
     app.sdb.rollbackBlock().then(() => {
-      modules.blocks.loadBlocksFromPeer(peer, lastBlock.id, (err) => {
+      modules.blocks.loadBlocksFromPeer(peerId, lastBlock.id, (err) => {
         if (err) {
           library.logger.error('syncBlocksFromPeer error:', err)
         }
@@ -264,14 +259,14 @@ Loader.prototype.onPeerReady = () => {
     setTimeout(nextSync, slots.interval * 1000)
   })
 
-  setImmediate(() => {
-    if (!priv.loaded || self.syncing()) return
+  setTimeout(function syncTrans() {
     priv.loadUnconfirmedTransactions((err) => {
       if (err) {
-        library.logger.error('loadUnconfirmedTransactions timer:', err)
+        library.logger.error('fail to loadUnconfirmedTransactions', err)
+        setTimeout(syncTrans, slots.interval * 1000)
       }
     })
-  })
+  }, 3000)
 }
 
 Loader.prototype.onBind = (scope) => {

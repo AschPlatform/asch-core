@@ -17,35 +17,67 @@ const shared = {}
 priv.unconfirmedNumber = 0
 priv.unconfirmedTransactions = []
 priv.unconfirmedTransactionsIdIndex = {}
+priv.lastCheckUnconfirmedAt = 0
+
+const MAX_EMPTY_COUNT = 500
+const CHECK_TRANACTION_INTERVAL = 30 * 1000
+const MAX_CHECK_TIMES = 3 // (1 + 4 + 9) * 30s = 7min
 
 class TransactionPool {
   constructor() {
     this.index = new Map()
-    this.unConfirmed = []
+    this.unconfirmed = []
+    this.nullCount = 0
+  }
+
+  getNextCheckDelay(times) {
+    return ((times + 1) ** 2) * CHECK_TRANACTION_INTERVAL
   }
 
   add(trs) {
-    this.unConfirmed.push(trs)
-    this.index.set(trs.id, this.unConfirmed.length - 1)
+    const now = Date.now()
+    const ext = { 
+      nextCheckAt: this.getNextCheckDelay(0) + now, 
+      checkTimes: 0 
+    }
+
+    this.unconfirmed.push({ trs, ext })
+    this.index.set(trs.id, this.unconfirmed.length - 1)
   }
 
-  remove(id) {
-    const pos = this.index.get(id)
-    delete this.index[id]
-    this.unConfirmed[pos] = null
+  remove(...ids) {
+    for(let txId of [...ids]) {
+      const pos = this.index.get(txId)
+      if (pos === undefined) continue
+
+      this.index.delete(txId)
+      this.unconfirmed[pos] = null
+      this.nullCount++
+    }
+
+    if (this.nullCount >= MAX_EMPTY_COUNT) {
+      this.evitEmptyItems()
+    }
+  }
+
+  evitEmptyItems() {
+    this.unconfirmed = this.unconfirmed.filter(item => !item)
+    this.index.clear()
+    this.unconfirmed.forEach((item, idx) => this.index.set(item.trs.id, idx))
+    this.nullCount = 0
   }
 
   has(id) {
     const pos = this.index.get(id)
-    return pos !== undefined && !!this.unConfirmed[pos]
+    return pos !== undefined && !!this.unconfirmed[pos]
   }
 
   getUnconfirmed() {
     const a = []
 
-    for (let i = 0; i < this.unConfirmed.length; i++) {
-      if (this.unConfirmed[i]) {
-        a.push(this.unConfirmed[i])
+    for (let i = 0; i < this.unconfirmed.length; i++) {
+      if (this.unconfirmed[i]) {
+        a.push(this.unconfirmed[i].trs)
       }
     }
     return a
@@ -53,12 +85,37 @@ class TransactionPool {
 
   clear() {
     this.index = new Map()
-    this.unConfirmed = []
+    this.unconfirmed = []
+    this.nullCount = 0
   }
 
-  get(id) {
+  get(id, ext) {
     const pos = this.index.get(id)
-    return this.unConfirmed[pos]
+    if (pos === undefined) return undefined
+      
+    return !!ext ? 
+      this.unconfirmed[pos] : 
+      this.unconfirmed[pos].trs
+  }
+
+  checkTimeout() {
+    const timeoutItems = []
+    const retryItems = []
+    
+    const now = Date.now()
+    for(let { trs, ext } of this.getUnconfirmed()) {
+      if (ext.nextCheckAt > now) continue
+
+      if (ext.checkTimes >= MAX_CHECK_TIMES) {
+        timeoutItems.push(trs)
+      } else {
+        retryItems.push(trs)
+        ext.checkTimes++
+        ext.nextCheckAt = now + this.getNextCheckDelay(ext.checkTimes) 
+      }
+    }
+    this.remove(...timeoutItems.map(trs => trs.id))
+    return { retryItems, timeoutItems }
   }
 }
 
@@ -132,15 +189,25 @@ priv.attachStorageApi = () => {
   })
 }
 
+priv.broadcastUnconfirmedTransaction = (transaction) => {
+  library.bus.message('unconfirmedTransaction', transaction)
+}
+
 Transactions.prototype.getUnconfirmedTransaction = id => self.pool.get(id)
 
 Transactions.prototype.getUnconfirmedTransactionList = () => self.pool.getUnconfirmed()
 
 Transactions.prototype.removeUnconfirmedTransaction = id => self.pool.remove(id)
 
+Transactions.prototype.removeUnconfirmedTransactions = ids => ids.forEach(id => self.pool.remove(id))
+
 Transactions.prototype.hasUnconfirmed = id => self.pool.has(id)
 
 Transactions.prototype.clearUnconfirmed = () => self.pool.clear()
+
+Transactions.prototype.clearFailedTrsCache = () => self.failedTrsCache = new LimitCache()
+
+Transactions.prototype.cacheFailedTrsId = (id) => self.failedTrsCache.set(id, true)
 
 Transactions.prototype.getUnconfirmedTransactions = (_, cb) => setImmediate(
   cb, null,
@@ -195,11 +262,11 @@ Transactions.prototype.applyTransactionsAsync = async (transactions) => {
   }
 }
 
-Transactions.prototype.processUnconfirmedTransactions = (transactions, cb) => {
+Transactions.prototype.processUnconfirmedTransactions = (transactions, verifyOnly, cb) => {
   (async () => {
     try {
       for (const transaction of transactions) {
-        await self.processUnconfirmedTransactionAsync(transaction)
+        await self.processUnconfirmedTransactionAsync(transaction, verifyOnly)
       }
       cb(null, transactions)
     } catch (e) {
@@ -208,16 +275,16 @@ Transactions.prototype.processUnconfirmedTransactions = (transactions, cb) => {
   })()
 }
 
-Transactions.prototype.processUnconfirmedTransactionsAsync = async (transactions) => {
+Transactions.prototype.processUnconfirmedTransactionsAsync = async (transactions, verifyOnly) => {
   for (const transaction of transactions) {
-    await self.processUnconfirmedTransactionAsync(transaction)
+    await self.processUnconfirmedTransactionAsync(transaction, verifyOnly)
   }
 }
 
-Transactions.prototype.processUnconfirmedTransaction = (transaction, cb) => {
+Transactions.prototype.processUnconfirmedTransaction = (transaction, verifyOnly, cb) => {
   (async () => {
     try {
-      const ret = await self.processUnconfirmedTransactionAsync(transaction)
+      const ret = await self.processUnconfirmedTransactionAsync(transaction, verifyOnly)
       cb(null, ret)
     } catch (e) {
       cb(e.toString())
@@ -234,17 +301,7 @@ Transactions.prototype.existsTransaction = async (id) => {
   return exists
 }
 
-Transactions.prototype.broadcastUnconfirmedTransaction = (transaction) => {
-  const isLargeTransaction = transaction.type === 600
-
-  const messageName = isLargeTransaction ?
-    'unconfirmedLargeTransaction' :
-    'unconfirmedNormalTransaction'
-  library.bus.message(messageName, transaction)
-}
-
-
-Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) => {
+Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction, verifyOnly) => {
   try {
     if (!transaction.id) {
       transaction.id = library.base.transaction.getId(transaction)
@@ -255,7 +312,7 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
       }
     }
 
-    if (modules.blocks.isCollectingVotes()) {
+    if (modules.blocks.isCollectingVotes() && !verifyOnly) {
       throw new Error('Block consensus in processing')
     }
 
@@ -269,17 +326,26 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction) 
     if (exists) {
       throw new Error('Transaction already confirmed')
     }
-    const ret = await self.applyUnconfirmedTransactionAsync(transaction)
+    
+    let ret
+    if (verifyOnly) {
+      await self.verifyUnconfirmedTransactionAsync(transaction) 
+      ret = undefined
+    } else {
+      //FIXME: predict block info for context ???
+      ret = await self.applyUnconfirmedTransactionAsync(transaction) 
+    }
     self.pool.add(transaction)
     return ret
+
   } catch (e) {
-    self.failedTrsCache.set(transaction.id, true)
+    self.cacheFailedTrsId(transaction.id)
     throw e
   }
 }
 
-Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) => {
-  library.logger.debug('apply unconfirmed trs', transaction)
+Transactions.prototype.verifyUnconfirmedTransactionAsync = async (transaction) => {
+  library.logger.debug('verify unconfirmed transaction', transaction)
 
   const height = modules.blocks.getLastBlock().height
   const block = {
@@ -337,6 +403,16 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     const error = await library.base.transaction.verify(context)
     if (error) throw new Error(error)
   }
+  return context
+}
+
+Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction, block) => {
+  library.logger.debug('apply unconfirmed transaction', transaction.id)
+
+  const context = await self.verifyUnconfirmedTransactionAsync(transaction)
+  if (block) {
+    context.block = block
+  }
 
   app.sdb.beginContract()
   try {
@@ -345,6 +421,7 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction) =>
     return ret
   } catch (e) {
     await app.sdb.rollbackContract()
+    self.cacheFailedTrsId(transaction.id)
     library.logger.error(e)
     throw e
   }
@@ -494,6 +571,25 @@ Transactions.prototype.getById = (id, cb) => priv.getById(id, cb)
 // Events
 Transactions.prototype.onBind = (scope) => {
   modules = scope
+}
+
+Transactions.prototype.onProcessBlock = (block) => {
+  const now = Date.now()
+  // Prevent excessive checking
+  if ((now - priv.lastCheckUnconfirmedAt) < CHECK_TRANACTION_INTERVAL) {
+    return 
+  }
+  
+  try {
+    const { retryItems, timeoutItems } = self.pool.checkTimeout()
+    app.logger.debug(`Check timeout, retry =`, retryItems, 'timeout =', timeoutItems)
+    
+    retryItems.forEach(tx => priv.broadcastUnconfirmedTransaction(tx))
+    priv.lastCheckUnconfirmedAt = now
+    
+  } catch(err) {
+    app.logger.error(`Fail to check timeout for pool, height = ${block.height} `, err)
+  }
 }
 
 Transactions.prototype.getBlockTransactionsForV1 = (v1Block, cb) => {
@@ -732,6 +828,7 @@ shared.addTransactionUnsigned = (req, cb) => {
       message: { type: 'string', maxLength: 50 },
       senderId: { type: 'string', maxLength: 50 },
       mode: { type: 'integer', min: 0, max: 1 },
+      verifyOnly: { type: 'boolean' }
     },
     required: ['secret', 'fee', 'type'],
   })
@@ -760,8 +857,9 @@ shared.addTransactionUnsigned = (req, cb) => {
           keypair,
           mode: query.mode,
         })
-        const result = await self.processUnconfirmedTransactionAsync(trs)
-        self.broadcastUnconfirmedTransaction(trs)
+        const verifyOnly = !!query.verifyOnly
+        const result = await self.processUnconfirmedTransactionAsync(trs, verifyOnly)
+        priv.broadcastUnconfirmedTransaction(trs)
         callback(null, Object.assign({ transactionId: trs.id }, result))
       } catch (e) {
         library.logger.warn('Failed to process unsigned transaction', e)
@@ -777,6 +875,7 @@ shared.addTransactions = (req, cb) => {
     return cb('Invalid params')
   }
   const trs = req.body.transactions
+  const verifyOnly = !!req.body.verifyOnly
   try {
     for (const t of trs) {
       library.base.transaction.objectNormalize(t)
@@ -785,7 +884,7 @@ shared.addTransactions = (req, cb) => {
     return cb(`Invalid transaction body: ${e.toString()}`)
   }
   return library.sequence.add((callback) => {
-    self.processUnconfirmedTransactions(trs, callback)
+    self.processUnconfirmedTransactions(trs, verifyOnly, callback)
   }, cb)
 }
 

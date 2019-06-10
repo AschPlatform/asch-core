@@ -63,7 +63,7 @@ Consensus.prototype.hasEnoughVotes = votes => votes && votes.signatures
 Consensus.prototype.hasEnoughVotesRemote = votes => votes && votes.signatures
   && votes.signatures.length >= 6
 
-Consensus.prototype.getPendingBlock = () => self.pendingBlock
+Consensus.prototype.getPendingBlock = () => ({ block: self.pendingBlock, failedTransactions: self.failedTransactions})
 
 Consensus.prototype.hasPendingBlock = (timestamp) => {
   if (!self.pendingBlock) {
@@ -72,16 +72,18 @@ Consensus.prototype.hasPendingBlock = (timestamp) => {
   return slots.getSlotNumber(self.pendingBlock.timestamp) === slots.getSlotNumber(timestamp)
 }
 
-Consensus.prototype.setPendingBlock = (block) => {
+Consensus.prototype.setPendingBlock = (block, failedTransactions) => {
   self.pendingVotes = null
   self.votesKeySet = {}
   self.pendingBlock = block
+  self.failedTransactions = failedTransactions
 }
 
 Consensus.prototype.clearState = () => {
   self.pendingVotes = null
   self.votesKeySet = {}
   self.pendingBlock = null
+  self.failedTransactions = null
 }
 
 Consensus.prototype.addPendingVotes = (votes) => {
@@ -109,14 +111,14 @@ Consensus.prototype.addPendingVotes = (votes) => {
   return self.pendingVotes
 }
 
-Consensus.prototype.createPropose = (keypair, block, address) => {
+Consensus.prototype.createPropose = (keypair, block, peerId) => {
   assert(keypair.publicKey.toString('hex') === block.delegate)
   const propose = {
     height: block.height,
     id: block.id,
     timestamp: block.timestamp,
     generatorPublicKey: block.delegate,
-    address,
+    peerId,
   }
   const hash = self.getProposeHash(propose)
   propose.hash = hash.toString('hex')
@@ -143,11 +145,8 @@ Consensus.prototype.getProposeHash = (propose) => {
   }
 
   bytes.writeInt(propose.timestamp)
-
-  const parts = propose.address.split(':')
-  assert(parts.length === 2)
-  bytes.writeInt(ip.toLong(parts[0]))
-  bytes.writeInt(Number(parts[1]))
+  
+  bytes.writeString(propose.peerId)
 
   bytes.flip()
   return crypto.createHash('sha256').update(bytes.toBuffer()).digest()
