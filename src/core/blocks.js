@@ -304,7 +304,8 @@ Blocks.prototype.verifyBlockVotes = async (block, votes) => {
 Blocks.prototype.applyBlock = async (block) => {
   app.logger.trace('enter applyblock')
   const appliedTransactions = {}
-
+  let withStateHash = false
+  const hash = crypto.createHash('sha256')
   let error
   library.bus.message('preApplyBlock', block)
   priv.isApplyingBlock = true
@@ -313,10 +314,18 @@ Blocks.prototype.applyBlock = async (block) => {
       if (appliedTransactions[transaction.id]) {
         throw new Error(`Duplicate transaction in block: ${transaction.id}`)
       }
-      await modules.transactions.applyUnconfirmedTransactionAsync(transaction, block) //FIXME: check block info equal packTransactions
-      // TODO not just remove, should mark as applied
-      // modules.blockchain.transactions.removeUnconfirmedTransaction(transaction.id)
+      const applyResult = await modules.transactions.applyUnconfirmedTransactionAsync(transaction, block) //FIXME: check block info equal packTransactions
+      if (self.withStateChanges(transaction, applyResult)) {
+        withStateHash = true
+        hash.update(applyResult.stateChangesHash, 'hex')
+      }
       appliedTransactions[transaction.id] = transaction
+    }
+
+    const stateHash = withStateHash ? hash.digest().toString('hex') : ''
+    // block.stateChangesHash is undefined in history blocks
+    if (stateHash !== (block.stateChangesHash || '')) { 
+      throw new Error(`Invalid stateChangesHash, expected '${block.stateChangesHash}' but was'${stateHash}'`)
     }
   } catch (e) {
     app.logger.error(e)
@@ -621,8 +630,10 @@ Blocks.prototype.loadBlocksFromPeer = (peerId, id, cb) => {
 Blocks.prototype.packTransactions = async (block) => {
   const transactions = []
   const failedTransactions = []
-  const hash = crypto.createHash('sha256')
+  const payload = crypto.createHash('sha256')
+  const stateChanges = crypto.createHash('sha256')
   const startTime = process.uptime()
+  let withStateHash = false
   let payloadLength = 0
   let fees = 0
   for (const trans of modules.transactions.getUnconfirmedTransactionList()) {
@@ -634,7 +645,11 @@ Blocks.prototype.packTransactions = async (block) => {
     }
 
     try {
-      await modules.transactions.applyUnconfirmedTransactionAsync(trans, block)
+      const applyResult = await modules.transactions.applyUnconfirmedTransactionAsync(trans, block)
+      if (self.withStateChanges(trans, applyResult)) {
+        withStateHash = true
+        stateChanges.update(applyResult.stateChangesHash, 'hex')
+      }
     } catch (err) {
       const error = err.message || String(err)
       failedTransactions.push(trans.id)
@@ -644,7 +659,7 @@ Blocks.prototype.packTransactions = async (block) => {
 
     transactions.push(trans)
     fees += trans.fee
-    hash.update(bytes)
+    payload.update(bytes)
     payloadLength += bytes.length
     
     if (process.uptime() - startTime >= constants.buildBlockTimeoutSeconds) {
@@ -658,10 +673,16 @@ Blocks.prototype.packTransactions = async (block) => {
     transactions, 
     count: transactions.length,
     payloadLength, 
-    payloadHash: hash.digest().toString('hex')
+    payloadHash: payload.digest().toString('hex'),
+    stateChangesHash: withStateHash ? stateChanges.digest().toString('hex') : ''
   })
 
   return failedTransactions
+}
+
+Blocks.prototype.withStateChanges = (trans, applyResult) => {
+  return constants.smartContractType.includes(trans.type) && 
+    applyResult && applyResult.stateChangesHash
 }
 
 Blocks.prototype.buildBlock = async (keypair, timestamp) => {
