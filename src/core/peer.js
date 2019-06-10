@@ -23,7 +23,7 @@ const priv = {
 
   generateRandomIdentity: () => {
     const random = String(Math.round(Math.random() * 1000000000)) + String(Date.now())
-    const hash = crypto.createHash('sha256').update(random, 'utf-8').digest()
+    const hash = crypto.createHash('sha256').update(random, 'utf8').digest()
     const keypair = ed.MakeKeypair(hash)
     return {
       id: priv.generatePeerId(keypair.publicKey),

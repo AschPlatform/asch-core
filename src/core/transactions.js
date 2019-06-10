@@ -332,7 +332,6 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction, 
       await self.verifyUnconfirmedTransactionAsync(transaction) 
       ret = undefined
     } else {
-      //FIXME: predict block info for context ???
       ret = await self.applyUnconfirmedTransactionAsync(transaction) 
     }
     self.pool.add(transaction)
@@ -410,9 +409,11 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction, bl
   library.logger.debug('apply unconfirmed transaction', transaction.id)
 
   const context = await self.verifyUnconfirmedTransactionAsync(transaction)
-  if (block) {
-    context.block = block
-  }
+  const contextBlock = block || await modules.blocks.predictNextBlock()
+  const { delegate, height, prevBlockId, timestamp } = contextBlock
+  context.block = { delegate, height, prevBlockId, timestamp }
+  
+  library.logger.debug('context.block =', context.block)
 
   app.sdb.beginContract()
   try {

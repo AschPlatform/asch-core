@@ -685,6 +685,23 @@ Blocks.prototype.withStateChanges = (trans, applyResult) => {
     applyResult && applyResult.stateChangesHash
 }
 
+Blocks.prototype.predictNextBlock = async () => {
+  const lastBlock = self.getLastBlock()
+  const height = lastBlock.height + 1
+  const nextBlock = priv.nextBlock || {}
+  if (height === nextBlock.height ) {
+    return nextBlock
+  }
+
+  const nextSlot = slots.getNextSlot()
+  const timestamp = slots.getSlotTime(nextSlot)
+  const delegates = await PIFY(modules.delegates.generateDelegateList)(height)
+  const delegate = delegates[nextSlot % slots.delegates]
+
+  priv.nextBlock = { delegate, height, timestamp, prevBlockId: lastBlock.id }
+  return priv.nextBlock
+}
+
 Blocks.prototype.buildBlock = async (keypair, timestamp) => {
   const delegate = keypair.publicKey.toString('hex')
   const prevBlockId = priv.lastBlock.id
