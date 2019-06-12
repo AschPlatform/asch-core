@@ -29,7 +29,6 @@ priv.attachRESTAPI = () => {
   const router = new Router()
 
   router.use((req, res, next) => {
-
     res.set(priv.headers)
     if (req.headers.magic !== library.config.magic) {
       return res.status(500).send({
@@ -83,7 +82,7 @@ priv.attachRESTAPI = () => {
       } else {
         library.bus.message('unconfirmedTransaction', transaction)
         const result = (!ret) ? { success: true, transactionId: transaction.id } :
-          Object.assign({ transactionId: transaction.id }, ret) 
+          Object.assign({ transactionId: transaction.id }, ret)
         res.status(200).json(result)
       }
     })
@@ -137,7 +136,7 @@ priv.attachP2PAPI = () => {
     }
     const newBlock = priv.latestBlocksCache.get(params.id)
     if (!newBlock) {
-      return cb('New block not found: '+ params.id )
+      return cb(`New block not found: ${params.id}`)
     }
     return cb(null, newBlock)
   })
@@ -225,7 +224,7 @@ priv.attachP2PAPI = () => {
   handleRPC('getUnconfirmedTransactions', (req, cb) => {
     const { ids = [] } = req.params
     const idSet = new Set()
-    ids.forEach(id => {
+    ids.forEach((id) => {
       if (!idSet.has(id)) idSet.add(id)
     })
 
@@ -234,11 +233,9 @@ priv.attachP2PAPI = () => {
     return cb(null, { transactions })
   })
 
-  handleRPC('getHeight', (req, cb) => {
-    return cb(null, {
-      height: modules.blocks.getLastBlock().height,
-    })
-  })
+  handleRPC('getHeight', (req, cb) => cb(null, {
+    height: modules.blocks.getLastBlock().height,
+  }))
 }
 
 Transport.prototype.broadcast = (topic, data) => {
@@ -268,7 +265,7 @@ Transport.prototype.onBlockchainReady = () => {
 Transport.prototype.onPeerReady = () => {
   priv.attachP2PAPI()
 
-  modules.peer.subscribe('newBlockHeader', (data, peerId, callbackForward) => {
+  modules.peer.subscribe('newBlockHeader', (data, peerId) => {
     if (modules.loader.syncing()) {
       return
     }
@@ -282,13 +279,11 @@ Transport.prototype.onPeerReady = () => {
       library.logger.error('Invalid message data')
       return
     }
-    
-    const height = data.height
-    const id = data.id.toString('hex')
-    const prevBlockId = data.prevBlockId.toString('hex')
+
+    const { id, height, prevBlockId } = data
     if (height === lastBlock.height && id === lastBlock.id) {
       library.logger.debug('Receive processed block', { height, id, prevBlockId })
-      return 
+      return
     }
 
     if (height !== lastBlock.height + 1 || prevBlockId !== lastBlock.id) {
@@ -301,7 +296,7 @@ Transport.prototype.onPeerReady = () => {
       return
     }
 
-    library.logger.info('Receive new block header', { height, id })
+    library.logger.info('Receive new block header', data)
     modules.peer.request('newBlock', { id }, peerId, (err, result) => {
       if (err) {
         library.logger.error('Failed to get latest block data', err)
@@ -320,8 +315,9 @@ Transport.prototype.onPeerReady = () => {
         priv.latestBlocksCache.set(block.id, result)
         priv.blockHeaderMidCache.set(block.id, data)
         library.bus.message('receiveBlock', block, votes, result.failedTransactions)
-        //forward newBlockHeader message
-        //callbackForward(null, true)
+        // We will verify the block and broadcast it in receiveBlock event,
+        // so we need not to forward newBlockHeader message
+        // callbackForward(null, true)
       } catch (e) {
         library.logger.error(`normalize block or votes object error: ${e.toString()}`, result)
       }
@@ -330,7 +326,8 @@ Transport.prototype.onPeerReady = () => {
 
   modules.peer.subscribe('propose', (data, peerId, callbackForward) => {
     try {
-      const propose = library.protobuf.decodeBlockPropose(data.propose)
+      const buffer = Buffer.from(data.propose, 'base64')
+      const propose = library.protobuf.decodeBlockPropose(buffer)
       library.bus.message('receivePropose', propose)
       // forward propose message
       callbackForward(null, true)
@@ -341,6 +338,7 @@ Transport.prototype.onPeerReady = () => {
 
   modules.peer.subscribe('votes', (data, peerId, callbackForward) => {
     library.bus.message('receiveVotes', data.votes)
+    // forward votes message
     return callbackForward(null, true)
   })
 
@@ -352,31 +350,32 @@ Transport.prototype.onPeerReady = () => {
       return
     }
 
-    (async() => {
-      try{
-        const id = data.id.toString('hex')
+    (async () => {
+      try {
+        const id = data.id
         library.logger.debug(`receive transaction ${id}`)
-        
+
         const exists = await modules.transactions.existsTransaction(id)
         if (exists) {
           library.logger.debug(`transaction ${id} exists or processed`)
-          return 
+          return
         }
-        
+
         const request = promisify(modules.peer.request)
         const getResult = await request('getUnconfirmedTransaction', { id }, peerId)
         library.logger.debug(`get transaction from remote peer ${peerId}, result`, getResult)
-        //TODO: check result error
+        // TODO: check result error
         if (!getResult || getResult.error) {
           library.logger.info(`fail to get transaction ${id} from peer ${peerId},`, getResult.error)
-          return 
+          return
         }
 
         const transaction = library.base.transaction.objectNormalize(getResult.transaction)
         library.sequence.add((cb) => {
-          modules.transactions.processUnconfirmedTransaction(transaction, true/* verify only */, (err, ret) => {
+          // The 2rd argument is true to indicate 'verify only'
+          modules.transactions.processUnconfirmedTransaction(transaction, true, (err, ret) => {
             cb(err, ret)
-            //forward transaction message if process OK
+            // forward transaction message if process OK
             callbackForward(err, !err)
           })
         }, (err) => {
@@ -384,9 +383,8 @@ Transport.prototype.onPeerReady = () => {
             library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
           }
         })
-      }
-      catch(err) {
-        library.logger.info(`failed to get / verify transaction`, err)
+      } catch (err) {
+        library.logger.info('failed to get / verify transaction', err)
       }
     })()
   })
@@ -394,30 +392,31 @@ Transport.prototype.onPeerReady = () => {
 
 Transport.prototype.onUnconfirmedTransaction = (transaction) => {
   const data = {
-    id: Buffer.from(transaction.id, 'hex')
+    id: transaction.id,
   }
   self.broadcast('transaction', data)
 }
 
 Transport.prototype.onNewBlock = (block, votes, failedTransactions) => {
-  priv.latestBlocksCache.set(block.id,
+  priv.latestBlocksCache.set(
+    block.id,
     {
       block,
       votes: library.protobuf.encodeBlockVotes(votes).toString('base64'),
-      failedTransactions
-    }
+      failedTransactions,
+    },
   )
   const data = priv.blockHeaderMidCache.get(block.id) || {
-    id: Buffer.from(block.id, 'hex'),
+    id: block.id,
     height: block.height,
-    prevBlockId: Buffer.from(block.prevBlockId, 'hex'),
+    prevBlockId: block.prevBlockId,
   }
   self.broadcast('newBlockHeader', data)
 }
 
 Transport.prototype.onNewPropose = (propose) => {
   const data = {
-    propose: library.protobuf.encodeBlockPropose(propose),
+    propose: library.protobuf.encodeBlockPropose(propose).toString('base64'),
   }
   self.broadcast('propose', data)
 }
@@ -426,14 +425,14 @@ Transport.prototype.sendVotes = (votes, peerId) => {
   const data = { votes, peerId }
   if (!modules.peer.isConnected(peerId)) {
     self.broadcast('votes', data)
-    return 
+    return
   }
 
-  modules.peer.request('votes', data, peerId, (err, ret) => {
+  modules.peer.request('votes', data, peerId, (err) => {
     if (err) {
       self.broadcast('votes', data)
     }
-  })  
+  })
 }
 
 Transport.prototype.cleanup = (cb) => {
@@ -450,7 +449,7 @@ shared.message = (msg, cb) => {
 }
 
 shared.request = (req, cb) => {
-  //TODO: check it !!!
+  // TODO: check it !!!
   if (req.params.peer) {
     modules.peer.request('chainRequest', req, req.params.peer, (err, res) => {
       if (res) {

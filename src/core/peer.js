@@ -4,7 +4,6 @@ const ip = require('ip')
 const crypto = require('crypto')
 const base58check = require('../utils/base58check')
 const ed = require('../utils/ed')
-const _ = require('lodash')
 const P2PNode = require('fastp2p')
 const PeerInfo = require('fastp2p/peer-addr')
 const Router = require('../utils/router.js')
@@ -28,48 +27,50 @@ const priv = {
     return {
       id: priv.generatePeerId(keypair.publicKey),
       publicKey: keypair.publicKey.toString('hex'),
-      privateKey: keypair.privateKey.toString('hex')
+      privateKey: keypair.privateKey.toString('hex'),
     }
   },
 
   generatePeerId: (publicKey) => {
     const hash1 = crypto.createHash('sha256').update(publicKey).digest()
     const hash2 = crypto.createHash('ripemd160').update(hash1).digest()
-    return 'P' + base58check.encode(hash2)
+    return `P${base58check.encode(hash2)}`
   },
 
-  getNodeIdentity: (path) => {
-    if (!fs.existsSync(path)) {
+  getNodeIdentity: (idFilePath) => {
+    if (!fs.existsSync(idFilePath)) {
       const identity = priv.generateRandomIdentity()
-      fs.writeFileSync(path, JSON.stringify(identity))
+      fs.writeFileSync(idFilePath, JSON.stringify(identity))
       return identity
     }
 
-    const content = fs.readFileSync(path).toString('utf8')
+    const content = fs.readFileSync(idFilePath).toString('utf8')
     return JSON.parse(content)
   },
 
-  getLocalPeerId: () => {
-    return priv.nodeIdentity.id
-  },
-  
-  getAddress(ip, port, id) {
-    return `/ipv4/${ip}/tcp/${port}/${id}`
+  getLocalPeerId: () => priv.nodeIdentity.id,
+
+  getAddress(peerIp, port, id) {
+    return `/ipv4/${peerIp}/tcp/${port}/${id}`
   },
 
   initP2P: async (p2pOptions) => {
-    const { publicIp, peerPort, peersDbDir, timeout = DEFAULT_PEER_TIMEOUT, seedList = [] } = p2pOptions 
-    
+    const {
+      publicIp, peerPort, peersDbDir, timeout = DEFAULT_PEER_TIMEOUT, seedList = [],
+    } = p2pOptions
+
     const nodeIdPath = path.join(peersDbDir, 'nodeId')
     const identity = priv.getNodeIdentity(nodeIdPath)
+    const pubIp = (publicIp || '').trim().toLowerCase()
+    const isPublicIp = !!pubIp && ip.isPublic(pubIp) && pubIp !== '0.0.0.0' && pubIp !== 'localhost'
     const p2pNode = new P2PNode({
       config: {
         seeds: seedList.map(n => priv.getAddress(n.ip, n.port, n.id)),
-        publicIp: ip.isPublic(publicIp) ? publicIp : '',
-        peerDb: path.join(peersDbDir, 'peers.db')
+        publicIp: isPublicIp ? pubIp : '',
+        peerDb: path.join(peersDbDir, 'peers.db'),
       },
       port: peerPort,
-      id: identity.id
+      id: identity.id,
     })
 
     priv.nodeIdentity = identity
@@ -80,24 +81,18 @@ const priv = {
     p2pNode.start()
   },
 
-  isConnected: (peerId) => {
-    return priv.p2pNode.connections.has(peerId)
-  },
+  isConnected: peerId => priv.p2pNode.connections.has(peerId),
 
-  getRandomPeerId: () => {  
-    let peerIds = priv.getPeerIds() 
-    //peerIds = peerIds.length === 0 ? priv.bootstrapPeerIds : peerIds
+  getRandomPeerId: () => {
+    const peerIds = priv.getPeerIds()
+    // peerIds = peerIds.length === 0 ? priv.bootstrapPeerIds : peerIds
     const rnd = Math.floor(Math.random() * peerIds.length)
-    return peerIds[rnd]     
+    return peerIds[rnd]
   },
 
-  getPeerIds: () => {
-    return priv.p2pNode.getPeers()
-  },
+  getPeerIds: () => priv.p2pNode.getPeers(),
 
-  getPeers: () => {
-    return priv.p2pNode.discovery.peerBook.getUnbannedPeers()
-  },
+  getPeers: () => priv.p2pNode.discovery.peerBook.getUnbannedPeers(),
 
   handleRPC: (method, handler) => {
     priv.p2pNode.rpc.serve(method, handler)
@@ -123,33 +118,19 @@ const priv = {
   },
 
   subscribe: (topic, handler) => {
-    const isBuffer = (value) => {
-      return !!value && typeof value === 'object' &&
-        value['type'] === 'Buffer' && 
-        Array.isArray(value['data'])
-    }
-
     priv.p2pNode.gossip.subscribe(topic, (msg, peerId) => {
-      const { topic, data } = msg
-      if (!topic) {
-        library.logger.debug('Receive invalid publish message topic', topic, msg)
+      const { topic: msgTopic, data } = msg
+      if (!msgTopic) {
+        library.logger.debug('Receive invalid publish message topic', msgTopic, msg)
         return
       }
 
-      let formattedData = {}
-      if (!!data) {
-        for (const key in data) {
-          const item = data[key]
-          formattedData[key] = isBuffer(item) ? Buffer.from(item['data']) : item
-        }
-      }
-      
-      handler(formattedData, peerId, (err, forward) => {
+      handler(data, peerId, (err, forward) => {
         // if (err) {
         //   library.logger.debug('Fail to handler publish message', msg, err)
-        //   return 
+        //   return
         // }
-  
+
         if (forward) {
           priv.p2pNode.gossip.forward(msg)
         }
@@ -214,13 +195,9 @@ Peer.prototype.addChain = (config, cb) => {
   cb()
 }
 
-Peer.prototype.getPeerId = () => {
-  return priv.getLocalPeerId()
-}
+Peer.prototype.getPeerId = () => priv.getLocalPeerId()
 
-Peer.prototype.isConnected = (peerId) => {
-  return priv.isConnected(peerId)
-}
+Peer.prototype.isConnected = peerId => priv.isConnected(peerId)
 
 Peer.prototype.getVersion = () => ({
   version: library.config.version,
@@ -251,13 +228,13 @@ Peer.prototype.isCompatible = (version) => {
 }
 
 Peer.prototype.handleRPC = (method, handler) => {
-  //handler: (req: { params, peer }, callback) => void
+  // handler: (req: { params, peer }, callback) => void
   priv.handleRPC(method, handler)
 }
 
 Peer.prototype.subscribe = (topic, handler) => {
-  //handler: (message, peerId, callback) => void
-  //foward the message if arguments[1] of callback is true 
+  // handler: (message, peerId, callback) => void
+  // foward the message if arguments[1] of callback is true
   priv.subscribe(topic, handler)
 }
 
@@ -280,10 +257,10 @@ Peer.prototype.request = (method, params, peerId, cb) => {
 
 Peer.prototype.randomRequest = (method, params, cb) => {
   const peerId = priv.getRandomPeerId()
-  if (!peerId) return cb('None peer found')
-  
+  if (!peerId) return cb('No peer found')
+
   library.logger.debug('select random peer', peerId)
-  self.request(method, params, peerId, cb)
+  return self.request(method, params, peerId, cb)
 }
 
 Peer.prototype.sandboxApi = (call, args, cb) => {
@@ -298,13 +275,13 @@ Peer.prototype.onBind = (scope) => {
 Peer.prototype.onBlockchainReady = () => {
   const { publicIp, peerPort } = library.config
   const { list, blackList, timeout } = library.config.peers
-  
+
   priv.attachApi()
   priv.initP2P({
     publicIp,
     peerPort,
     seedList: list,
-    blackList: blackList,
+    blackList,
     timeout,
     peersDbDir: global.Config.dataDir,
   }).then(() => {
@@ -320,11 +297,11 @@ shared.getPeers = (req, cb) => {
     library.logger.warn('network is not ready')
     return
   }
-  const peers = priv.getPeers().map(p => {
+  const peers = priv.getPeers().map((p) => {
     const { host, port, id } = PeerInfo.parse(p.addr)
     return { host, port, id }
   })
-  setImmediate(()=> cb(null, { peers })) 
+  setImmediate(() => cb(null, { peers }))
 }
 
 shared.getPeer = (req, cb) => {

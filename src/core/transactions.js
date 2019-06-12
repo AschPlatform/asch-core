@@ -30,15 +30,15 @@ class TransactionPool {
     this.nullCount = 0
   }
 
-  getNextCheckDelay(times) {
+  static getNextCheckDelay(times) {
     return ((times + 1) ** 2) * CHECK_TRANACTION_INTERVAL
   }
 
   add(trs) {
     const now = Date.now()
-    const ext = { 
-      nextCheckAt: this.getNextCheckDelay(0) + now, 
-      checkTimes: 0 
+    const ext = {
+      nextCheckAt: TransactionPool.getNextCheckDelay(0) + now,
+      checkTimes: 0,
     }
 
     this.unconfirmed.push({ trs, ext })
@@ -46,7 +46,7 @@ class TransactionPool {
   }
 
   remove(...ids) {
-    for(let txId of [...ids]) {
+    for (const txId of [...ids]) {
       const pos = this.index.get(txId)
       if (pos === undefined) continue
 
@@ -92,18 +92,18 @@ class TransactionPool {
   get(id, ext) {
     const pos = this.index.get(id)
     if (pos === undefined) return undefined
-      
-    return !!ext ? 
-      this.unconfirmed[pos] : 
+
+    return ext ?
+      this.unconfirmed[pos] :
       this.unconfirmed[pos].trs
   }
 
   checkTimeout() {
     const timeoutItems = []
     const retryItems = []
-    
+
     const now = Date.now()
-    for(let { trs, ext } of this.getUnconfirmed()) {
+    for (const { trs, ext } of this.getUnconfirmed()) {
       if (ext.nextCheckAt > now) continue
 
       if (ext.checkTimes >= MAX_CHECK_TIMES) {
@@ -111,7 +111,7 @@ class TransactionPool {
       } else {
         retryItems.push(trs)
         ext.checkTimes++
-        ext.nextCheckAt = now + this.getNextCheckDelay(ext.checkTimes) 
+        ext.nextCheckAt = now + TransactionPool.getNextCheckDelay(ext.checkTimes)
       }
     }
     this.remove(...timeoutItems.map(trs => trs.id))
@@ -199,15 +199,19 @@ Transactions.prototype.getUnconfirmedTransactionList = () => self.pool.getUnconf
 
 Transactions.prototype.removeUnconfirmedTransaction = id => self.pool.remove(id)
 
-Transactions.prototype.removeUnconfirmedTransactions = ids => ids.forEach(id => self.pool.remove(id))
+Transactions.prototype.removeUnconfirmedTransactions = (ids) => {
+  ids.forEach(id => self.pool.remove(id))
+}
 
 Transactions.prototype.hasUnconfirmed = id => self.pool.has(id)
 
 Transactions.prototype.clearUnconfirmed = () => self.pool.clear()
 
-Transactions.prototype.clearFailedTrsCache = () => self.failedTrsCache = new LimitCache()
+Transactions.prototype.clearFailedTrsCache = () => {
+  self.failedTrsCache = new LimitCache()
+}
 
-Transactions.prototype.cacheFailedTrsId = (id) => self.failedTrsCache.set(id, true)
+Transactions.prototype.cacheFailedTrsId = id => self.failedTrsCache.set(id, true)
 
 Transactions.prototype.getUnconfirmedTransactions = (_, cb) => setImmediate(
   cb, null,
@@ -326,17 +330,16 @@ Transactions.prototype.processUnconfirmedTransactionAsync = async (transaction, 
     if (exists) {
       throw new Error('Transaction already confirmed')
     }
-    
+
     let ret
     if (verifyOnly) {
-      await self.verifyUnconfirmedTransactionAsync(transaction) 
+      await self.verifyUnconfirmedTransactionAsync(transaction)
       ret = undefined
     } else {
-      ret = await self.applyUnconfirmedTransactionAsync(transaction) 
+      ret = await self.applyUnconfirmedTransactionAsync(transaction)
     }
     self.pool.add(transaction)
     return ret
-
   } catch (e) {
     self.cacheFailedTrsId(transaction.id)
     throw e
@@ -410,9 +413,13 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction, bl
 
   const context = await self.verifyUnconfirmedTransactionAsync(transaction)
   const contextBlock = block || await modules.blocks.predictNextBlock()
-  const { delegate, height, prevBlockId, timestamp } = contextBlock
-  context.block = { delegate, height, prevBlockId, timestamp }
-  
+  const {
+    delegate, height, prevBlockId, timestamp,
+  } = contextBlock
+  context.block = {
+    delegate, height, prevBlockId, timestamp,
+  }
+
   library.logger.debug('context.block =', context.block)
 
   app.sdb.beginContract()
@@ -578,17 +585,16 @@ Transactions.prototype.onProcessBlock = (block) => {
   const now = Date.now()
   // Prevent excessive checking
   if ((now - priv.lastCheckUnconfirmedAt) < CHECK_TRANACTION_INTERVAL) {
-    return 
+    return
   }
-  
+
   try {
     const { retryItems, timeoutItems } = self.pool.checkTimeout()
-    app.logger.debug(`Check timeout, retry =`, retryItems, 'timeout =', timeoutItems)
-    
+    app.logger.debug('Check timeout, retry =', retryItems, 'timeout =', timeoutItems)
+
     retryItems.forEach(tx => priv.broadcastUnconfirmedTransaction(tx))
     priv.lastCheckUnconfirmedAt = now
-    
-  } catch(err) {
+  } catch (err) {
     app.logger.error(`Fail to check timeout for pool, height = ${block.height} `, err)
   }
 }
@@ -829,7 +835,7 @@ shared.addTransactionUnsigned = (req, cb) => {
       message: { type: 'string', maxLength: 50 },
       senderId: { type: 'string', maxLength: 50 },
       mode: { type: 'integer', min: 0, max: 1 },
-      verifyOnly: { type: 'boolean' }
+      verifyOnly: { type: 'boolean' },
     },
     required: ['secret', 'fee', 'type'],
   })

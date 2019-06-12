@@ -92,7 +92,7 @@ priv.findUpdate = (lastBlock, peerId, cb) => {
         if (toRemove > 0) {
           modules.transactions.clearUnconfirmed()
           modules.transactions.clearFailedTrsCache()
-          
+
           await app.sdb.rollbackBlock(commonBlock.height)
           modules.block.evitCachedFailedTransactionsUntil(commonBlock.height)
           modules.blocks.setLastBlock(app.sdb.lastBlock)
@@ -154,7 +154,7 @@ priv.loadBlocks = (lastBlock, cb) => {
   })
 }
 
-priv.loadUnconfirmedTransactions = (cb) => { 
+priv.loadUnconfirmedTransactions = (cb) => {
   modules.peer.randomRequest('getUnconfirmedTransactions', { }, (err, ret, peerId) => {
     if (err) {
       return cb(err)
@@ -185,9 +185,9 @@ priv.loadUnconfirmedTransactions = (cb) => {
         return cb(e)
       }
     }
-    
+
     library.logger.info(`Loading ${transactions.length} unconfirmed transactions from peer ${peerId}`)
-    
+
     const trs = transactions.filter(t => !modules.transactions.existsTransaction(t.id))
     return library.sequence.add((done) => {
       modules.transactions.processUnconfirmedTransactions(trs, true/* verify only */, done)
@@ -234,7 +234,7 @@ Loader.prototype.syncBlocksFromPeer = (peerId) => {
     library.logger.debug('syncBlocksFromPeer enter sequence')
     priv.syncing = true
     const lastBlock = modules.blocks.getLastBlock()
-    //modules.transactions.clearUnconfirmed()
+    // modules.transactions.clearUnconfirmed()
     app.sdb.rollbackBlock().then(() => {
       modules.blocks.loadBlocksFromPeer(peerId, lastBlock.id, (err) => {
         if (err) {

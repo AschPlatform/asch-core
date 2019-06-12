@@ -310,21 +310,21 @@ Blocks.prototype.applyBlock = async (block) => {
   library.bus.message('preApplyBlock', block)
   priv.isApplyingBlock = true
   try {
-    for (const transaction of block.transactions) {
-      if (appliedTransactions[transaction.id]) {
-        throw new Error(`Duplicate transaction in block: ${transaction.id}`)
+    for (const tx of block.transactions) {
+      if (appliedTransactions[tx.id]) {
+        throw new Error(`Duplicate transaction in block: ${tx.id}`)
       }
-      const applyResult = await modules.transactions.applyUnconfirmedTransactionAsync(transaction, block) //FIXME: check block info equal packTransactions
-      if (self.withStateChanges(transaction, applyResult)) {
+      const applyResult = await modules.transactions.applyUnconfirmedTransactionAsync(tx, block)
+      if (self.withStateChanges(tx, applyResult)) {
         withStateHash = true
         hash.update(applyResult.stateChangesHash, 'hex')
       }
-      appliedTransactions[transaction.id] = transaction
+      appliedTransactions[tx.id] = tx
     }
 
     const stateHash = withStateHash ? hash.digest().toString('hex') : ''
     // block.stateChangesHash is undefined in history blocks
-    if (stateHash !== (block.stateChangesHash || '')) { 
+    if (stateHash !== (block.stateChangesHash || '')) {
       throw new Error(`Invalid stateChangesHash, expected '${block.stateChangesHash}' but was'${stateHash}'`)
     }
   } catch (e) {
@@ -398,7 +398,7 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
     await self.applyRound(block)
     if (failedTransactions && failedTransactions.length > 0) {
       self.cacheFailedTransactions(block.height, failedTransactions)
-    } 
+    }
   } catch (e) {
     app.logger.error(block, failedTransactions)
     app.logger.error('save block error: ', e)
@@ -415,7 +415,7 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
     self.setLastBlock(block)
     modules.transactions.removeUnconfirmedTransactions([
       ...(failedTransactions || []),
-      ...block.transactions.map(t => t.id)
+      ...block.transactions.map(t => t.id),
     ])
 
     if (options.broadcast) {
@@ -443,20 +443,20 @@ Blocks.prototype.cacheFailedTransactions = (height, failedTransactions) => {
 
 Blocks.prototype.getCachedFailedTransactions = (minHeight, maxHeight) => {
   const result = {}
-  for(let height = minHeight; height <= maxHeight; height++) {
+  for (let height = minHeight; height <= maxHeight; height++) {
     const failedItems = priv.failedTransactionsCache.get(height)
     if (failedItems) {
       result[height] = failedItems
     }
   }
   return result
-} 
+}
 
 Blocks.prototype.evitCachedFailedTransactionsUntil = (height) => {
   library.logger.debug('evit cached failed transactions to height', height)
 
   let currentHeight = priv.lastBlock.height
-  while(currentHeight > height) {
+  while (currentHeight > height) {
     priv.failedTransactionsCache.evit(currentHeight)
     currentHeight--
   }
@@ -640,7 +640,7 @@ Blocks.prototype.packTransactions = async (block) => {
     const bytes = library.base.transaction.getBytes(trans)
     // TODO check payload length when process remote block
     if ((payloadLength + bytes.length) > constants.maxPayloadLength) {
-      app.logger.debug(`finish packing transactions due to payload size exceed 8M`)
+      app.logger.debug('finish packing transactions due to payload size exceed 8M')
       break
     }
 
@@ -653,7 +653,7 @@ Blocks.prototype.packTransactions = async (block) => {
     } catch (err) {
       const error = err.message || String(err)
       failedTransactions.push(trans.id)
-      app.logger.info(`fail to pack transaction ${trans.id} to block ${block.height},`, error )
+      app.logger.info(`fail to pack transaction ${trans.id} to block ${block.height},`, error)
       continue
     }
 
@@ -661,35 +661,35 @@ Blocks.prototype.packTransactions = async (block) => {
     fees += trans.fee
     payload.update(bytes)
     payloadLength += bytes.length
-    
+
     if (process.uptime() - startTime >= constants.buildBlockTimeoutSeconds) {
-      app.logger.debug(`finish packing transactions due to timeout`)
+      app.logger.debug('finish packing transactions due to timeout')
       break
     }
   }
 
-  Object.assign(block, { 
-    fees, 
-    transactions, 
+  Object.assign(block, {
+    fees,
+    transactions,
     count: transactions.length,
-    payloadLength, 
+    payloadLength,
     payloadHash: payload.digest().toString('hex'),
-    stateChangesHash: withStateHash ? stateChanges.digest().toString('hex') : ''
+    stateChangesHash: withStateHash ? stateChanges.digest().toString('hex') : '',
   })
 
   return failedTransactions
 }
 
-Blocks.prototype.withStateChanges = (trans, applyResult) => {
-  return constants.smartContractType.includes(trans.type) && 
-    applyResult && applyResult.stateChangesHash
-}
+Blocks.prototype.withStateChanges = (trans, applyResult) =>
+  constants.smartContractType.includes(trans.type) &&
+  applyResult &&
+  applyResult.stateChangesHash
 
 Blocks.prototype.predictNextBlock = async () => {
   const lastBlock = self.getLastBlock()
   const height = lastBlock.height + 1
   const nextBlock = priv.nextBlock || {}
-  if (height === nextBlock.height ) {
+  if (height === nextBlock.height) {
     return nextBlock
   }
 
@@ -698,7 +698,9 @@ Blocks.prototype.predictNextBlock = async () => {
   const delegates = await PIFY(modules.delegates.generateDelegateList)(height)
   const delegate = delegates[nextSlot % slots.delegates]
 
-  priv.nextBlock = { delegate, height, timestamp, prevBlockId: lastBlock.id }
+  priv.nextBlock = {
+    delegate, height, timestamp, prevBlockId: lastBlock.id,
+  }
   return priv.nextBlock
 }
 
@@ -709,7 +711,9 @@ Blocks.prototype.buildBlock = async (keypair, timestamp) => {
   const reward = priv.blockStatus.calcReward(height)
   const version = 0
 
-  const block = { version, delegate, height, prevBlockId, timestamp, reward }
+  const block = {
+    version, delegate, height, prevBlockId, timestamp, reward,
+  }
   const failedTransactions = await self.packTransactions(block)
 
   block.signature = library.base.block.sign(block, keypair)
@@ -722,9 +726,9 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
   if (library.base.consensus.hasPendingBlock(timestamp)) {
     return null
   }
- 
-  await app.sdb.rollbackBlock() 
-  const { block, failedTransactions } = await self.buildBlock(keypair, timestamp) //FIXME: handle failed transactions 
+
+  await app.sdb.rollbackBlock()
+  const { block, failedTransactions } = await self.buildBlock(keypair, timestamp)
   let activeKeypairs
   try {
     activeKeypairs = await PIFY(modules.delegates.getActiveDelegateKeypairs)(block.height)
@@ -736,8 +740,9 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
   library.logger.info(`get active delegate keypairs len: ${activeKeypairs.length}`)
   const localVotes = library.base.consensus.createVotes(activeKeypairs, block)
   if (library.base.consensus.hasEnoughVotes(localVotes)) {
-    //modules.transactions.clearUnconfirmed()
-    await self.processBlock(block, failedTransactions, { local: true, broadcast: true, votes: localVotes })
+    // modules.transactions.clearUnconfirmed()
+    const options = { local: true, broadcast: true, votes: localVotes }
+    await self.processBlock(block, failedTransactions, options)
     library.logger.info(`Forged new block id: ${block.id}, height: ${block.height}, round: ${modules.round.calc(block.height)}, slot: ${slots.getSlotNumber(block.timestamp)}, reward: ${block.reward}`)
     return null
   }
@@ -890,7 +895,7 @@ Blocks.prototype.onReceiveVotes = (votes) => {
   library.sequence.add((cb) => {
     const totalVotes = library.base.consensus.addPendingVotes(votes)
     if (totalVotes && totalVotes.signatures) {
-      library.logger.debug(`receive new votes, total votes number ${totalVotes.signatures.length}`)
+      library.logger.debug(`Receive new votes, total votes ${totalVotes.signatures.length}`)
     }
     if (library.base.consensus.hasEnoughVotes(totalVotes)) {
       const { block, failedTransactions } = library.base.consensus.getPendingBlock()
@@ -898,8 +903,9 @@ Blocks.prototype.onReceiveVotes = (votes) => {
       const id = block.id
       return (async () => {
         try {
-          //modules.transactions.clearUnconfirmed()
-          await self.processBlock(block, failedTransactions, { votes: totalVotes, local: true, broadcast: true })
+          // modules.transactions.clearUnconfirmed()
+          const options = { votes: totalVotes, local: true, broadcast: true }
+          await self.processBlock(block, failedTransactions, options)
           library.logger.info(`Forged new block id: ${id}, height: ${height}, round: ${modules.round.calc(height)}, slot: ${slots.getSlotNumber(block.timestamp)}, reward: ${block.reward}`)
         } catch (err) {
           library.logger.error(`Failed to process confirmed block height: ${height} id: ${id} error: ${err}`)

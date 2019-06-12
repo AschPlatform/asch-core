@@ -496,7 +496,8 @@ shared.submitOutTransfer = (req) => {
 
   library.sequence.add((done) => {
     library.logger.info(`Received transaction ${transaction.id} from http client`)
-    return modules.transactions.processUnconfirmedTransaction(transaction, true/* verify only */, done)
+    // The 2rd argument is true to indicate 'verify only'
+    return modules.transactions.processUnconfirmedTransaction(transaction, true, done)
   }, (err) => {
     if (err) {
       const errMsg = err.message ? err.message : err.toString()
