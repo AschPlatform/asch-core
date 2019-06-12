@@ -118,18 +118,16 @@ module.exports = {
     if (now <= netEnergyLimit.lastNetUpdateDay) {
       totalUsed += netEnergyLimit.netUsed
     }
-    if (totalUsed <= netEnergyLimit.netLimit) {
-      return true
-    }
+    return totalUsed <= netEnergyLimit.netLimit
 
-    totalUsed = netUsed
-    if (now <= netEnergyLimit.lastFreeNetUpdateDay) {
-      totalUsed += netEnergyLimit.freeNetUsed
-    }
-    if (totalUsed <= netEnergyLimit.freeNetLimit) {
-      return true
-    }
-    return false
+    // totalUsed = netUsed
+    // if (now <= netEnergyLimit.lastFreeNetUpdateDay) {
+    //   totalUsed += netEnergyLimit.freeNetUsed
+    // }
+    // if (totalUsed <= netEnergyLimit.freeNetLimit) {
+    //   return true
+    // }
+    // return false
   },
 
   async isEnergyCovered(gasLimit, address, blockHeight) {
@@ -150,11 +148,7 @@ module.exports = {
     if (now <= netEnergyLimit.lastEnergyUpdateDay) {
       totalUsed += netEnergyLimit.energyUsed
     }
-    if (totalUsed <= netEnergyLimit.energyLimit) {
-      return true
-    }
-
-    return false
+    return totalUsed <= netEnergyLimit.energyLimit
   },
 
   async consumeGasFee(fee, address, height, tid) {
@@ -204,9 +198,7 @@ module.exports = {
         isFeeDeduct: 0,
         address,
       })
-      return null
     }
-
     return null
   },
 
@@ -242,23 +234,23 @@ module.exports = {
       return null
     }
 
-    totalUsed = netUsed
-    if (now <= netEnergyLimit.lastFreeNetUpdateDay) {
-      totalUsed += netEnergyLimit.freeNetUsed
-    } else {
-      pledgeAccount.lastFreeNetUpdateDay = now
-    }
-    if (totalUsed <= netEnergyLimit.freeNetLimit) {
-      pledgeAccount.freeNetUsed = totalUsed
-      app.sdb.update('AccountPledge', pledgeAccount, { address })
-      app.sdb.create('Netenergyconsumption', {
-        tid,
-        height: blockHeight,
-        netUsed,
-        isFeeDeduct: 0,
-        address,
-      })
-    }
+    // totalUsed = netUsed
+    // if (now <= netEnergyLimit.lastFreeNetUpdateDay) {
+    //   totalUsed += netEnergyLimit.freeNetUsed
+    // } else {
+    //   pledgeAccount.lastFreeNetUpdateDay = now
+    // }
+    // if (totalUsed <= netEnergyLimit.freeNetLimit) {
+    //   pledgeAccount.freeNetUsed = totalUsed
+    //   app.sdb.update('AccountPledge', pledgeAccount, { address })
+    //   app.sdb.create('Netenergyconsumption', {
+    //     tid,
+    //     height: blockHeight,
+    //     netUsed,
+    //     isFeeDeduct: 0,
+    //     address,
+    //   })
+    // }
 
     return null
   },
