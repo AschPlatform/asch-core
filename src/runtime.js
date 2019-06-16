@@ -178,15 +178,15 @@ async function checkAndRecover() {
   const dbHeight = sdb.lastBlockHeight
   const contractHeight = await contractSandbox.getLastCommittedHeight()
 
-  if (dbHeight === contractHeight) return 
-  
-  app.logger.warn(`Inconsistent SmartDB and contract DB detected, try to recover`)
+  if (dbHeight === contractHeight) return
+
+  app.logger.warn('Inconsistent SmartDB and contract DB detected, try to recover')
   if (dbHeight !== contractHeight - 1) {
     const error = 'Cannot recover contract DB, please check it manually'
     app.logger.error(error, { dbHeight, contractHeight })
     throw new Error(error)
   }
-  
+
   try {
     const ret = await contractSandbox.rollback(dbHeight)
     if (!ret.success) throw new Error(ret.error)
@@ -356,7 +356,6 @@ module.exports = async function runtime(options) {
     pledges: require('./utils/pledges.js'),
   }
 
-  
   const contractSandbox = new AschContract.SandboxConnector({
     entry: require.resolve('asch-contract/sandbox-launcher.js'),
     dataDir: path.join(dataDir, '/contracts'),
