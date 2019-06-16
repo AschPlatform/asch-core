@@ -61,7 +61,7 @@ class TransactionPool {
   }
 
   evitEmptyItems() {
-    this.unconfirmed = this.unconfirmed.filter(item => !item)
+    this.unconfirmed = this.unconfirmed.filter(item => !!item)
     this.index.clear()
     this.unconfirmed.forEach((item, idx) => this.index.set(item.trs.id, idx))
     this.nullCount = 0
@@ -103,7 +103,9 @@ class TransactionPool {
     const retryItems = []
 
     const now = Date.now()
-    for (const { trs, ext } of this.getUnconfirmed()) {
+    for (const item of this.unconfirmed) {
+      if (!item) continue
+      const { trs, ext } = item
       if (ext.nextCheckAt > now) continue
 
       if (ext.checkTimes >= MAX_CHECK_TIMES) {
