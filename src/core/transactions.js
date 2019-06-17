@@ -27,7 +27,6 @@ class TransactionPool {
   constructor() {
     this.index = new Map()
     this.unconfirmed = []
-    this.nullCount = 0
   }
 
   static getNextCheckDelay(times) {
@@ -52,10 +51,10 @@ class TransactionPool {
 
       this.index.delete(txId)
       this.unconfirmed[pos] = null
-      this.nullCount++
     }
 
-    if (this.nullCount >= MAX_EMPTY_COUNT) {
+    const nullCount = this.unconfirmed.length - this.index.size
+    if (nullCount >= MAX_EMPTY_COUNT) {
       this.evitEmptyItems()
     }
   }
@@ -64,7 +63,6 @@ class TransactionPool {
     this.unconfirmed = this.unconfirmed.filter(item => !!item)
     this.index.clear()
     this.unconfirmed.forEach((item, idx) => this.index.set(item.trs.id, idx))
-    this.nullCount = 0
   }
 
   has(id) {
@@ -86,7 +84,6 @@ class TransactionPool {
   clear() {
     this.index = new Map()
     this.unconfirmed = []
-    this.nullCount = 0
   }
 
   get(id, ext) {
@@ -120,11 +117,8 @@ class TransactionPool {
     return { retryItems, timeoutItems }
   }
 
-  getSize(evitEmpty = false) {
-    if (evitEmpty) {
-      this.evitEmptyItems()
-    }
-    return this.unconfirmed.length
+  getSize() {
+    return this.index.size
   }
 }
 
@@ -210,7 +204,7 @@ Transactions.prototype.removeUnconfirmedTransaction = id => self.pool.remove(id)
 
 Transactions.prototype.removeUnconfirmedTransactions = (ids) => {
   ids.forEach(id => self.pool.remove(id))
-  return self.pool.getSize()
+  return self.pool.getSize(true)
 }
 
 Transactions.prototype.hasUnconfirmed = id => self.pool.has(id)
