@@ -5,6 +5,8 @@ const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const promisify = require('util').promisify
 
+const MAX_BLOCKS_JSON_SIZE = 4 * 1024 * 1024 // 4M
+
 let modules
 let library
 let self
@@ -41,7 +43,7 @@ priv.attachRESTAPI = () => {
     return next()
   })
 
-  router.post('transactions', (req, res) => {
+  router.post('/transactions', (req, res) => {
     const verifyOnly = !!req.body.verifyOnly
     if (modules.loader.syncing() && !verifyOnly) {
       return res.status(500).send({
@@ -126,6 +128,30 @@ priv.attachRESTAPI = () => {
   library.network.app.use('/peer', router)
 }
 
+priv.limitBlocksResultSize = (allBlocks, allFailedTransactions, maxSize = MAX_BLOCKS_JSON_SIZE) => {
+  const blocks = []
+  const failedTransactions = {}
+
+  let resultSize = 0
+  while (allBlocks.length > 0) {
+    const block = allBlocks.shift()
+    const failedOfHeight = allFailedTransactions[block.height]
+
+    const size = JSON.stringify(block).length +
+      (failedOfHeight ? JSON.stringify(failedOfHeight).length : 0)
+
+    if (resultSize + size >= maxSize) break
+
+    blocks.push(block)
+    if (failedOfHeight) {
+      failedTransactions[height] = failedOfHeight
+    }
+    resultSize += size
+  }
+
+  return { blocks, failedTransactions }
+}
+
 priv.attachP2PAPI = () => {
   const handleRPC = modules.peer.handleRPC
 
@@ -193,7 +219,8 @@ priv.attachP2PAPI = () => {
         const maxHeight = (minHeight + blocksLimit) - 1
         const blocks = await modules.blocks.getBlocks(minHeight, maxHeight, true)
         const failedTransactions = modules.blocks.getCachedFailedTransactions(minHeight, maxHeight)
-        return cb(null, { blocks, failedTransactions })
+        const blocksResult = priv.limitBlocksResultSize(blocks, failedTransactions)
+        return cb(null, blocksResult)
       } catch (e) {
         app.logger.error('Failed to get blocks or transactions', e)
         return cb(null, { blocks: [], failedTransactions: {} })
