@@ -187,11 +187,22 @@ priv.loadUnconfirmedTransactions = (cb) => {
     }
 
     library.logger.info(`Loading ${transactions.length} unconfirmed transactions from peer ${peerId}`)
+    const asyncProcessTransactions = (async () => {
+      const transArray = []
+      try {
+        for (const trans of transactions) {
+          const exists = await modules.transactions.existsTransaction(trans.id)
+          if (!exists) transArray.push(trans)
+        }
+      } catch (e) {
+        return cb(e)
+      }
 
-    const trs = transactions.filter(t => !modules.transactions.existsTransaction(t.id))
-    return library.sequence.add((done) => {
-      modules.transactions.processUnconfirmedTransactions(trs, true/* verify only */, done)
-    }, cb)
+      return library.sequence.add((done) => {
+        modules.transactions.processUnconfirmedTransactions(transArray, true/* verify only */, done)
+      }, cb)
+    })
+    return asyncProcessTransactions()
   })
 }
 
