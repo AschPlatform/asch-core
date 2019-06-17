@@ -198,6 +198,10 @@ priv.loadUnconfirmedTransactions = (cb) => {
 // Public methods
 Loader.prototype.syncing = () => priv.syncing
 
+Loader.prototype.setSyncing = (value) => {
+  priv.syncing = value
+}
+
 Loader.prototype.sandboxApi = (call, args, cb) => {
   sandboxHelper.callMethod(shared, call, args, cb)
 }

@@ -410,13 +410,14 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
   try {
     await app.sdb.commitBlock()
     const trsCount = block.transactions.length
-    app.logger.info(`Block applied correctly with ${trsCount} transactions`)
 
     self.setLastBlock(block)
-    modules.transactions.removeUnconfirmedTransactions([
+    const size = modules.transactions.removeUnconfirmedTransactions([
       ...(failedTransactions || []),
       ...block.transactions.map(t => t.id),
     ])
+
+    app.logger.info(`Block applied correctly with ${trsCount} transactions, ${size} in pool`)
 
     if (options.broadcast) {
       options.votes.signatures = options.votes.signatures.slice(0, 6)
@@ -777,7 +778,12 @@ Blocks.prototype.onReceiveBlock = (block, votes, failedTransactions) => {
   }
   priv.blockCache[block.id] = true
 
-  library.sequence.add((cb) => {
+  modules.loader.setSyncing(true)
+  library.sequence.add((callback) => {
+    const cb = (...args) => {
+      modules.loader.setSyncing(false)
+      callback(...args)
+    }
     if (block.prevBlockId === priv.lastBlock.id && priv.lastBlock.height + 1 === block.height) {
       library.logger.info(`Received new block id: ${block.id}`
         + ` height: ${block.height}`
@@ -804,8 +810,9 @@ Blocks.prototype.onReceiveBlock = (block, votes, failedTransactions) => {
       return cb('Fork')
     } if (block.height > priv.lastBlock.height + 1) {
       library.logger.info(`receive discontinuous block height ${block.height}`)
+      modules.loader.setSyncing(false)
       modules.loader.startSyncBlocks()
-      return cb()
+      return callback()
     }
     return cb()
   })

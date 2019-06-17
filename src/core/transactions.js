@@ -119,6 +119,13 @@ class TransactionPool {
     this.remove(...timeoutItems.map(trs => trs.id))
     return { retryItems, timeoutItems }
   }
+
+  getSize(evitEmpty = false) {
+    if (evitEmpty) {
+      this.evitEmptyItems()
+    }
+    return this.unconfirmed.length
+  }
 }
 
 // Constructor
@@ -203,6 +210,7 @@ Transactions.prototype.removeUnconfirmedTransaction = id => self.pool.remove(id)
 
 Transactions.prototype.removeUnconfirmedTransactions = (ids) => {
   ids.forEach(id => self.pool.remove(id))
+  return self.pool.getSize()
 }
 
 Transactions.prototype.hasUnconfirmed = id => self.pool.has(id)
