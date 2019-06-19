@@ -235,11 +235,11 @@ priv.attachP2PAPI = () => {
 
     const id = req.params.id
     const transaction = modules.transactions.getUnconfirmedTransaction(id)
-    if (!transaction) {
-      return cb(`Transaction not found, id = ${id}`)
-    }
+    const info = (transaction) ?
+      `response transaction, id = ${id}` :
+      `transaction not found, id = ${id}`
 
-    library.logger.debug(`response transaction, id = ${id}`)
+    library.logger.debug(info)
     return cb(null, { transaction })
   })
 
@@ -313,6 +313,14 @@ Transport.prototype.onPeerReady = () => {
       return
     }
 
+    if (height < lastBlock.height) {
+      const cachedBlock = priv.latestBlocksCache.get(id)
+      if (cachedBlock && cachedBlock.block && cachedBlock.block.height === height) {
+        library.logger.debug('Receive processed block', { height, id, prevBlockId })
+        return
+      }
+    }
+
     if (height !== lastBlock.height + 1 || prevBlockId !== lastBlock.id) {
       library.logger.warn('New block donnot match with last block', data)
       if (height > lastBlock.height + 5) {
@@ -378,41 +386,55 @@ Transport.prototype.onPeerReady = () => {
     }
 
     (async () => {
-      try {
-        const id = data.id
-        library.logger.debug(`receive transaction ${id}`)
+      const id = data.id
+      library.logger.debug(`receive transaction ${id}`)
 
+      let trans
+      try {
         const exists = await modules.transactions.existsTransaction(id)
         if (exists) {
-          library.logger.debug(`transaction ${id} exists or processed`)
+          library.logger.debug(`receive processed transaction ${id}`)
           return
         }
 
+        library.logger.debug(`try to get transaction from remote peer ${peerId}`)
         const request = promisify(modules.peer.request)
         const getResult = await request('getUnconfirmedTransaction', { id }, peerId)
-        library.logger.debug(`get transaction from remote peer ${peerId}, result`, getResult)
-        // TODO: check result error
+
         if (!getResult || getResult.error) {
           library.logger.info(`fail to get transaction ${id} from peer ${peerId},`, getResult.error)
           return
         }
 
-        const transaction = library.base.transaction.objectNormalize(getResult.transaction)
-        library.sequence.add((cb) => {
-          // The 2rd argument is true to indicate 'verify only'
-          modules.transactions.processUnconfirmedTransaction(transaction, true, (err, ret) => {
-            cb(err, ret)
-            // forward transaction message if process OK
-            callbackForward(err, !err)
-          })
-        }, (err) => {
-          if (err) {
-            library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
-          }
-        })
+        trans = getResult.transaction
+        if (!trans) {
+          // transaction maybe in new block
+          library.logger.debug(`transaction ${id} not found`)
+          return
+        }
       } catch (err) {
-        library.logger.info('failed to get / verify transaction', err)
+        library.logger.info(`fail to get transaction ${id} from peer ${peerId}`, err)
+        return
       }
+
+      const transaction = library.base.transaction.objectNormalize(trans)
+      library.sequence.add((cb) => {
+        // The 2rd argument is true to indicate 'verify only'
+        modules.transactions.processUnconfirmedTransaction(transaction, true, (err, ret) => {
+          cb(err, ret)
+          // forward transaction message if process OK
+          callbackForward(err, !err)
+        })
+      }, (err) => {
+        if (!err) return
+
+        // New blocks may be generated after queuing
+        if (/Transaction already/.test(err)) {
+          library.logger.debug(`Receive processed transaction ${transaction.id}`)
+        } else {
+          library.logger.warn(`Receive invalid transaction ${transaction.id}`, err)
+        }
+      })
     })()
   })
 }
