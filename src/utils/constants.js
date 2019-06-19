@@ -1,6 +1,6 @@
 module.exports = {
   maxAmount: 100000000,
-  maxPayloadLength: 8 * 1024 * 1024,
+  maxPayloadLength: 2 * 1024 * 1024, // max size of block payload
   buildBlockTimeoutSeconds: 5,
   blockHeaderLength: 248,
   addressLength: 208,

@@ -641,7 +641,7 @@ Blocks.prototype.packTransactions = async (block) => {
     const bytes = library.base.transaction.getBytes(trans)
     // TODO check payload length when process remote block
     if ((payloadLength + bytes.length) > constants.maxPayloadLength) {
-      app.logger.info('finish packing transactions due to payload size exceed 8M')
+      app.logger.info(`finish packing transactions due to payload size exceed ${constants.maxPayloadLength}`)
       break
     }
 
