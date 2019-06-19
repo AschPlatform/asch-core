@@ -778,12 +778,7 @@ Blocks.prototype.onReceiveBlock = (block, votes, failedTransactions) => {
   }
   priv.blockCache[block.id] = true
 
-  modules.loader.setSyncing(true)
-  library.sequence.add((callback) => {
-    const cb = (...args) => {
-      modules.loader.setSyncing(false)
-      callback(...args)
-    }
+  library.sequence.add((cb) => {
     if (block.prevBlockId === priv.lastBlock.id && priv.lastBlock.height + 1 === block.height) {
       library.logger.info(`Received new block id: ${block.id}`
         + ` height: ${block.height}`
@@ -810,9 +805,8 @@ Blocks.prototype.onReceiveBlock = (block, votes, failedTransactions) => {
       return cb('Fork')
     } if (block.height > priv.lastBlock.height + 1) {
       library.logger.info(`receive discontinuous block height ${block.height}`)
-      modules.loader.setSyncing(false)
       modules.loader.startSyncBlocks()
-      return callback()
+      return cb()
     }
     return cb()
   })
