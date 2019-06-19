@@ -1,26 +1,19 @@
 const util = require('util')
 const async = require('async')
-const slots = require('./slots.js')
-
-const TASK_TIMEOUT_MS = slots.interval * 1000
 
 function tick(task, cb) {
-  let isCallbacked = false
+  const start = process.uptime()
   const done = (err, res) => {
-    if (isCallbacked) {
-      return
-    }
-    isCallbacked = true
     if (task.done) {
       setImmediate(task.done, err, res)
+      const cost = process.uptime() - start
+      if (cost > 3) {
+        library.logger.info(`queuing task cost ${cost.toFixed(2)} s`)
+      }
     }
     setImmediate(cb)
   }
-  setTimeout(() => {
-    if (!isCallbacked) {
-      done('Worker task timeout')
-    }
-  }, TASK_TIMEOUT_MS)
+
   let args = [done]
   if (task.args) {
     args = args.concat(task.args)
