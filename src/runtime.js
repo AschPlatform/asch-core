@@ -181,21 +181,31 @@ async function checkAndRecover() {
   if (dbHeight === contractHeight) return
 
   app.logger.warn('Inconsistent SmartDB and contract DB detected, try to recover')
-  if (dbHeight !== contractHeight - 1) {
-    const error = 'Cannot recover contract DB, please check it manually'
+  if (Math.abs(dbHeight - contractHeight) > 1) {
+    const error = 'Cannot recover contract DB automatically, please check it manually'
     app.logger.error(error, { dbHeight, contractHeight })
     throw new Error(error)
   }
 
-  try {
-    const ret = await contractSandbox.rollback(dbHeight)
-    if (!ret.success) throw new Error(ret.error)
-    const currentContractHeight = await contractSandbox.getLastCommittedHeight()
-    app.logger.info(`Success recover contract DB, height ${contractHeight} -> ${currentContractHeight}`)
-  } catch (err) {
-    const error = `Fail to recover contract DB, ${err}`
-    app.logger.error(error)
-    throw new Error(error)
+  if (dbHeight > contractHeight) {
+    try {
+      await app.sdb.rollbackBlock(contractHeight)
+    } catch (err) {
+      const error = `Fail to recover SmartDB, ${err}`
+      app.logger.error(error)
+      throw new Error(error)
+    }
+  } else {
+    try {
+      const ret = await contractSandbox.rollback(dbHeight)
+      if (!ret.success) throw new Error(ret.error)
+      const currentContractHeight = await contractSandbox.getLastCommittedHeight()
+      app.logger.info(`Success recover contract DB, height ${contractHeight} -> ${currentContractHeight}`)
+    } catch (err) {
+      const error = `Fail to recover contract DB, ${err}`
+      app.logger.error(error)
+      throw new Error(error)
+    }
   }
 }
 
@@ -339,7 +349,7 @@ module.exports = async function runtime(options) {
   const BLOCK_HEADER_DIR = path.join(BLOCK_DB_DIR, 'blocks')
 
   adaptSmartDBLogger(options.appConfig)
-  app.sdb = new AschCore.SmartDB(BLOCK_DB_DIR, BLOCK_HEADER_DIR)
+  app.sdb = new AschCore.SmartDB(BLOCK_DB_DIR, BLOCK_HEADER_DIR, { blockTimeout: 10000 })
   app.balances = new BalanceManager(app.sdb)
   app.autoID = new AutoIncrement(app.sdb)
   app.events = new EventEmitter()
@@ -384,6 +394,18 @@ module.exports = async function runtime(options) {
   app.sdb.on(AschCore.SmartDB.events.beforeRollbackContract, async () => {
     const result = await contractSandbox.cancelChanges()
     if (!result.success) throw new Error(result.error)
+  })
+
+  app.sdb.on(AschCore.SmartDB.events.commitBlockTimeout, async (args) => {
+    // exit process
+    library.logger.error(`process exit unexpectedly due to commit block ${args.height} timeout`)
+    process.emit('cleanup')
+  })
+
+  app.sdb.on(AschCore.SmartDB.events.rollbackBlockTimeout, async (args) => {
+    // exit process
+    library.logger.error(`process exit unexpectedly due to rollback block to ${args.height} timeout`)
+    process.emit('cleanup')
   })
 
   await loadModels(path.join(appDir, 'model'))
