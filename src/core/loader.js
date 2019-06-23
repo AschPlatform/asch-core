@@ -94,8 +94,10 @@ priv.findUpdate = (lastBlock, peerId, cb) => {
           modules.transactions.clearFailedTrsCache()
 
           await app.sdb.rollbackBlock(commonBlock.height)
-          modules.block.evitCachedFailedTransactionsUntil(commonBlock.height)
+          const maxHeight = commonBlock.height + toRemove
+          modules.blocks.evitCachedFailedTransactions(commonBlock.height + 1, maxHeight)
           modules.blocks.setLastBlock(app.sdb.lastBlock)
+
           library.logger.debug('set new last block', app.sdb.lastBlock)
         } else {
           await app.sdb.rollbackBlock()
@@ -118,7 +120,7 @@ priv.findUpdate = (lastBlock, peerId, cb) => {
 priv.loadBlocks = (lastBlock, cb) => {
   modules.peer.randomRequest('getHeight', {}, (err, ret, peerId) => {
     if (err) {
-      library.logger.error('Failed to request from random peer,', err)
+      library.logger.warn('Failed to request from random peer,', err)
       return cb()
     }
 
@@ -221,9 +223,15 @@ Loader.prototype.startSyncBlocks = () => {
   }
   library.sequence.add((cb) => {
     library.logger.debug('startSyncBlocks enter sequence')
+
+    if (!self.needSync()) {
+      library.logger.debug('no need to synchronize blocks now')
+      return cb()
+    }
+
     priv.syncing = true
     const lastBlock = modules.blocks.getLastBlock()
-    priv.loadBlocks(lastBlock, (err) => {
+    return priv.loadBlocks(lastBlock, (err) => {
       if (err) {
         library.logger.error('loadBlocks error:', err)
       }
@@ -243,10 +251,15 @@ Loader.prototype.syncBlocksFromPeer = (peerId) => {
   }
   library.sequence.add((cb) => {
     library.logger.debug('syncBlocksFromPeer enter sequence')
+    if (!self.needSync()) {
+      library.logger.debug('no need to synchronize blocks now')
+      return cb()
+    }
+
     priv.syncing = true
     const lastBlock = modules.blocks.getLastBlock()
     // modules.transactions.clearUnconfirmed()
-    app.sdb.rollbackBlock().then(() => {
+    return app.sdb.rollbackBlock().then(() => {
       modules.blocks.loadBlocksFromPeer(peerId, lastBlock.id, (err) => {
         if (err) {
           library.logger.error('syncBlocksFromPeer error:', err)
@@ -259,12 +272,16 @@ Loader.prototype.syncBlocksFromPeer = (peerId) => {
   })
 }
 
+Loader.prototype.needSync = () => {
+  const lastBlock = modules.blocks.getLastBlock()
+  const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
+  return slots.getNextSlot() - lastSlot >= 3
+}
+
 // Events
 Loader.prototype.onPeerReady = () => {
   setImmediate(function nextSync() {
-    const lastBlock = modules.blocks.getLastBlock()
-    const lastSlot = slots.getSlotNumber(lastBlock.timestamp)
-    if (slots.getNextSlot() - lastSlot >= 3) {
+    if (self.needSync()) {
       self.startSyncBlocks()
     }
     setTimeout(nextSync, slots.interval * 1000)
@@ -273,7 +290,7 @@ Loader.prototype.onPeerReady = () => {
   setTimeout(function syncTrans() {
     priv.loadUnconfirmedTransactions((err) => {
       if (err) {
-        library.logger.error('fail to loadUnconfirmedTransactions', err)
+        library.logger.warn('fail to load unconfirmed transactions,', err)
         setTimeout(syncTrans, slots.interval * 1000)
       }
     })
