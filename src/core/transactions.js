@@ -424,9 +424,7 @@ Transactions.prototype.applyUnconfirmedTransactionAsync = async (transaction, bl
     delegate, height, prevBlockId, timestamp,
   }
 
-  library.logger.debug('context.block =', context.block)
-
-  app.sdb.beginContract()
+  app.sdb.beginContract(transaction.id)
   try {
     const ret = await library.base.transaction.apply(context)
     await app.sdb.commitContract()

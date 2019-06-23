@@ -115,6 +115,18 @@ module.exports = function init(options, done) {
         return b && b.length > 0
       })
 
+      ZSchema.registerFormat('hex_or_empty', (str) => {
+        try {
+          if (str === '') return true
+
+          b = Buffer.from(str, 'hex')
+        } catch (e) {
+          return false
+        }
+
+        return b && b.length > 0
+      })
+
       ZSchema.registerFormat('publicKey', (str) => {
         if (str.length === 0) {
           return true

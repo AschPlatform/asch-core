@@ -18,6 +18,15 @@ prv.getAddressByPublicKey = (publicKey) => {
   return address
 }
 
+prv.writeHexBytes = (buffer, hexString) => {
+  if (!hexString) return
+
+  const hexBuffer = Buffer.from(hexString, 'hex')
+  for (let i = 0; i < hexBuffer.length; i++) {
+    buffer.writeByte(hexBuffer[i])
+  }
+}
+
 let self
 // Constructor
 function Block(scope) {
@@ -106,7 +115,9 @@ Block.prototype.sign = (block, keypair) => {
 }
 
 Block.prototype.getBytes = (block, skipSignature) => {
-  const size = 4 + 4 + 8 + 4 + 8 + 8 + 8 + 4 + 32 + 32 + 64
+  const size = 4 + 4 + 8 + 4 + 8 + 8 + 64 + 64 + 32 +
+    block.version > 0 ? (32 /* stateHash */ + 32 /* contractStateHash */) : 0 +
+    64
 
   const bb = new ByteBuffer(size, true)
   bb.writeInt(block.version)
@@ -124,17 +135,15 @@ Block.prototype.getBytes = (block, skipSignature) => {
     bb.writeString('0')
   }
 
-  const payloadHashBuffer = Buffer.from(block.payloadHash, 'hex')
-  for (let i = 0; i < payloadHashBuffer.length; i++) {
-    bb.writeByte(payloadHashBuffer[i])
+  prv.writeHexBytes(bb, block.payloadHash)
+
+  if (block.version > 0) {
+    prv.writeHexBytes(bb, block.stateHash)
+    prv.writeHexBytes(bb, block.contractStateHash)
   }
 
-
   if (!skipSignature && block.signature) {
-    const signatureBuffer = Buffer.from(block.signature, 'hex')
-    for (let i = 0; i < signatureBuffer.length; i++) {
-      bb.writeByte(signatureBuffer[i])
-    }
+    prv.writeHexBytes(bb, block.signature)
   }
 
   bb.flip()
@@ -164,6 +173,7 @@ Block.prototype.verifySignature = (block) => {
 }
 
 Block.prototype.objectNormalize = (block) => {
+  // eslint-disable-next-line guard-for-in
   for (const i in block) {
     if (block[i] == null || typeof block[i] === 'undefined') {
       delete block[i]
@@ -196,6 +206,14 @@ Block.prototype.objectNormalize = (block) => {
       },
       payloadLength: {
         type: 'integer',
+      },
+      stateHash: {
+        type: 'string',
+        format: 'hex_or_empty',
+      },
+      contractStateHash: {
+        type: 'string',
+        format: 'hex_or_empty',
       },
       prevBlockId: {
         type: 'string',

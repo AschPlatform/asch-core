@@ -168,8 +168,12 @@ Blocks.prototype.setLastBlock = (block) => {
     if (priv.lastBlock.height >= 4290000) {
       featureSwitch.enable('enableLockReset')
     }
+    // TODO: check height to enable feature
     if (priv.lastBlock.height >= 6880000) {
       featureSwitch.enable('enableUpdateProduceRatio')
+    }
+    if (priv.lastBlock.height >= 6880000) {
+      featureSwitch.enable('enableBlock_v1')
     }
   } else {
     featureSwitch.enable('enableLongId')
@@ -183,6 +187,7 @@ Blocks.prototype.setLastBlock = (block) => {
     featureSwitch.enable('enableMoreLockTypes')
     featureSwitch.enable('enableLockReset')
     featureSwitch.enable('enableUpdateProduceRatio')
+    featureSwitch.enable('enableBlock_v1')
   }
   featureSwitch.enable('fixVoteNewAddressIssue')
   if (global.Config.netVersion === 'mainnet' && priv.lastBlock.height < 1854000) {
@@ -304,7 +309,7 @@ Blocks.prototype.verifyBlockVotes = async (block, votes) => {
 Blocks.prototype.applyBlock = async (block) => {
   app.logger.trace('enter applyblock')
   const appliedTransactions = {}
-  let withStateHash = false
+  let contractStateChanged = false
   const hash = crypto.createHash('sha256')
   let error
   library.bus.message('preApplyBlock', block)
@@ -315,17 +320,17 @@ Blocks.prototype.applyBlock = async (block) => {
         throw new Error(`Duplicate transaction in block: ${tx.id}`)
       }
       const applyResult = await modules.transactions.applyUnconfirmedTransactionAsync(tx, block)
-      if (self.withStateChanges(tx, applyResult)) {
-        withStateHash = true
+      if (self.withContractStateChanges(tx, applyResult)) {
+        contractStateChanged = true
         hash.update(applyResult.stateChangesHash, 'hex')
       }
       appliedTransactions[tx.id] = tx
     }
 
-    const stateHash = withStateHash ? hash.digest().toString('hex') : ''
+    const contractStateHash = contractStateChanged ? hash.digest().toString('hex') : ''
     // block.stateChangesHash is undefined in history blocks
-    if (stateHash !== (block.stateChangesHash || '')) {
-      throw new Error(`Invalid stateChangesHash, expected '${block.stateChangesHash}' but was'${stateHash}'`)
+    if (contractStateHash !== (block.contractStateHash || '')) {
+      throw new Error(`Invalid contract state hash, expected '${block.contractStateHash}' but was'${contractStateHash}'`)
     }
   } catch (e) {
     app.logger.error(e)
@@ -340,6 +345,35 @@ Blocks.prototype.applyBlock = async (block) => {
 
 Blocks.prototype.isApplyingBlock = () => priv.isApplyingBlock
 
+Blocks.prototype.commitGeneratedBlock = async (block, failedTransactions, votes) => {
+  try {
+    await app.sdb.commitBlock()
+    const trsCount = block.transactions.length
+
+    self.setLastBlock(block)
+    const size = modules.transactions.removeUnconfirmedTransactions([
+      ...(failedTransactions || []),
+      ...block.transactions.map(t => t.id),
+    ])
+
+    app.logger.info(`Commit generated block correctly with ${trsCount} transactions, ${size} in pool`)
+
+    votes.signatures = votes.signatures.slice(0, 6)
+    library.bus.message('newBlock', block, votes, failedTransactions)
+    library.bus.message('processBlock', block)
+
+    priv.blockCache = {}
+    priv.proposeCache = {}
+    priv.lastVoteTime = null
+    priv.isCollectingVotes = false
+    library.base.consensus.clearState()
+  } catch (e) {
+    await app.sdb.rollbackBlock()
+    app.logger.error(block)
+    app.logger.error('failed to commit block', e)
+  }
+}
+
 Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
   if (!priv.loaded) throw new Error('Blockchain is loading')
 
@@ -347,50 +381,47 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
   app.sdb.beginBlock(block)
 
   if (!block.transactions) block.transactions = []
-  if (!options.local) {
+
+  try {
+    block = library.base.block.objectNormalize(block)
+  } catch (e) {
+    library.logger.error(`Failed to normalize block: ${e}`, block)
+    throw e
+  }
+
+  await self.verifyBlock(block, options)
+
+  library.logger.debug('verify block ok')
+  if (block.height !== 0) {
+    const dbBlock = await app.sdb.getBlockById(block.id)
+    if (dbBlock) throw new Error(`Block already exists: ${block.id}`)
+  }
+
+  if (block.height !== 0) {
     try {
-      block = library.base.block.objectNormalize(block)
+      await PIFY(modules.delegates.validateBlockSlot)(block)
     } catch (e) {
-      library.logger.error(`Failed to normalize block: ${e}`, block)
-      throw e
+      library.logger.error(e)
+      throw new Error(`Can't verify slot: ${e}`)
     }
+    library.logger.debug('verify block slot ok')
+  }
 
-    // TODO sort transactions
-    // block.transactions = library.base.block.sortTransactions(block)
-    await self.verifyBlock(block, options)
+  // TODO use bloomfilter
+  for (const transaction of block.transactions) {
+    library.base.transaction.objectNormalize(transaction)
+  }
+  const idList = block.transactions.map(t => t.id)
+  if (await app.sdb.exists('Transaction', { id: { $in: idList } })) {
+    throw new Error('Block contain already confirmed transaction')
+  }
 
-    library.logger.debug('verify block ok')
-    if (block.height !== 0) {
-      const exists = (undefined !== await app.sdb.getBlockById(block.id))
-      if (exists) throw new Error(`Block already exists: ${block.id}`)
-    }
-
-    if (block.height !== 0) {
-      try {
-        await PIFY(modules.delegates.validateBlockSlot)(block)
-      } catch (e) {
-        library.logger.error(e)
-        throw new Error(`Can't verify slot: ${e}`)
-      }
-      library.logger.debug('verify block slot ok')
-    }
-
-    // TODO use bloomfilter
-    for (const transaction of block.transactions) {
-      library.base.transaction.objectNormalize(transaction)
-    }
-    const idList = block.transactions.map(t => t.id)
-    if (await app.sdb.exists('Transaction', { id: { $in: idList } })) {
-      throw new Error('Block contain already confirmed transaction')
-    }
-
-    app.logger.trace('before applyBlock')
-    try {
-      await self.applyBlock(block, options)
-    } catch (e) {
-      app.logger.error(`Failed to apply block: ${e}`)
-      throw e
-    }
+  app.logger.trace('before applyBlock')
+  try {
+    await self.applyBlock(block, options)
+  } catch (e) {
+    app.logger.error(`Failed to apply block: ${e}`)
+    throw e
   }
 
   try {
@@ -401,10 +432,19 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
     }
   } catch (e) {
     app.logger.error(block, failedTransactions)
-    app.logger.error('save block error: ', e)
+    app.logger.error('save block transactions error: ', e)
     await app.sdb.rollbackBlock()
-    self.evitCachedFailedTransactionsUntil(block.height - 1)
-    throw new Error(`Failed to save block: ${e}`)
+    self.evitCachedFailedTransactions(block.height)
+    throw new Error(`Failed to save block transactions: ${e}`)
+  }
+
+  if (block.version > 0) {
+    const stateHash = app.sdb.getChangesHash()
+    if (stateHash !== block.stateHash) {
+      await app.sdb.rollbackBlock()
+      self.evitCachedFailedTransactions(block.height)
+      throw new Error(`Invalid transaction state hash, expected '${block.stateHash}' but was '${stateHash}'`)
+    }
   }
 
   try {
@@ -453,13 +493,12 @@ Blocks.prototype.getCachedFailedTransactions = (minHeight, maxHeight) => {
   return result
 }
 
-Blocks.prototype.evitCachedFailedTransactionsUntil = (height) => {
-  library.logger.debug('evit cached failed transactions to height', height)
+Blocks.prototype.evitCachedFailedTransactions = (minHeight, maxHeight) => {
+  library.logger.debug('evit cached failed transactions ', minHeight, maxHeight)
 
-  let currentHeight = priv.lastBlock.height
-  while (currentHeight > height) {
-    priv.failedTransactionsCache.evit(currentHeight)
-    currentHeight--
+  let height = (maxHeight === undefined) ? minHeight : maxHeight
+  while (height >= minHeight) {
+    priv.failedTransactionsCache.evit(height--)
   }
 }
 
@@ -634,7 +673,7 @@ Blocks.prototype.packTransactions = async (block) => {
   const payload = crypto.createHash('sha256')
   const stateChanges = crypto.createHash('sha256')
   const startTime = process.uptime()
-  let withStateHash = false
+  let contractStateChanged = false
   let payloadLength = 0
   let fees = 0
   for (const trans of modules.transactions.getUnconfirmedTransactionList()) {
@@ -647,8 +686,8 @@ Blocks.prototype.packTransactions = async (block) => {
 
     try {
       const applyResult = await modules.transactions.applyUnconfirmedTransactionAsync(trans, block)
-      if (self.withStateChanges(trans, applyResult)) {
-        withStateHash = true
+      if (self.withContractStateChanges(trans, applyResult)) {
+        contractStateChanged = true
         stateChanges.update(applyResult.stateChangesHash, 'hex')
       }
     } catch (err) {
@@ -675,13 +714,13 @@ Blocks.prototype.packTransactions = async (block) => {
     count: transactions.length,
     payloadLength,
     payloadHash: payload.digest().toString('hex'),
-    stateChangesHash: withStateHash ? stateChanges.digest().toString('hex') : '',
+    contractStateHash: contractStateChanged ? stateChanges.digest().toString('hex') : '',
   })
 
   return failedTransactions
 }
 
-Blocks.prototype.withStateChanges = (trans, applyResult) =>
+Blocks.prototype.withContractStateChanges = (trans, applyResult) =>
   constants.smartContractType.includes(trans.type) &&
   applyResult &&
   applyResult.stateChangesHash
@@ -710,13 +749,28 @@ Blocks.prototype.buildBlock = async (keypair, timestamp) => {
   const prevBlockId = priv.lastBlock.id
   const height = priv.lastBlock.height + 1
   const reward = priv.blockStatus.calcReward(height)
-  const version = 0
+  const version = featureSwitch.isEnabled('enableBlock_v1') ? 1 : 0
 
   const block = {
     version, delegate, height, prevBlockId, timestamp, reward,
   }
-  const failedTransactions = await self.packTransactions(block)
 
+  app.sdb.beginBlock(block)
+
+  // TODO sort transactions
+  // block.transactions = library.base.block.sortTransactions(block)
+  const failedTransactions = await self.packTransactions(block)
+  try {
+    self.saveBlockTransactions(block)
+    await self.applyRound(block)
+  } catch (e) {
+    app.logger.error(block, failedTransactions)
+    app.logger.error('save block transactions error: ', e)
+    await app.sdb.rollbackBlock()
+    throw new Error(`Failed to save block transactions: ${e}`)
+  }
+
+  block.stateHash = app.sdb.getChangesHash()
   block.signature = library.base.block.sign(block, keypair)
   block.id = library.base.block.getId(block)
 
@@ -742,8 +796,7 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
   const localVotes = library.base.consensus.createVotes(activeKeypairs, block)
   if (library.base.consensus.hasEnoughVotes(localVotes)) {
     // modules.transactions.clearUnconfirmed()
-    const options = { local: true, broadcast: true, votes: localVotes }
-    await self.processBlock(block, failedTransactions, options)
+    await self.commitGeneratedBlock(block, failedTransactions, localVotes)
     library.logger.info(`Forged new block id: ${block.id}, height: ${block.height}, round: ${modules.round.calc(block.height)}, slot: ${slots.getSlotNumber(block.timestamp)}, reward: ${block.reward}`)
     return null
   }
@@ -752,6 +805,7 @@ Blocks.prototype.generateBlock = async (keypair, timestamp) => {
     const peerId = modules.peer.getPeerId()
     propose = library.base.consensus.createPropose(keypair, block, peerId)
   } catch (e) {
+    await app.sdb.rollbackBlock()
     library.logger.error('Failed to create propose', e)
     return null
   }
@@ -905,8 +959,7 @@ Blocks.prototype.onReceiveVotes = (votes) => {
       return (async () => {
         try {
           // modules.transactions.clearUnconfirmed()
-          const options = { votes: totalVotes, local: true, broadcast: true }
-          await self.processBlock(block, failedTransactions, options)
+          await self.commitGeneratedBlock(block, failedTransactions, totalVotes)
           library.logger.info(`Forged new block id: ${id}, height: ${height}, round: ${modules.round.calc(height)}, slot: ${slots.getSlotNumber(block.timestamp)}, reward: ${block.reward}`)
         } catch (err) {
           library.logger.error(`Failed to process confirmed block height: ${height} id: ${id} error: ${err}`)
