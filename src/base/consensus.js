@@ -1,7 +1,6 @@
 const assert = require('assert')
 const crypto = require('crypto')
 const ByteBuffer = require('bytebuffer')
-const ip = require('ip')
 const ed = require('../utils/ed.js')
 const slots = require('../utils/slots.js')
 const featureSwitch = require('../utils/feature-switch.js')
@@ -63,7 +62,8 @@ Consensus.prototype.hasEnoughVotes = votes => votes && votes.signatures
 Consensus.prototype.hasEnoughVotesRemote = votes => votes && votes.signatures
   && votes.signatures.length >= 6
 
-Consensus.prototype.getPendingBlock = () => ({ block: self.pendingBlock, failedTransactions: self.failedTransactions})
+Consensus.prototype.getPendingBlock = () =>
+  ({ block: self.pendingBlock, failedTransactions: self.failedTransactions })
 
 Consensus.prototype.hasPendingBlock = (timestamp) => {
   if (!self.pendingBlock) {
@@ -145,7 +145,7 @@ Consensus.prototype.getProposeHash = (propose) => {
   }
 
   bytes.writeInt(propose.timestamp)
-  
+
   bytes.writeString(propose.peerId)
 
   bytes.flip()

@@ -32,13 +32,13 @@ module.exports = class FIFOCache {
 
   evit(key) {
     if (!this._cachedItems.has(key)) return undefined
-    
+
     const keyIndex = this._keysQueue.indexOf(key)
     this._keysQueue.slice(keyIndex, 1)
 
     const value = this._cachedItems.get(key)
     this._cachedItems.delete(key)
-    
+
     return value
   }
 
@@ -56,11 +56,11 @@ module.exports = class FIFOCache {
       this.add(key, value)
     }
   }
-  
+
   get capacity() {
     return this._capacity
   }
-  
+
   get avaialbe() {
     return this.capacity - this.size
   }
