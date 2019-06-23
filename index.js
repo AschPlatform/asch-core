@@ -54,32 +54,33 @@ class Application {
           }
         }, (err) => {
           if (err) {
-            scope.logger.error('Error while cleaning up', err)
+            scope.logger.error('Error while cleaning up modules', err)
           } else {
-            scope.logger.info('Cleaned up successfully')
+            scope.logger.info('Cleaned up modules successfully')
           }
-          if (global.app.contract && global.app.contract.connected) {
-            (async () => {
+
+          (async () => {
+            if (global.app.contract && global.app.contract.connected) {
               try {
                 await global.app.contract.disconnect()
                 scope.logger.info('Smart contract engine disconnected')
               } catch (e) {
                 scope.logger.error('Failed to disconnect smart contract engine', e)
               }
-            })()
-          }
-          (async () => {
+            }
+
             try {
               await global.app.sdb.close()
-              scope.logger.info('Smart db closed')
+              scope.logger.info('SmartDB closed')
             } catch (e) {
-              scope.logger.error('Failed to close smart db', e)
+              scope.logger.error('Failed to close SmartDB', e)
             }
+
+            if (fs.existsSync(pidFile)) {
+              fs.unlinkSync(pidFile)
+            }
+            process.exit(1)
           })()
-          if (fs.existsSync(pidFile)) {
-            fs.unlinkSync(pidFile)
-          }
-          process.exit(1)
         })
       })
 
