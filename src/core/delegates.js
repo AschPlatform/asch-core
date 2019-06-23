@@ -405,7 +405,7 @@ Delegates.prototype.getDelegates = (query, cb) => {
     delegates[i].vote = delegates[i].votes
     delegates[i].missedblocks = delegates[i].missedBlocks
     delegates[i].producedblocks = delegates[i].producedBlocks
-    app.sdb.update('Delegate', delegates[i], { address: delegates[i].address })
+    // app.sdb.update('Delegate', delegates[i], { address: delegates[i].address })
   }
   return cb(null, delegates)
 }
