@@ -550,6 +550,15 @@ shared.getVoters = (req, cb) => {
         type: 'string',
         maxLength: 50,
       },
+      limit: {
+        type: 'integer',
+        minimum: 0,
+        maximum: 100,
+      },
+      offset: {
+        type: 'integer',
+        minimum: 0,
+      },
     },
     required: ['name'],
   }, (err) => {
@@ -559,9 +568,14 @@ shared.getVoters = (req, cb) => {
 
     return (async () => {
       try {
-        const votes = await app.sdb.findAll('Vote', { condition: { delegate: query.name } })
-        if (!votes || !votes.length) return cb(null, { accounts: [] })
+        const { limit: rawLimit, offset: rawOffset, name } = query
+        const limit = Number.parseInt(rawLimit, 10) || 20
+        const offset = Number.parseInt(rawOffset, 10) || 0
+        const condition = { delegate: name }
+        const count = await app.sdb.count('Vote', condition)
+        if (count <= 0) return cb(null, { count, accounts: [] })
 
+        const votes = await app.sdb.find('Vote', condition, { limit, offset })
         const addresses = votes.map(v => v.address)
         const accounts = await app.sdb.findAll('Account', { condition: { address: { $in: addresses } } })
         const lastBlock = modules.blocks.getLastBlock()
@@ -570,7 +584,7 @@ shared.getVoters = (req, cb) => {
           a.balance = a.xas
           a.weightRatio = (a.weight * 100) / totalSupply
         }
-        return cb(null, { accounts })
+        return cb(null, { count, accounts })
       } catch (e) {
         library.logger.error('Failed to find voters', e)
         return cb('Server error')
