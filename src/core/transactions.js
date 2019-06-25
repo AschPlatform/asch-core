@@ -831,7 +831,7 @@ shared.addTransactionUnsigned = (req, cb) => {
     type: 'object',
     properties: {
       secret: { type: 'string', maxLength: 100 },
-      fee: { type: 'integer', min: 1 },
+      fee: { type: 'integer', min: 0 },
       type: { type: 'integer', min: 1 },
       args: { type: 'array' },
       message: { type: 'string', maxLength: 50 },

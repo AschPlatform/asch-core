@@ -378,7 +378,7 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
   if (!priv.loaded) throw new Error('Blockchain is loading')
 
   let block = b
-  app.sdb.beginBlock(block)
+  await app.sdb.beginBlock(block)
 
   if (!block.transactions) block.transactions = []
 
@@ -690,17 +690,17 @@ Blocks.prototype.packTransactions = async (block) => {
         contractStateChanged = true
         stateChanges.update(applyResult.stateChangesHash, 'hex')
       }
+      payload.update(bytes)
+      payloadLength += bytes.length
+
+      transactions.push(trans)
+      fees += trans.fee
     } catch (err) {
       const error = err.message || String(err)
       failedTransactions.push(trans.id)
       app.logger.info(`fail to pack transaction ${trans.id} to block ${block.height},`, error)
       continue
     }
-
-    transactions.push(trans)
-    fees += trans.fee
-    payload.update(bytes)
-    payloadLength += bytes.length
 
     if (process.uptime() - startTime >= constants.buildBlockTimeoutSeconds) {
       app.logger.info('finish packing transactions due to timeout')
@@ -755,7 +755,7 @@ Blocks.prototype.buildBlock = async (keypair, timestamp) => {
     version, delegate, height, prevBlockId, timestamp, reward,
   }
 
-  app.sdb.beginBlock(block)
+  await app.sdb.beginBlock(block)
 
   // TODO sort transactions
   // block.transactions = library.base.block.sortTransactions(block)
