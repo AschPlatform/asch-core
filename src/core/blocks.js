@@ -13,6 +13,8 @@ const addressHelper = require('../utils/address.js')
 const featureSwitch = require('../utils/feature-switch.js')
 const benefits = require('../utils/benefits.js')
 
+const REGISTER_CONTRACT_TYPE = 600
+
 let genesisblock = null
 let modules
 let library
@@ -330,7 +332,7 @@ Blocks.prototype.applyBlock = async (block) => {
     const contractStateHash = contractStateChanged ? hash.digest().toString('hex') : ''
     // block.stateChangesHash is undefined in history blocks
     if (contractStateHash !== (block.contractStateHash || '')) {
-      throw new Error(`Invalid contract state hash, expected '${block.contractStateHash}' but was'${contractStateHash}'`)
+      throw new Error(`Invalid contract state hash, expect '${block.contractStateHash}' but '${contractStateHash}'`)
     }
   } catch (e) {
     app.logger.error(e)
@@ -676,7 +678,15 @@ Blocks.prototype.packTransactions = async (block) => {
   let contractStateChanged = false
   let payloadLength = 0
   let fees = 0
+  let registerCount = 0
   for (const trans of modules.transactions.getUnconfirmedTransactionList()) {
+    if (trans.type === REGISTER_CONTRACT_TYPE) {
+      if (registerCount < constants.maxContractRegisterationPerBlock) {
+        registerCount++
+      } else {
+        continue
+      }
+    }
     const bytes = library.base.transaction.getBytes(trans)
     // TODO check payload length when process remote block
     if ((payloadLength + bytes.length) > constants.maxPayloadLength) {
@@ -714,7 +724,7 @@ Blocks.prototype.packTransactions = async (block) => {
     count: transactions.length,
     payloadLength,
     payloadHash: payload.digest().toString('hex'),
-    contractStateHash: contractStateChanged ? stateChanges.digest().toString('hex') : '',
+    contractStateHash: (block.version > 0 && contractStateChanged) ? stateChanges.digest().toString('hex') : '',
   })
 
   return failedTransactions
@@ -770,7 +780,7 @@ Blocks.prototype.buildBlock = async (keypair, timestamp) => {
     throw new Error(`Failed to save block transactions: ${e}`)
   }
 
-  block.stateHash = app.sdb.getChangesHash()
+  block.stateHash = version > 0 ? app.sdb.getChangesHash() : ''
   block.signature = library.base.block.sign(block, keypair)
   block.id = library.base.block.getId(block)
 
