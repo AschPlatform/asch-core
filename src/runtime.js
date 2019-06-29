@@ -164,11 +164,10 @@ function adaptSmartDBLogger(config) {
 }
 
 async function loadSmartContracts() {
-  const contracts = await app.sdb.find('Contract', {}, undefined, undefined, ['name'])
-  contracts.forEach(async (c) => {
-    const loadResult = await app.contract.loadContract(c.name)
-    app.logger.debug(`Load contract '${c.name}' `, loadResult)
-  })
+  const contracts = await app.sdb.find('Contract', { state: 0 }, undefined, undefined, ['name'])
+  app.logger.info(`Loading ${contracts.length} contracts`)
+  await app.contract.loadContracts(contracts.map(c => c.name))
+  app.logger.info('Smart contracts loaded')
 }
 
 async function checkAndRecover() {
@@ -191,7 +190,7 @@ async function checkAndRecover() {
     try {
       await app.sdb.rollbackBlock(contractHeight)
     } catch (err) {
-      const error = `Fail to recover SmartDB, ${err}`
+      const error = `Fail to rollback SmartDB, ${err}`
       app.logger.error(error)
       throw new Error(error)
     }
@@ -199,14 +198,14 @@ async function checkAndRecover() {
     try {
       const ret = await contractSandbox.rollback(dbHeight)
       if (!ret.success) throw new Error(ret.error)
-      const currentContractHeight = await contractSandbox.getLastCommittedHeight()
-      app.logger.info(`Success recover contract DB, height ${contractHeight} -> ${currentContractHeight}`)
+      await contractSandbox.getLastCommittedHeight()
     } catch (err) {
-      const error = `Fail to recover contract DB, ${err}`
+      const error = `Fail to rollback contract DB, ${err}`
       app.logger.error(error)
       throw new Error(error)
     }
   }
+  app.logger.info('Recovery successful')
 }
 
 module.exports = async function runtime(options) {
