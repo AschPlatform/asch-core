@@ -126,12 +126,8 @@ const priv = {
       }
 
       handler(data, peerId, (err, forward) => {
-        // if (err) {
-        //   library.logger.debug('Fail to handler publish message', msg, err)
-        //   return
-        // }
-
         if (forward) {
+          library.logger.debug('forward message', msgTopic)
           priv.p2pNode.gossip.forward(msg)
         }
       })

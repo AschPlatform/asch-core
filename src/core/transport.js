@@ -300,7 +300,7 @@ Transport.prototype.onBlockchainReady = () => {
 Transport.prototype.onPeerReady = () => {
   priv.attachP2PAPI()
 
-  modules.peer.subscribe('newBlockHeader', (data, peerId) => {
+  modules.peer.subscribe('newBlockHeader', (data, peerId, callbackForward) => {
     if (modules.loader.syncing()) {
       return
     }
@@ -357,10 +357,7 @@ Transport.prototype.onPeerReady = () => {
         votes = library.base.consensus.normalizeVotes(votes)
         priv.latestBlocksCache.set(block.id, result)
         priv.blockHeaderMidCache.set(block.id, data)
-        library.bus.message('receiveBlock', block, votes, result.failedTransactions)
-        // We will verify the block and broadcast it in receiveBlock event,
-        // so we need not to forward newBlockHeader message
-        // callbackForward(null, true)
+        modules.blocks.onReceiveNewBlock(block, votes, result.failedTransactions, callbackForward)
       } catch (e) {
         library.logger.error(`normalize block or votes object error: ${e.toString()}`, result)
       }
@@ -454,7 +451,7 @@ Transport.prototype.onUnconfirmedTransaction = (transaction) => {
   self.broadcast('transaction', data)
 }
 
-Transport.prototype.onNewBlock = (block, votes, failedTransactions) => {
+Transport.prototype.onNewBlock = (block, votes, failedTransactions, broadcast = false) => {
   priv.latestBlocksCache.set(
     block.id,
     {
@@ -463,6 +460,9 @@ Transport.prototype.onNewBlock = (block, votes, failedTransactions) => {
       failedTransactions,
     },
   )
+
+  if (!broadcast) return
+
   const data = priv.blockHeaderMidCache.get(block.id) || {
     id: block.id,
     height: block.height,

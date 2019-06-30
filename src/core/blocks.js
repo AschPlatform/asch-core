@@ -361,7 +361,7 @@ Blocks.prototype.commitGeneratedBlock = async (block, failedTransactions, votes)
     app.logger.info(`Commit generated block correctly with ${trsCount} transactions, ${size} in pool`)
 
     votes.signatures = votes.signatures.slice(0, 6)
-    library.bus.message('newBlock', block, votes, failedTransactions)
+    library.bus.message('newBlock', block, votes, failedTransactions, true /* broadcast */)
     library.bus.message('processBlock', block)
 
     priv.blockCache = {}
@@ -461,10 +461,8 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
 
     app.logger.info(`Block applied correctly with ${trsCount} transactions, ${size} in pool`)
 
-    if (options.broadcast) {
-      options.votes.signatures = options.votes.signatures.slice(0, 6)
-      library.bus.message('newBlock', block, options.votes, failedTransactions)
-    }
+    options.votes.signatures = options.votes.signatures.slice(0, 6)
+    library.bus.message('newBlock', block, options.votes, failedTransactions)
     library.bus.message('processBlock', block)
 
     priv.blockCache = {}
@@ -832,7 +830,7 @@ Blocks.prototype.sandboxApi = (call, args, cb) => {
 }
 
 // Events
-Blocks.prototype.onReceiveBlock = (block, votes, failedTransactions) => {
+Blocks.prototype.onReceiveNewBlock = (block, votes, failedTransactions, callback) => {
   if (modules.loader.syncing() || !priv.loaded) {
     return
   }
@@ -851,11 +849,11 @@ Blocks.prototype.onReceiveBlock = (block, votes, failedTransactions) => {
       return (async () => {
         try {
           await app.sdb.rollbackBlock()
-          await self.processBlock(block, failedTransactions, { votes, broadcast: true })
+          await self.processBlock(block, failedTransactions, { votes })
+          cb(null, true)
         } catch (e) {
           library.logger.error('Failed to process received block', e)
-        } finally {
-          cb()
+          cb(e)
         }
       })()
     } if (block.prevBlockId !== priv.lastBlock.id
@@ -873,7 +871,7 @@ Blocks.prototype.onReceiveBlock = (block, votes, failedTransactions) => {
       return cb()
     }
     return cb()
-  })
+  }, callback)
 }
 
 Blocks.prototype.onReceivePropose = (propose) => {
