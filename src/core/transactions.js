@@ -5,6 +5,7 @@ const Router = require('../utils/router.js')
 const sandboxHelper = require('../utils/sandbox.js')
 const LimitCache = require('../utils/limit-cache.js')
 const addressHelper = require('../utils/address.js')
+const constants = require('../utils/constants.js')
 
 // let genesisblock = null
 // Private fields
@@ -196,6 +197,8 @@ priv.broadcastUnconfirmedTransaction = (transaction) => {
   library.bus.message('unconfirmedTransaction', transaction)
 }
 
+Transactions.prototype.getUnconfirmedTransactionCount = () => self.pool.getSize()
+
 Transactions.prototype.getUnconfirmedTransaction = id => self.pool.get(id)
 
 Transactions.prototype.getUnconfirmedTransactionList = () => self.pool.getUnconfirmed()
@@ -204,7 +207,7 @@ Transactions.prototype.removeUnconfirmedTransaction = id => self.pool.remove(id)
 
 Transactions.prototype.removeUnconfirmedTransactions = (ids) => {
   ids.forEach(id => self.pool.remove(id))
-  return self.pool.getSize(true)
+  return self.pool.getSize()
 }
 
 Transactions.prototype.hasUnconfirmed = id => self.pool.has(id)
@@ -822,8 +825,11 @@ function convertV1Transfer(trans) {
 
 
 shared.addTransactionUnsigned = (req, cb) => {
-  const query = req.body
+  if (self.getUnconfirmedTransactionCount() > constants.maxQueuedTransactions) {
+    return cb('Blockchain is busy')
+  }
 
+  const query = req.body
   query.type = Number(query.type || 0)
   convertV1Transfer(query)
 
@@ -880,6 +886,10 @@ shared.addTransactionUnsigned = (req, cb) => {
 }
 
 shared.addTransactions = (req, cb) => {
+  if (self.getUnconfirmedTransactionCount() > constants.maxQueuedTransactions) {
+    return cb('Blockchain is busy')
+  }
+
   if (!req.body || !req.body.transactions) {
     return cb('Invalid params')
   }

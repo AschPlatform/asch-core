@@ -2,6 +2,7 @@ module.exports = {
   maxAmount: 100000000,
   maxPayloadLength: 2 * 1024 * 1024, // max size of block payload
   maxContractRegisterationPerBlock: 10,
+  maxQueuedTransactions: 10000,
   buildBlockTimeoutSeconds: 5,
   blockHeaderLength: 248,
   addressLength: 208,

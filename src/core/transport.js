@@ -3,6 +3,7 @@ const LRU = require('lru-cache')
 const Router = require('../utils/router.js')
 const slots = require('../utils/slots.js')
 const sandboxHelper = require('../utils/sandbox.js')
+const constants = require('../utils/constants.js')
 const promisify = require('util').promisify
 
 const MAX_BLOCKS_JSON_SIZE = 4 * 1024 * 1024 // 4M
@@ -44,6 +45,13 @@ priv.attachRESTAPI = () => {
   })
 
   router.post('/transactions', (req, res) => {
+    if (modules.transactions.getUnconfirmedTransactionCount() > constants.maxQueuedTransactions) {
+      return res.status(500).send({
+        success: false,
+        error: 'Blockchain is busy',
+      })
+    }
+
     const verifyOnly = !!req.body.verifyOnly
     if (modules.loader.syncing() && !verifyOnly) {
       return res.status(500).send({
