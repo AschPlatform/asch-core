@@ -178,7 +178,7 @@ async function checkAndRecover() {
   const dbHeight = sdb.lastBlockHeight
   const contractHeight = await contractSandbox.getLastCommittedHeight()
 
-  if (dbHeight === contractHeight) return
+  if (dbHeight === contractHeight || contractHeight < 0) return
 
   app.logger.warn('Inconsistent SmartDB and contract DB detected, try to recover')
   if (Math.abs(dbHeight - contractHeight) > 1) {
