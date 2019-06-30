@@ -171,10 +171,10 @@ Blocks.prototype.setLastBlock = (block) => {
       featureSwitch.enable('enableLockReset')
     }
     // TODO: check height to enable feature
-    if (priv.lastBlock.height >= 6880000) {
+    if (priv.lastBlock.height >= 8474200) {
       featureSwitch.enable('enableUpdateProduceRatio')
     }
-    if (priv.lastBlock.height >= 6880000) {
+    if (priv.lastBlock.height >= 8474200) {
       featureSwitch.enable('enableBlock_v1')
     }
   } else {

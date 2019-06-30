@@ -1,17 +1,17 @@
 {
   "name": "asch-core",
-  "version": "1.5.0-beta+7",
+  "version": "1.5.0-beta+8",
   "main": "index.js",
   "scripts": {
     "test": "./node_modules/.bin/mocha --require mocha-babel"
   },
   "author": "Qingfeng Shan <sqf1225@foxmail.com>",
   "dependencies": {
-    "asch-contract": "~0.4.8",
+    "asch-contract": "~0.4.9",
     "asch-gateway": "https://github.com/AschPlatform/asch-gateway-dist/tarball/v1.0.0",
     "asch-js": "https://github.com/AschPlatform/asch-js/tarball/v1.4.1",
     "asch-sandbox": "https://github.com/AschPlatform/asch-sandbox-dist/tarball/v1.4.0",
-    "asch-smartdb": "https://github.com/AschPlatform/asch-smartdb-dist/tarball/v1.1.9",
+    "asch-smartdb": "https://github.com/AschPlatform/asch-smartdb-dist/tarball/v1.2.0",
     "async": "=1.5.2",
     "bignumber": "https://github.com/AschPlatform/bignumber/tarball/v1.3.0-2+asch.1",
     "bitcore-mnemonic": "=1.2.5",
