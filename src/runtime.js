@@ -1,4 +1,5 @@
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const util = require('util')
 const { EventEmitter } = require('events')
@@ -365,11 +366,19 @@ module.exports = async function runtime(options) {
     pledges: require('./utils/pledges.js'),
   }
 
+  const memoryConfig = {}
+  if (options.appConfig.netVersion === 'mainnet') {
+    const totalMemory = Math.round(os.totalmem() / (1024 * 1024))
+    if (totalMemory > 4096) {
+      memoryConfig.maxOldSpace = totalMemory - 2048
+    }
+  }
   const contractSandbox = new AschContract.SandboxConnector({
     entry: require.resolve('asch-contract/sandbox-launcher.js'),
     dataDir: path.join(dataDir, '/contracts'),
     logDir: path.join(appDir, '../logs/contracts/'),
     logLevelConfig: { defaultLogLevel: AschContract.LogLevel[options.appConfig.logLevel] },
+    memoryConfig,
   })
 
   await contractSandbox.connect()
