@@ -390,8 +390,11 @@ module.exports = async function runtime(options) {
   })
 
   app.sdb.on(AschCore.SmartDB.events.rollbackBlock, async (info) => {
-    const result = await contractSandbox.rollback(info.to)
-    if (!result.success) throw new Error(result.error)
+    const lastHeight = await contractSandbox.getLastCommittedHeight()
+    if (lastHeight >= 0) {
+      const result = await contractSandbox.rollback(info.to)
+      if (!result.success) throw new Error(result.error)
+    }
   })
 
   app.sdb.on(AschCore.SmartDB.events.beforeCommitContract, async () => {
