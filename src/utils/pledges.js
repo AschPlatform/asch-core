@@ -95,7 +95,7 @@ module.exports = {
 
     const totalPledge = totalPledges[0]
     const energy = gas * totalPledge.gasprice
-    const xas = parseInt(energy / totalPledge.energyPerXAS * constants.fixedPoint, 10)
+    const xas = parseInt(energy * (constants.fixedPoint / totalPledge.energyPerXAS), 10)
 
     return xas
   },
