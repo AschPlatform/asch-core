@@ -461,8 +461,10 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
 
     app.logger.info(`Block applied correctly with ${trsCount} transactions, ${size} in pool`)
 
-    options.votes.signatures = options.votes.signatures.slice(0, 6)
-    library.bus.message('newBlock', block, options.votes, failedTransactions)
+    if (options.newBlock) {
+      options.votes.signatures = options.votes.signatures.slice(0, 6)
+      library.bus.message('newBlock', block, options.votes, failedTransactions)
+    }
     library.bus.message('processBlock', block)
 
     priv.blockCache = {}
@@ -849,7 +851,7 @@ Blocks.prototype.onReceiveNewBlock = (block, votes, failedTransactions, callback
       return (async () => {
         try {
           await app.sdb.rollbackBlock()
-          await self.processBlock(block, failedTransactions, { votes })
+          await self.processBlock(block, failedTransactions, { votes, newBlock: true })
           cb(null, true)
         } catch (e) {
           library.logger.error('Failed to process received block', e)
