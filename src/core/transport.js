@@ -152,7 +152,7 @@ priv.limitBlocksResultSize = (allBlocks, allFailedTransactions, maxSize = MAX_BL
 
     blocks.push(block)
     if (failedOfHeight) {
-      failedTransactions[height] = failedOfHeight
+      failedTransactions[block.height] = failedOfHeight
     }
     resultSize += size
   }
