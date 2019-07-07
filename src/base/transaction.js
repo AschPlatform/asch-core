@@ -352,9 +352,11 @@ Transaction.prototype.objectNormalize = (trs) => {
       signatures: { type: 'array' },
       // args: { type: "array" },
       message: { type: 'string', maxLength: 256 },
+      mode: { type: 'integer' },
     },
     required: ['type', 'timestamp', 'senderId', 'signatures'],
   })
+  trs.mode = trs.mode || 0
 
   if (!report) {
     library.logger.error(`Failed to normalize transaction body: ${self.scope.scheme.getLastError().details[0].message}`, trs)

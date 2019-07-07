@@ -170,12 +170,15 @@ Blocks.prototype.setLastBlock = (block) => {
     if (priv.lastBlock.height >= 4290000) {
       featureSwitch.enable('enableLockReset')
     }
-    // TODO: check height to enable feature
     if (priv.lastBlock.height >= 8474506) {
       featureSwitch.enable('enableUpdateProduceRatio')
     }
     if (priv.lastBlock.height >= 8474506) {
       featureSwitch.enable('enableBlock_v1')
+    }
+    // TODO: adjust height to enable full state hash verification
+    if (priv.lastBlock.height >= 8540050) {
+      featureSwitch.enable('fullStateHash')
     }
   } else {
     featureSwitch.enable('enableLongId')
@@ -190,6 +193,7 @@ Blocks.prototype.setLastBlock = (block) => {
     featureSwitch.enable('enableLockReset')
     featureSwitch.enable('enableUpdateProduceRatio')
     featureSwitch.enable('enableBlock_v1')
+    featureSwitch.enable('fullStateHash')
   }
   featureSwitch.enable('fixVoteNewAddressIssue')
   if (global.Config.netVersion === 'mainnet' && priv.lastBlock.height < 1854000) {
@@ -441,7 +445,8 @@ Blocks.prototype.processBlock = async (b, failedTransactions, options) => {
   }
 
   if (block.version > 0) {
-    const stateHash = app.sdb.getChangesHash()
+    const fullStateHash = featureSwitch.isEnabled('fullStateHash')
+    const stateHash = app.sdb.getChangesHash(!fullStateHash)
     if (stateHash !== block.stateHash) {
       await app.sdb.rollbackBlock()
       self.evitCachedFailedTransactions(block.height)
@@ -532,56 +537,62 @@ Blocks.prototype.applyRound = async (block) => {
     return
   }
 
-  let address = addressHelper.generateNormalAddress(block.delegate)
-  app.sdb.increase('Delegate', { producedBlocks: 1 }, { address })
+  app.sdb.beginContract()
+  try {
+    let address = addressHelper.generateNormalAddress(block.delegate)
+    app.sdb.increase('Delegate', { producedBlocks: 1 }, { address })
 
-  let blockFees = 0
-  // const records = await app.sdb.load('Netenergyconsumption', { height: block.height })
-  for (const t of block.transactions) {
-    const record = await app.sdb.load('Netenergyconsumption', { tid: t.id })
-    if (!record) {
-      blockFees += t.fee
-    } else if (record.isFeeDeduct === 1) {
-      blockFees += record.fee
-    } else {
-      assert(record.netUsed || record.energyUsed, 'net or energy must be consumed instead of fee')
+    let blockFees = 0
+    // const records = await app.sdb.load('Netenergyconsumption', { height: block.height })
+    for (const t of block.transactions) {
+      const record = await app.sdb.load('Netenergyconsumption', { tid: t.id })
+      if (!record) {
+        blockFees += t.fee
+      } else if (record.isFeeDeduct === 1) {
+        blockFees += record.fee
+      } else {
+        assert(record.netUsed || record.energyUsed, 'net or energy must be consumed instead of fee')
+      }
     }
-  }
 
-  const roundNumber = modules.round.calc(block.height)
-  const modifier = { fees: blockFees, rewards: block.reward }
-  const { fees, rewards } = self.increaseRoundData(modifier, roundNumber)
+    const roundNumber = modules.round.calc(block.height)
+    const modifier = { fees: blockFees, rewards: block.reward }
+    const { fees, rewards } = self.increaseRoundData(modifier, roundNumber)
 
-  if (block.height % slots.delegates !== 0) return
+    if (block.height % slots.delegates !== 0) return
 
-  app.logger.debug(`----------------------on round ${roundNumber} end-----------------------`)
+    app.logger.debug(`----------------------on round ${roundNumber} end-----------------------`)
 
-  const delegates = await PIFY(modules.delegates.generateDelegateList)(block.height)
-  app.logger.debug('delegate length', delegates.length)
+    const delegates = await PIFY(modules.delegates.generateDelegateList)(block.height)
+    app.logger.debug('delegate length', delegates.length)
 
-  const forgedBlocks = await app.sdb.getBlocksByHeightRange(
-    block.height - slots.delegates + 1,
-    block.height - 1,
-  )
-  const forgedDelegates = [...forgedBlocks.map(b => b.delegate), block.delegate]
+    const forgedBlocks = await app.sdb.getBlocksByHeightRange(
+      block.height - slots.delegates + 1,
+      block.height - 1,
+    )
+    const forgedDelegates = [...forgedBlocks.map(b => b.delegate), block.delegate]
 
-  // const missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
-  let missedDelegates
-  if (featureSwitch.isEnabled('enableUpdateProduceRatio')) {
-    missedDelegates = delegates.filter(fd => !forgedDelegates.includes(fd))
-  } else {
-    missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
-  }
+    // const missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
+    let missedDelegates
+    if (featureSwitch.isEnabled('enableUpdateProduceRatio')) {
+      missedDelegates = delegates.filter(fd => !forgedDelegates.includes(fd))
+    } else {
+      missedDelegates = forgedDelegates.filter(fd => !delegates.includes(fd))
+    }
 
-  missedDelegates.forEach((md) => {
-    address = addressHelper.generateNormalAddress(md)
-    app.sdb.increase('Delegate', { missedBlocks: 1 }, { address })
-  })
+    missedDelegates.forEach((md) => {
+      address = addressHelper.generateNormalAddress(md)
+      app.sdb.increase('Delegate', { missedBlocks: 1 }, { address })
+    })
 
-  await benefits.assignIncentive(forgedDelegates, fees, rewards)
+    await benefits.assignIncentive(forgedDelegates, fees, rewards)
 
-  if (block.height % slots.delegates === 0) {
-    modules.delegates.updateBookkeeper()
+    if (block.height % slots.delegates === 0) {
+      modules.delegates.updateBookkeeper()
+    }
+    await app.sdb.commitContract()
+  } catch (err) {
+    await app.sdb.rollbackContract()
   }
 }
 
@@ -695,6 +706,9 @@ Blocks.prototype.packTransactions = async (block) => {
     }
 
     try {
+      // fix: transaction should contains height before call contract
+      trans.height = trans.height || block.height
+      trans.mode = trans.mode || 0
       const applyResult = await modules.transactions.applyUnconfirmedTransactionAsync(trans, block)
       if (self.withContractStateChanges(trans, applyResult)) {
         contractStateChanged = true
@@ -780,7 +794,8 @@ Blocks.prototype.buildBlock = async (keypair, timestamp) => {
     throw new Error(`Failed to save block transactions: ${e}`)
   }
 
-  block.stateHash = version > 0 ? app.sdb.getChangesHash() : ''
+  const fullStateHash = featureSwitch.isEnabled('fullStateHash')
+  block.stateHash = version > 0 ? app.sdb.getChangesHash(!fullStateHash) : ''
   block.signature = library.base.block.sign(block, keypair)
   block.id = library.base.block.getId(block)
 
