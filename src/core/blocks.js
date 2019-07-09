@@ -179,6 +179,8 @@ Blocks.prototype.setLastBlock = (block) => {
     // TODO: adjust height to enable full state hash verification
     if (priv.lastBlock.height >= 8540050 && priv.lastBlock.height <= 8540070) {
       featureSwitch.enable('fullStateHash')
+    } else {
+      featureSwitch.disable('fullStateHash')
     }
   } else {
     featureSwitch.enable('enableLongId')
