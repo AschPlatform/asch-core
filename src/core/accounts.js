@@ -219,7 +219,7 @@ shared.getPublickey = (req, cb) => {
       return cb(err[0].message)
     }
 
-    return self.getAccount({ address: query.address }, (err2, account) => {
+    return shared.getAccount({ body: { address: query.address } }, (err2, account) => {
       if (err2) {
         return cb(err2.toString())
       }
