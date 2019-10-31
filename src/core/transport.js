@@ -368,6 +368,11 @@ Transport.prototype.onPeerReady = () => {
     try {
       const buffer = Buffer.from(data.propose, 'base64')
       const propose = library.protobuf.decodeBlockPropose(buffer)
+      const lastBlock = modules.blocks.getLastBlock()
+      if (propose.height < lastBlock.height) {
+        library.logger.debug('Receive invalid propose ', { propose: propose.height, local: lastBlock.height })
+        return
+      }
       library.bus.message('receivePropose', propose)
       // forward propose message
       callbackForward(null, true)
@@ -377,9 +382,15 @@ Transport.prototype.onPeerReady = () => {
   })
 
   modules.peer.subscribe('votes', (data, peerId, callbackForward) => {
+    const lastBlock = modules.blocks.getLastBlock()
+    if (data.votes.height < lastBlock.height) {
+      library.logger.debug('Receive invalid vote', { vote: data.votes.height, local: lastBlock.height })
+      return
+    }
+
     library.bus.message('receiveVotes', data.votes)
     // forward votes message
-    return callbackForward(null, true)
+    callbackForward(null, true)
   })
 
   modules.peer.subscribe('transaction', (data, peerId, callbackForward) => {
