@@ -476,7 +476,7 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[601] = 'contract.call'
   app.contractTypeMapping[602] = 'contract.pay'
 
-  if (featureSwitch.isEnabled('featureSwitch')) {
+  if (featureSwitch.isEnabled('feature_council')) {
     app.contractTypeMapping[700] = 'council.register'
     app.contractTypeMapping[701] = 'council.vote'
     app.contractTypeMapping[702] = 'council.initiatePayment'
