@@ -15,6 +15,7 @@ const BalanceManager = require('./smartdb/balance-manager')
 const AutoIncrement = require('./smartdb/auto-increment')
 const AccountRole = require('./utils/account-role')
 const transactionMode = require('./utils/transaction-mode.js')
+const featureSwitch = require('./utils/feature-switch')
 
 const PIFY = util.promisify
 
@@ -474,4 +475,11 @@ module.exports = async function runtime(options) {
   app.contractTypeMapping[600] = 'contract.register'
   app.contractTypeMapping[601] = 'contract.call'
   app.contractTypeMapping[602] = 'contract.pay'
+
+  if (featureSwitch.isEnabled('featureSwitch')) {
+    app.contractTypeMapping[700] = 'council.register'
+    app.contractTypeMapping[701] = 'council.vote'
+    app.contractTypeMapping[702] = 'council.initiatePayment'
+    app.contractTypeMapping[703] = 'council.signPayment'
+  }
 }

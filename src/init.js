@@ -38,6 +38,7 @@ const moduleNames = [
   'chains',
   'blocks',
   'gateway',
+  'council',
 ]
 
 const CIPHERS = `
@@ -272,7 +273,7 @@ module.exports = function init(options, done) {
       scope.network.app.use((req, res, next) => {
         const parts = req.url.split('/')
         const host = req.headers['x-forwarded-for'] || req.connection.remoteAddress
-        const { port } = req.headers
+        // const { port } = req.headers
 
         scope.logger.debug(`receive request: ${req.method} ${req.url} from ${host}`)
 
