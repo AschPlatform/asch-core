@@ -6,10 +6,15 @@ const shared = {}
 
 priv.loaded = false
 
+// const COUNCIL_CONFIG = {
+//   startHeight: 1,
+//   electionDuration: 21,
+//   servingDuration: 105,
+// }
 const COUNCIL_CONFIG = {
-  startHeight: 1,
-  electionDuration: 21,
-  servingDuration: 105,
+  startHeight: 9476110,
+  electionDuration: 25920,
+  servingDuration: 1576800,
 }
 
 function Council(cb, scope) {
